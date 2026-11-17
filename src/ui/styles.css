@@ -666,3 +666,14 @@ button.remove {
 .menu .field {
   margin: 6px 0;
 }
+
+.cost-total {
+  margin: 2px 0;
+  font-size: 18px;
+  font-family: var(--caption-font);
+}
+.cost-lines {
+  margin: 0 0 4px;
+  padding-left: 18px;
+  font-size: 13px;
+}

@@ -3,6 +3,7 @@
 // current state; none of them holds state of its own.
 
 import {
+  costOfScene,
   failingStep,
   type ResourceKind,
   type ResourceRef,
@@ -152,6 +153,28 @@ export function renderObjectives(
           state.phase === 'flying' ? 'Kites are flying…' : 'Fly the kites to test your sky.',
       }),
     )
+
+  // Running cost, for levels whose goals mention it. Coins are not prices, and say so.
+  const usesCost = [
+    ...level.objectives.map((objective) => objective.predicate),
+    ...level.stars.wellArchitected.predicates,
+  ].some((predicate) => predicate.kind === 'cost-at-most')
+  if (usesCost) {
+    const cost = costOfScene(state.scene)
+    parts.push(
+      h('h2', { textContent: 'Running cost' }),
+      h('p', { class: 'cost-total', textContent: `${cost.total} coins` }),
+      h(
+        'ul',
+        { class: 'cost-lines' },
+        ...cost.lines.map((line) => h('li', { textContent: `${line.name}: ${line.coins}` })),
+      ),
+      h('p', {
+        class: 'note',
+        textContent: 'Coins are illustrative units for comparing choices, not real AWS prices.',
+      }),
+    )
+  }
 
   parts.push(h('h2', { textContent: 'Stars' }))
   const stars = judged ? lastRun?.stars : undefined

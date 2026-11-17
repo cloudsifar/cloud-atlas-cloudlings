@@ -4,9 +4,11 @@
 // from this list. The same vocabulary serves objectives, star criteria and the
 // narrator's "has the player done this yet?" checks.
 
+import { costOfScene } from './cost'
 import {
   findResourceOfKind,
   requireSubnet,
+  resourcesOfKind,
   type LoadBalancer,
   type PortOption,
   type RouteDestination,
@@ -15,6 +17,7 @@ import {
   type SecurityGroupPeer,
   type ServiceAction,
 } from './model'
+import { resolveRoute } from './routing'
 import { hasPublicStatement } from './s3'
 import { failingStep, type CheckKind, type Flow, type FlowResult } from './trace'
 
@@ -52,6 +55,13 @@ export type Predicate =
   | { kind: 'role-allows'; roleId: string; action: ServiceAction; resourceId: string }
   /** Block Public Access is on and the bucket policy grants nothing to everyone. */
   | { kind: 'bucket-locked-down'; bucketId: string }
+  /**
+   * Every subnet that holds an instance sends that service's traffic to a gateway
+   * endpoint, so none of it leaves the AWS network (none of it "crosses the ground").
+   */
+  | { kind: 'service-routed-through-gateway-endpoint'; service: 's3' | 'dynamodb' }
+  /** The scene's running cost is no more than this many coins (see cost.ts). */
+  | { kind: 'cost-at-most'; coins: number }
 
 export type Objective = {
   id: string
@@ -171,6 +181,20 @@ export function evaluatePredicate(scene: Scene, runs: FlowRun[], predicate: Pred
       const bucket = findResourceOfKind(scene, 's3-bucket', predicate.bucketId)
       return bucket !== undefined && bucket.blockPublicAccess && !hasPublicStatement(bucket)
     }
+    case 'service-routed-through-gateway-endpoint': {
+      // Asked of the routing rules, not read off the route tables: where would
+      // this service's traffic actually go from each instance's subnet?
+      const instances = resourcesOfKind(scene, 'ec2-instance')
+      return (
+        instances.length > 0 &&
+        instances.every((instance) => {
+          const subnet = requireSubnet(scene, instance.subnetId)
+          return resolveRoute(scene, subnet, predicate.service).kind === 'gateway-endpoint'
+        })
+      )
+    }
+    case 'cost-at-most':
+      return costOfScene(scene).total <= predicate.coins
   }
 }
 

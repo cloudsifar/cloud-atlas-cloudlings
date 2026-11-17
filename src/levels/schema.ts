@@ -103,6 +103,18 @@ export type Level = {
   /** Ids (resources, security groups, route tables, NACLs) the player may not change. */
   lockedIds: string[]
   palette: PaletteEntry[]
+  /**
+   * Ids of resources in the initial scene that the player may remove. Clouds the
+   * player placed from the palette can always be removed; anything else stays unless
+   * it is listed here.
+   */
+  removableIds?: string[]
+  /**
+   * Gateway endpoint services the player may add routes to. A gateway endpoint is a
+   * route-table target, not a cloud, so it is offered on route cards rather than in
+   * the palette. Leave out for levels that do not use them.
+   */
+  gatewayEndpoints?: ('s3' | 'dynamodb')[]
   population: Kite[]
   events: LevelEvent[]
   objectives: Objective[]

@@ -1,0 +1,551 @@
+{
+  "id": 4,
+  "slug": "skyway",
+  "title": "Skyway",
+  "concept": "Reaching S3 privately through a gateway endpoint, and why a NAT Gateway you do not need is money spent.",
+  "guidance": "hints",
+  "region": "eu-central-1",
+  "azs": 2,
+  "narration": [
+    {
+      "id": "arrival",
+      "text": "Welcome to Frankfurt, eu-central-1. An AWS Region is a separate place in the world with its own Availability Zones, and what you build in one Region stays there unless you say otherwise. From here on you get a goal and hints, not steps.",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    },
+    {
+      "id": "brief",
+      "text": "The uploads work, but every photo leaves through the NAT Gateway and crosses the ground to reach S3, and the NAT Gateway costs coins every hour it exists. Nothing here needs the internet except S3. Find a cheaper, more private way: start with the private route table.",
+      "highlight": "subnet:private-a",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    }
+  ],
+  "initialScene": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "nat-gateway",
+              "natGatewayId": "nat"
+            }
+          }
+        ]
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "nat-gateway",
+        "id": "nat",
+        "name": "NAT Gateway",
+        "subnetId": "public-a"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "https",
+        "targetIds": ["app-a", "app-b"]
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-a",
+        "name": "EC2 instance A",
+        "subnetId": "private-a",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-b",
+        "name": "EC2 instance B",
+        "subnetId": "private-b",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "s3-bucket",
+        "id": "photos",
+        "name": "photo-bucket",
+        "blockPublicAccess": true,
+        "policy": [],
+        "dataClass": "sensitive",
+        "encryption": {
+          "kind": "sse-s3"
+        }
+      },
+      {
+        "kind": "iam-role",
+        "id": "app-role",
+        "name": "app-role",
+        "statements": [
+          {
+            "effect": "allow",
+            "actions": ["s3:Write"],
+            "resource": "photos"
+          }
+        ]
+      }
+    ]
+  },
+  "lockedIds": [
+    "igw",
+    "alb",
+    "rt-public",
+    "nacl-default",
+    "sg-alb",
+    "sg-app",
+    "photos",
+    "app-role"
+  ],
+  "palette": [],
+  "removableIds": ["nat"],
+  "gatewayEndpoints": ["s3"],
+  "population": [
+    {
+      "id": "green-1",
+      "kind": "friendly",
+      "groundPosition": 0,
+      "ip": "203.0.113.10",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "uploads a photo",
+      "backendCall": {
+        "destinationId": "photos",
+        "action": "s3:Write"
+      }
+    },
+    {
+      "id": "green-2",
+      "kind": "friendly",
+      "groundPosition": 1,
+      "ip": "203.0.113.24",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "uploads a photo",
+      "backendCall": {
+        "destinationId": "photos",
+        "action": "s3:Write"
+      }
+    },
+    {
+      "id": "green-3",
+      "kind": "friendly",
+      "groundPosition": 2,
+      "ip": "192.0.2.31",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "uploads a photo",
+      "backendCall": {
+        "destinationId": "photos",
+        "action": "s3:Write"
+      }
+    },
+    {
+      "id": "red-1",
+      "kind": "hostile",
+      "groundPosition": 5,
+      "ip": "192.0.2.66",
+      "destinationId": "photos",
+      "port": 443,
+      "payload": "clean",
+      "action": "s3:Read",
+      "label": "tries to read the bucket"
+    }
+  ],
+  "events": [],
+  "objectives": [
+    {
+      "id": "uploads-land",
+      "text": "Every upload still lands in the bucket",
+      "predicate": {
+        "kind": "flows-delivered",
+        "flows": {
+          "intent": "legitimate"
+        }
+      }
+    },
+    {
+      "id": "stays-private",
+      "text": "No S3 traffic crosses the ground: it travels by gateway endpoint",
+      "predicate": {
+        "kind": "service-routed-through-gateway-endpoint",
+        "service": "s3"
+      }
+    }
+  ],
+  "stars": {
+    "wellArchitected": {
+      "text": "Running cost of 10 coins or less",
+      "predicates": [
+        {
+          "kind": "cost-at-most",
+          "coins": 10
+        }
+      ]
+    }
+  },
+  "hints": [
+    {
+      "objectiveId": "uploads-land",
+      "nudge": "If uploads stop, open a green kite's journey and find the route step that failed.",
+      "pointer": {
+        "text": "The private subnets need some route that reaches S3: a NAT Gateway or an S3 gateway endpoint.",
+        "highlight": "subnet:private-a"
+      },
+      "nearAnswer": "Click a private subnet and add the route \"S3 (prefix list) → S3 gateway endpoint\" before you remove the NAT Gateway."
+    },
+    {
+      "objectiveId": "stays-private",
+      "nudge": "A route table can send traffic for one service somewhere different from everything else.",
+      "pointer": {
+        "text": "Click a private subnet. Its route table offers a route for S3 only.",
+        "highlight": "subnet:private-a"
+      },
+      "nearAnswer": "Add \"S3 (prefix list) → S3 gateway endpoint\" to the private route table. It is more specific than 0.0.0.0/0, so S3 traffic takes it. Then remove the NAT Gateway: click it and choose \"Remove from the sky\"."
+    }
+  ],
+  "factCards": ["gateway-endpoint", "nat-gateway", "concept-cost"],
+  "referenceSolution": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": [
+          {
+            "destination": "s3",
+            "target": {
+              "kind": "gateway-endpoint",
+              "service": "s3"
+            }
+          }
+        ]
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "https",
+        "targetIds": ["app-a", "app-b"]
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-a",
+        "name": "EC2 instance A",
+        "subnetId": "private-a",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-b",
+        "name": "EC2 instance B",
+        "subnetId": "private-b",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "s3-bucket",
+        "id": "photos",
+        "name": "photo-bucket",
+        "blockPublicAccess": true,
+        "policy": [],
+        "dataClass": "sensitive",
+        "encryption": {
+          "kind": "sse-s3"
+        }
+      },
+      {
+        "kind": "iam-role",
+        "id": "app-role",
+        "name": "app-role",
+        "statements": [
+          {
+            "effect": "allow",
+            "actions": ["s3:Write"],
+            "resource": "photos"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -9,6 +9,7 @@ import {
   type PolicyStatement,
   type PortOption,
   type Resource,
+  type Route,
   type RouteTarget,
   type Scene,
   type SecurityGroup,
@@ -178,9 +179,16 @@ function securityGroupEditor(
   return section
 }
 
+const DESTINATION_LABELS: Record<Route['destination'], string> = {
+  internet: 'Internet (0.0.0.0/0)',
+  s3: 'S3 (prefix list)',
+  dynamodb: 'DynamoDB (prefix list)',
+}
+
 function describeTarget(scene: Scene, target: RouteTarget): string {
   if (target.kind === 'internet-gateway') return 'Internet Gateway'
-  if (target.kind === 'gateway-endpoint') return `${target.service.toUpperCase()} gateway endpoint`
+  if (target.kind === 'gateway-endpoint')
+    return `${target.service === 's3' ? 'S3' : 'DynamoDB'} gateway endpoint`
   return (
     scene.resources.find((resource) => resource.id === target.natGatewayId)?.name ??
     'NAT Gateway (missing)'
@@ -198,24 +206,32 @@ function subnetCard(state: GameState, subnetId: string, actions: CardActions): H
     .filter((other) => other.routeTableId === table.id)
     .map((other) => other.name)
 
-  // Route targets on offer: the Internet Gateway if attached, and any NAT Gateway.
-  // (Gateway endpoints join this list with Level 4.)
-  const targets: Option<string>[] = [
+  // Routes on offer: to the Internet Gateway if attached, to any NAT Gateway, and to
+  // the gateway endpoints this level allows. A gateway endpoint is not a cloud to
+  // place: in AWS, too, it shows up as a prefix-list route in the route table.
+  const internet = 'Internet (0.0.0.0/0)'
+  const routeOptions: (Option<string> & { route: Route })[] = [
     ...resourcesOfKind(scene, 'internet-gateway').map(() => ({
       value: 'igw',
-      label: 'Internet Gateway',
+      label: `${internet} → Internet Gateway`,
+      route: { destination: 'internet', target: { kind: 'internet-gateway' } } as Route,
     })),
     ...resourcesOfKind(scene, 'nat-gateway').map((nat) => ({
       value: `nat:${nat.id}`,
-      label: nat.name,
+      label: `${internet} → ${nat.name}`,
+      route: {
+        destination: 'internet',
+        target: { kind: 'nat-gateway', natGatewayId: nat.id },
+      } as Route,
+    })),
+    ...(level.gatewayEndpoints ?? []).map((service) => ({
+      value: `endpoint:${service}`,
+      label: `${DESTINATION_LABELS[service]} → ${describeTarget(scene, { kind: 'gateway-endpoint', service })}`,
+      route: { destination: service, target: { kind: 'gateway-endpoint', service } } as Route,
     })),
   ]
-  const targetKey = `${table.id}-target`
-  const chosen = pick(targetKey, targets[0]?.value ?? '')
-  const toTarget = (value: string): RouteTarget =>
-    value === 'igw'
-      ? { kind: 'internet-gateway' }
-      : { kind: 'nat-gateway', natGatewayId: value.slice(4) }
+  const routeKey = `${table.id}-route`
+  const chosen = pick(routeKey, routeOptions[0]?.value ?? '')
 
   const routes = h(
     'section',
@@ -227,7 +243,7 @@ function subnetCard(state: GameState, subnetId: string, actions: CardActions): H
       [
         { text: `The VPC (${scene.vpc.cidr}) → local   (always present)`, key: 'local' },
         ...table.routes.map((route) => ({
-          text: `${route.destination === 'internet' ? 'Internet (0.0.0.0/0)' : route.destination.toUpperCase()} → ${describeTarget(scene, route.target)}`,
+          text: `${DESTINATION_LABELS[route.destination]} → ${describeTarget(scene, route.target)}`,
           key: `${table.id}-remove-${route.destination}`,
           onRemove: locked
             ? undefined
@@ -238,7 +254,7 @@ function subnetCard(state: GameState, subnetId: string, actions: CardActions): H
     ),
     locked
       ? null
-      : targets.length === 0
+      : routeOptions.length === 0
         ? h('p', {
             class: 'note',
             textContent: 'There is nothing to route to yet. Attach an Internet Gateway first.',
@@ -246,17 +262,14 @@ function subnetCard(state: GameState, subnetId: string, actions: CardActions): H
         : h(
             'div',
             { class: 'add-row' },
-            h('span', { class: 'static-field', textContent: 'Internet (0.0.0.0/0) →' }),
-            dropdown('Target', targets, chosen, (value) => (draft[targetKey] = value), targetKey),
+            dropdown('Route', routeOptions, chosen, (value) => (draft[routeKey] = value), routeKey),
             button(
               'Add route',
-              () =>
-                actions.edit((current) =>
-                  setRoute(current, table.id, {
-                    destination: 'internet',
-                    target: toTarget(pick(targetKey, targets[0]?.value ?? 'igw')),
-                  }),
-                ),
+              () => {
+                const value = pick(routeKey, routeOptions[0].value)
+                const option = routeOptions.find((candidate) => candidate.value === value)
+                if (option) actions.edit((current) => setRoute(current, table.id, option.route))
+              },
               `${table.id}-add-route`,
             ),
           ),
@@ -577,7 +590,8 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
     )
 
   const fromPalette = level.palette.some((entry) => entry.resource.id === resource.id)
-  if (fromPalette && !locked) {
+  const removable = fromPalette || (level.removableIds ?? []).includes(resource.id)
+  if (removable && !locked) {
     parts.push(
       h(
         'footer',

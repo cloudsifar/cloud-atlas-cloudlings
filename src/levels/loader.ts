@@ -7,6 +7,7 @@
 import level01 from '../../levels/01-first-kite.json'
 import level02 from '../../levels/02-into-the-middle.json'
 import level03 from '../../levels/03-the-rain-store.json'
+import level04 from '../../levels/04-skyway.json'
 import factCards from '../../content/fact-cards.json'
 import type { Level } from './schema'
 import { validateLevel } from './validate'
@@ -24,4 +25,4 @@ export function parseLevel(json: unknown): Level {
   return json as Level
 }
 
-export const LEVELS: Level[] = [level01, level02, level03].map(parseLevel)
+export const LEVELS: Level[] = [level01, level02, level03, level04].map(parseLevel)

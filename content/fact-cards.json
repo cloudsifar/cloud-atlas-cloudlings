@@ -96,5 +96,22 @@
     "body": "Software on an instance gets its permissions from the instance's IAM role: short-lived credentials that AWS hands out and rotates. Nothing secret is stored on the server. Without a role, the instance cannot sign a request at all.",
     "simplifications": [],
     "atlasPage": "TODO(Simon)"
+  },
+  "gateway-endpoint": {
+    "title": "Gateway endpoint",
+    "body": "A private road from your VPC to S3 or DynamoDB. It is not a thing you place in a subnet: it appears as a route in the route table, with a prefix list (the service's address ranges) as the destination. Because that route is more specific than 0.0.0.0/0, traffic for the service takes it and never leaves the AWS network. Gateway endpoints exist for S3 and DynamoDB only, and have no additional charge.",
+    "simplifications": [
+      "Endpoint policies, which can restrict what the endpoint may be used for, are left out.",
+      "In AWS you create the endpoint and choose route tables for it; here you add the route directly."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "concept-cost": {
+    "title": "Paying for what you leave running",
+    "body": "Some resources cost money for every hour they exist, whether or not anything uses them. A NAT Gateway is one: it is charged by the hour and by the gigabyte. A gateway endpoint to S3 costs nothing. Choosing the cheaper path that still does the job is part of building well.",
+    "simplifications": [
+      "Coins are illustrative units for comparing choices. They are not real AWS prices."
+    ],
+    "atlasPage": "TODO(Simon)"
   }
 }

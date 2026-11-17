@@ -22,3 +22,4 @@ export {
   type Predicate,
 } from './predicates'
 export { scoreScene, type Finding } from './scoring'
+export { costOfScene, coinsFor, type CostLine, type SceneCost } from './cost'

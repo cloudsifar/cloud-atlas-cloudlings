@@ -180,6 +180,22 @@ only the S3 access decision applies.
   misconfigurations (for example a NAT Gateway outside a public subnet).
 - Tests: `tests/engine/scoring.test.ts`.
 
+## 11. Cost: `cost.ts`
+
+- **Modelled.** Each resource has a fixed running cost in coins. A NAT Gateway costs
+  more than a small instance; an Internet Gateway and an IAM role cost nothing; a
+  gateway endpoint is a route, not a resource, so it costs nothing either. Larger
+  instances cost more. Coins are illustrative units, never prices.
+- **AWS references.**
+  [Gateway endpoints](https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html)
+  (no additional charge),
+  [NAT gateway pricing](https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-pricing.html).
+- **Code.** `coinsFor`, `costOfScene`. Two predicates use them and the routing rules:
+  `cost-at-most` and `service-routed-through-gateway-endpoint` in `predicates.ts`.
+- **Tests.** `tests/engine/cost.test.ts`.
+- **Not modelled yet.** The brief's penalty for idle oversized instances needs the
+  capacity model that arrives with Level 5.
+
 ## Not built yet
 
 WAF, Auto Scaling, capacity, RDS, DynamoDB, SQS, SNS, Lambda, KMS, SSM, Route 53,

@@ -7,6 +7,7 @@
 
 import {
   isPublicSubnet,
+  resolveRoute,
   resourcesOfKind,
   type CheckKind,
   type Resource,
@@ -371,6 +372,40 @@ function drawConnections(context: CanvasRenderingContext2D, model: SkyViewModel)
       }
     }
   }
+  // A skyway: where a private subnet's route table sends S3 traffic to a gateway
+  // endpoint, a road runs from the mid band straight to the bucket, never touching
+  // the ground. It is drawn from the routing rules, so it appears exactly when the
+  // engine would use it.
+  const bucket = resourcesOfKind(scene, 's3-bucket')[0]
+  const bucketRect = bucket ? layout.clouds[bucket.id] : undefined
+  const viaEndpoint = scene.subnets.filter(
+    (subnet) =>
+      subnet.band === 'mid' && resolveRoute(scene, subnet, 's3').kind === 'gateway-endpoint',
+  )
+  if (bucketRect && viaEndpoint.length > 0) {
+    const rects = viaEndpoint.map((subnet) => layout.subnets[subnet.id])
+    const startX = Math.max(...rects.map((rect) => rect.x + rect.width))
+    const y = rects[0].y + rects[0].height * 0.3
+    const endX = bucketRect.x + bucketRect.width * 0.3
+    context.save()
+    for (const [width, colour, dash] of [
+      [12, 'rgba(255,244,205,0.95)', []],
+      [1.4, 'rgba(70,90,150,0.85)', [7, 5]],
+    ] as const) {
+      context.lineWidth = width
+      context.strokeStyle = colour
+      context.setLineDash([...dash])
+      for (const offset of width > 2 ? [0] : [-6, 6]) {
+        context.beginPath()
+        context.moveTo(startX, y + offset)
+        context.lineTo(endX, y + offset)
+        context.stroke()
+      }
+    }
+    context.restore()
+    caption(context, 'S3 gateway endpoint', (startX + endX) / 2, y - 12, 12, 'center', '#3c4a78')
+  }
+
   // A cirrus thread from a role down to whatever wears it.
   context.setLineDash([])
   context.lineWidth = 1.3
