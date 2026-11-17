@@ -2,17 +2,9 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "paths": {
-      "vitest": [
-        "./vitest-shim.ts"
-      ]
+      "vitest": ["./vitest-shim.ts"]
     },
-    "typeRoots": [
-      "/opt/npm-tools/node_modules/@types"
-    ]
+    "typeRoots": ["/opt/npm-tools/node_modules/@types"]
   },
-  "include": [
-    "../../src",
-    "../../tests",
-    "./vitest-shim.ts"
-  ]
+  "include": ["../../src", "../../tests", "./vitest-shim.ts"]
 }

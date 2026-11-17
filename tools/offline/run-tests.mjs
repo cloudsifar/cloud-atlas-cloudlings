@@ -15,7 +15,13 @@ const findTests = (dir) =>
 
 const result = spawnSync(
   'tsx',
-  ['--tsconfig', 'tools/offline/tsconfig.json', '--test', ...findTests('tests')],
+  [
+    '--tsconfig',
+    'tools/offline/tsconfig.json',
+    '--test',
+    '--test-reporter=spec',
+    ...findTests('tests'),
+  ],
   { stdio: 'inherit' },
 )
 process.exit(result.status ?? 1)

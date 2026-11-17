@@ -22,7 +22,8 @@ export function evaluateNetworkAcl(
 ): CheckOutcome {
   const ordered = [...acl[direction]].sort((first, second) => first.number - second.number)
   const rule = ordered.find(
-    (candidate) => portOptionCovers(candidate.ports, port) && cidrPeerContains(candidate.peer, peerIp),
+    (candidate) =>
+      portOptionCovers(candidate.ports, port) && cidrPeerContains(candidate.peer, peerIp),
   )
   const preposition = direction === 'inbound' ? 'from' : 'to'
   if (!rule) {

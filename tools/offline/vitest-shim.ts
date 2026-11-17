@@ -23,7 +23,9 @@ type Matchers = {
 function buildMatchers(actual: unknown, negate: boolean, message?: string): Matchers {
   const check = (pass: boolean, description: string) => {
     if (pass === negate) {
-      assert.fail(`${message ? message + ': ' : ''}expected ${format(actual)} ${negate ? 'not ' : ''}${description}`)
+      assert.fail(
+        `${message ? message + ': ' : ''}expected ${format(actual)} ${negate ? 'not ' : ''}${description}`,
+      )
     }
   }
   return {

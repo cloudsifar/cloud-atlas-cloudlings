@@ -12,7 +12,10 @@ export const S3_ENDPOINT_ADDRESS = '52.216.0.10'
 
 function toNumber(ip: string): number {
   const parts = ip.split('.').map(Number)
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+  ) {
     throw new Error(`"${ip}" is not an IPv4 address`)
   }
   return parts.reduce((total, part) => total * 256 + part, 0)

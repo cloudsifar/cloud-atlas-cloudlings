@@ -19,12 +19,12 @@ Written at the start of the build (Milestone 0). `PROGRESS.md` records what actu
 Four layers, imports pointing one way only: `ui → game → levels → engine`.
 `tests/architecture.test.ts` fails if any file imports "upwards".
 
-| Layer | Folder | Job |
-| --- | --- | --- |
-| Engine | `src/engine/` | The AWS model and evaluator. Pure functions over plain data. No DOM, no randomness, no dependencies |
-| Levels | `src/levels/` + `levels/*.json` | Level file type, validator, and `runLevel` (kites → flows → objectives → stars) |
-| Game | `src/game/` | Scene store with undo/redo, edits, layout, canvas drawing, playback, sound |
-| UI | `src/ui/` | DOM: menus, palette, config cards, narrator, objectives, trace inspector |
+| Layer  | Folder                          | Job                                                                                                 |
+| ------ | ------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Engine | `src/engine/`                   | The AWS model and evaluator. Pure functions over plain data. No DOM, no randomness, no dependencies |
+| Levels | `src/levels/` + `levels/*.json` | Level file type, validator, and `runLevel` (kites → flows → objectives → stars)                     |
+| Game   | `src/game/`                     | Scene store with undo/redo, edits, layout, canvas drawing, playback, sound                          |
+| UI     | `src/ui/`                       | DOM: menus, palette, config cards, narrator, objectives, trace inspector                            |
 
 ## The engine in one paragraph
 

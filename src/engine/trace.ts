@@ -55,9 +55,20 @@ export type CheckKind =
 
 /** The exact rule that decided a check, in a form code can use (scoring reads these). */
 export type RuleMatch =
-  | { kind: 'security-group-rule'; securityGroupId: string; direction: 'inbound' | 'outbound'; index: number }
+  | {
+      kind: 'security-group-rule'
+      securityGroupId: string
+      direction: 'inbound' | 'outbound'
+      index: number
+    }
   | { kind: 'nacl-rule'; networkAclId: string; direction: 'inbound' | 'outbound'; number: number }
-  | { kind: 'role-statement'; roleId: string; index: number; action: ServiceAction; resourceId: string }
+  | {
+      kind: 'role-statement'
+      roleId: string
+      index: number
+      action: ServiceAction
+      resourceId: string
+    }
   | { kind: 'bucket-statement'; bucketId: string; index: number; action: ServiceAction }
 
 export type TraceStep = {

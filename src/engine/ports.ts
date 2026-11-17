@@ -32,6 +32,8 @@ export function portOptionCovers(option: PortOption, port: number): boolean {
 
 export function describePort(port: number): string {
   if (port === REPRESENTATIVE_EPHEMERAL_PORT) return 'an ephemeral port (1024–65535)'
-  const named = Object.values(PORT_OPTIONS).find((range) => range.from === port && range.to === port)
+  const named = Object.values(PORT_OPTIONS).find(
+    (range) => range.from === port && range.to === port,
+  )
   return named ? named.label : `port ${port}`
 }

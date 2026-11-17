@@ -54,10 +54,15 @@ export function resolveRoute(scene: Scene, subnet: Subnet, query: RouteQuery): R
     case 'internet-gateway':
       return resourcesOfKind(scene, 'internet-gateway').length > 0
         ? { kind: 'internet-gateway' }
-        : { kind: 'blackhole', reason: 'the route points at an Internet Gateway that is not attached' }
+        : {
+            kind: 'blackhole',
+            reason: 'the route points at an Internet Gateway that is not attached',
+          }
     case 'nat-gateway': {
       const natGatewayId = best.target.natGatewayId
-      const natGateway = resourcesOfKind(scene, 'nat-gateway').find((nat) => nat.id === natGatewayId)
+      const natGateway = resourcesOfKind(scene, 'nat-gateway').find(
+        (nat) => nat.id === natGatewayId,
+      )
       return natGateway
         ? { kind: 'nat-gateway', natGateway }
         : { kind: 'blackhole', reason: 'the route points at a NAT Gateway that no longer exists' }

@@ -24,7 +24,15 @@ import { describePort, HTTP_PORT, HTTPS_PORT, REPRESENTATIVE_EPHEMERAL_PORT } fr
 import { isPublicSubnet, resolveRoute } from './routing'
 import { evaluateBucketAccess, type Caller } from './s3'
 import { evaluateSecurityGroups, type ConnectionPeer } from './securityGroups'
-import type { CheckKind, CheckOutcome, Flow, FlowResult, Leg, ResourceRef, TraceStep } from './trace'
+import type {
+  CheckKind,
+  CheckOutcome,
+  Flow,
+  FlowResult,
+  Leg,
+  ResourceRef,
+  TraceStep,
+} from './trace'
 
 /** Targets always listen on HTTP 80; the load balancer terminates HTTPS (docs/SIMPLIFICATIONS.md). */
 const TARGET_PORT = HTTP_PORT
@@ -225,7 +233,11 @@ function evaluateInternetToLoadBalancer(
  * through an Internet Gateway, and only to something with a public address in a
  * public subnet. In the game that is an internet-facing load balancer.
  */
-function internetRouteStep(scene: Scene, loadBalancer: LoadBalancer, nodeSubnet: Subnet): TraceStep {
+function internetRouteStep(
+  scene: Scene,
+  loadBalancer: LoadBalancer,
+  nodeSubnet: Subnet,
+): TraceStep {
   if (loadBalancer.scheme === 'internal') {
     return makeStep('request', { kind: 'vpc' }, 'route', {
       result: 'fail',
@@ -485,7 +497,9 @@ function instanceToBucketChecks(
     () => naclStep(scene, subnet, 'outbound', S3_ENDPOINT_ADDRESS, HTTPS_PORT, legs.request),
   ]
   const authorise: PendingCheck = () => {
-    const role = instance.roleId ? findResourceOfKind(scene, 'iam-role', instance.roleId) : undefined
+    const role = instance.roleId
+      ? findResourceOfKind(scene, 'iam-role', instance.roleId)
+      : undefined
     const caller: Caller = role
       ? { kind: 'role', role }
       : { kind: 'no-credentials', description: `"${instance.name}"` }
@@ -493,7 +507,14 @@ function instanceToBucketChecks(
     return makeStep(legs.request, atResource(bucket.id), check, outcome)
   }
   const replyReachesInstance: PendingCheck = () =>
-    naclStep(scene, subnet, 'inbound', S3_ENDPOINT_ADDRESS, REPRESENTATIVE_EPHEMERAL_PORT, legs.response)
+    naclStep(
+      scene,
+      subnet,
+      'inbound',
+      S3_ENDPOINT_ADDRESS,
+      REPRESENTATIVE_EPHEMERAL_PORT,
+      legs.response,
+    )
   const routeFails = (explanation: string): PendingCheck[] => [
     () => makeStep(legs.request, atSubnet(subnet), 'route', { result: 'fail', explanation }),
   ]
@@ -541,7 +562,8 @@ function instanceToBucketChecks(
           ...(crossesBoundary
             ? [() => naclStep(scene, natSubnet, 'inbound', instanceIp, HTTPS_PORT, legs.request)]
             : []),
-          () => naclStep(scene, natSubnet, 'outbound', S3_ENDPOINT_ADDRESS, HTTPS_PORT, legs.request),
+          () =>
+            naclStep(scene, natSubnet, 'outbound', S3_ENDPOINT_ADDRESS, HTTPS_PORT, legs.request),
           () =>
             makeStep(legs.request, atResource(nat.id), 'route', {
               result: 'pass',
@@ -624,7 +646,11 @@ function evaluateInternetToBucket(flow: Flow, bucket: S3Bucket): FlowResult {
         'Amazon S3 lives outside the VPC and has its own public endpoint, so the kite flies straight to the bucket. The VPC gates, fences and outlines play no part.',
     }),
   ]
-  const { check, ...outcome } = evaluateBucketAccess(bucket, { kind: 'anonymous' }, flow.action ?? 's3:Read')
+  const { check, ...outcome } = evaluateBucketAccess(
+    bucket,
+    { kind: 'anonymous' },
+    flow.action ?? 's3:Read',
+  )
   trace.push(makeStep('request', atResource(bucket.id), check, outcome))
   if (outcome.result === 'fail') return { outcome: 'blocked', trace }
 

@@ -31,8 +31,18 @@ export type Predicate =
   | { kind: 'flows-stopped'; flows: FlowSelector; by?: CheckKind }
   // --- about the scene -----------------------------------------------------
   | { kind: 'resource-exists'; resourceId: string }
-  | { kind: 'route-present'; routeTableId: string; destination: RouteDestination; target: RouteTarget['kind'] }
-  | { kind: 'security-group-allows'; securityGroupId: string; ports: PortOption; peer: SecurityGroupPeer }
+  | {
+      kind: 'route-present'
+      routeTableId: string
+      destination: RouteDestination
+      target: RouteTarget['kind']
+    }
+  | {
+      kind: 'security-group-allows'
+      securityGroupId: string
+      ports: PortOption
+      peer: SecurityGroupPeer
+    }
   | { kind: 'listener-is'; loadBalancerId: string; listener: LoadBalancer['listener'] }
   | { kind: 'targets-registered'; loadBalancerId: string; atLeast: number }
   | { kind: 'targets-in-both-azs'; loadBalancerId: string }
@@ -74,7 +84,10 @@ export function evaluatePredicate(scene: Scene, runs: FlowRun[], predicate: Pred
         selected.length > 0 &&
         selected.every((run) => {
           const stopped = run.result.outcome === 'blocked' || run.result.outcome === 'dropped'
-          return stopped && (predicate.by === undefined || failingStep(run.result)?.check === predicate.by)
+          return (
+            stopped &&
+            (predicate.by === undefined || failingStep(run.result)?.check === predicate.by)
+          )
         })
       )
     }
@@ -84,12 +97,15 @@ export function evaluatePredicate(scene: Scene, runs: FlowRun[], predicate: Pred
       const table = scene.routeTables.find((candidate) => candidate.id === predicate.routeTableId)
       return (
         table?.routes.some(
-          (route) => route.destination === predicate.destination && route.target.kind === predicate.target,
+          (route) =>
+            route.destination === predicate.destination && route.target.kind === predicate.target,
         ) ?? false
       )
     }
     case 'security-group-allows': {
-      const group = scene.securityGroups.find((candidate) => candidate.id === predicate.securityGroupId)
+      const group = scene.securityGroups.find(
+        (candidate) => candidate.id === predicate.securityGroupId,
+      )
       return (
         group?.inbound.some(
           (rule) => rule.ports === predicate.ports && samePeer(rule.peer, predicate.peer),
@@ -98,7 +114,8 @@ export function evaluatePredicate(scene: Scene, runs: FlowRun[], predicate: Pred
     }
     case 'listener-is':
       return (
-        findResourceOfKind(scene, 'load-balancer', predicate.loadBalancerId)?.listener === predicate.listener
+        findResourceOfKind(scene, 'load-balancer', predicate.loadBalancerId)?.listener ===
+        predicate.listener
       )
     case 'targets-registered': {
       const loadBalancer = findResourceOfKind(scene, 'load-balancer', predicate.loadBalancerId)

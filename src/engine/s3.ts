@@ -68,7 +68,8 @@ export function evaluateBucketAccess(
         explanation: `Block Public Access is on for "${bucket.name}". It overrides any policy that would open the bucket to everyone, so an anonymous request is refused.`,
       }
     }
-    const everyone = (principal: BucketPolicyStatement['principal']) => principal.kind === 'everyone'
+    const everyone = (principal: BucketPolicyStatement['principal']) =>
+      principal.kind === 'everyone'
     if (findStatement(bucket, 'deny', action, everyone) >= 0) {
       return {
         check: 'bucket-policy',
@@ -124,7 +125,13 @@ export function evaluateBucketAccess(
       check: 'iam',
       result: 'pass',
       ruleRef: `role "${role.name}": allow ${action}`,
-      matched: { kind: 'role-statement', roleId: role.id, index: identity.index, action, resourceId: bucket.id },
+      matched: {
+        kind: 'role-statement',
+        roleId: role.id,
+        index: identity.index,
+        action,
+        resourceId: bucket.id,
+      },
       explanation: `Role "${role.name}" allows ${action} on "${bucket.name}".`,
     }
   }

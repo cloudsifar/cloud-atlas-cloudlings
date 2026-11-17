@@ -70,7 +70,9 @@ export function scoreScene(scene: Scene, runs: FlowRun[], lockedIds: string[]): 
     })
   }
 
-  for (const role of resourcesOfKind(scene, 'iam-role').filter((candidate) => editable(candidate.id))) {
+  for (const role of resourcesOfKind(scene, 'iam-role').filter((candidate) =>
+    editable(candidate.id),
+  )) {
     role.statements.forEach((statement, index) => {
       if (statement.effect !== 'allow') return
       if (statement.resource === '*') {
@@ -97,7 +99,9 @@ export function scoreScene(scene: Scene, runs: FlowRun[], lockedIds: string[]): 
     })
   }
 
-  for (const bucket of resourcesOfKind(scene, 's3-bucket').filter((candidate) => editable(candidate.id))) {
+  for (const bucket of resourcesOfKind(scene, 's3-bucket').filter((candidate) =>
+    editable(candidate.id),
+  )) {
     if (bucket.dataClass === 'sensitive' && !bucket.blockPublicAccess) {
       findings.push({
         subjectId: bucket.id,
