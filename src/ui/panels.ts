@@ -5,6 +5,8 @@
 import {
   costOfScene,
   crowdTimeline,
+  deliveredShare,
+  type TickRecord,
   expandAutoScalingGroups,
   failingStep,
   type ResourceKind,
@@ -108,9 +110,13 @@ export function renderPalette(
 // Objectives, stars and hints
 // ---------------------------------------------------------------------------
 
+/** Which crowd kite's journey to open in the trace inspector: one from a given tick. */
+export type CrowdKiteChoice = { tick: number; fate: 'served' | 'timed-out' }
+
 export function renderObjectives(
   state: GameState,
   onHint: (objectiveId: string) => void,
+  onFollowCrowdKite: (choice: CrowdKiteChoice) => void = () => {},
 ): HTMLElement[] {
   const { level, lastRun, lastRunIsCurrent } = state
   const judged = lastRun !== null && lastRunIsCurrent && state.phase !== 'flying'
@@ -179,95 +185,7 @@ export function renderObjectives(
   }
 
   // The weather station: CloudWatch's view of the crowd, for levels that have one.
-  if (level.crowd) {
-    parts.push(h('h2', { textContent: 'Weather station' }))
-    const crowd = judged ? lastRun?.crowd : null
-    if (!crowd) {
-      const busiest = Math.max(
-        ...crowdTimeline(level.crowd, level.events).map((moment) => moment.kites),
-      )
-      parts.push(
-        h('p', {
-          class: 'note',
-          textContent: `A crowd is coming: up to ${busiest} kites per tick. Fly the kites to see how the sky copes.`,
-        }),
-      )
-    } else {
-      const peak = Math.max(1, ...crowd.ticks.map((tick) => tick.demand))
-      parts.push(
-        h('p', {
-          class: 'cost-total',
-          textContent: `${crowd.delivered} of ${crowd.demand} kites delivered (${crowd.deliveredPercent}%)`,
-        }),
-        h(
-          'div',
-          {
-            class: 'crowd-chart',
-            attrs: {
-              role: 'img',
-              'aria-label': 'Kites per tick; hatched bars are kites that were dropped',
-            },
-          },
-          ...crowd.ticks.map((tick) => {
-            const failed = tick.dropped + tick.blocked
-            return h(
-              'div',
-              {
-                class: 'crowd-bar',
-                title: `Tick ${tick.tick + 1}: ${tick.delivered} delivered, ${failed} not`,
-              },
-              h('div', {
-                class: 'not-delivered',
-                attrs: { style: `height:${(failed / peak) * 48}px` },
-              }),
-              h('div', {
-                class: 'delivered',
-                attrs: { style: `height:${(tick.delivered / peak) * 48}px` },
-              }),
-            )
-          }),
-        ),
-        h('p', {
-          class: 'note',
-          textContent: `Targets in service: ${crowd.ticks[0]?.targetsInService ?? 0} at the start, ${crowd.peakTargetsInService} at the busiest, ${crowd.finalTargetsInService} at the end.`,
-        }),
-        h(
-          'details',
-          { class: 'crowd-log' },
-          h('summary', { textContent: 'Tick by tick' }),
-          h(
-            'table',
-            null,
-            h(
-              'tr',
-              null,
-              ...['Tick', 'Kites', 'Dropped', 'Targets', 'CPU', 'Alarm'].map((text) =>
-                h('th', { textContent: text }),
-              ),
-            ),
-            ...crowd.ticks.map((tick) =>
-              h(
-                'tr',
-                null,
-                ...[
-                  tick.tick + 1,
-                  tick.demand,
-                  tick.dropped + tick.blocked,
-                  tick.launching > 0
-                    ? `${tick.targetsInService} (+${tick.launching})`
-                    : tick.targetsInService,
-                  `${tick.cpuPercent}%`,
-                  { ok: 'OK', 'high-cpu': 'ALARM: high CPU', 'low-cpu': 'ALARM: low CPU' }[
-                    tick.alarm
-                  ],
-                ].map((value) => h('td', { textContent: String(value) })),
-              ),
-            ),
-          ),
-        ),
-      )
-    }
-  }
+  if (level.crowd) parts.push(...renderWeatherStation(state, judged, onFollowCrowdKite))
 
   parts.push(h('h2', { textContent: 'Stars' }))
   const stars = judged ? lastRun?.stars : undefined
@@ -301,6 +219,197 @@ export function renderObjectives(
       ),
     )
   }
+  return parts
+}
+
+// ---------------------------------------------------------------------------
+// Weather station: CloudWatch's view of a crowd
+// ---------------------------------------------------------------------------
+
+const ALARM_WORDS: Record<TickRecord['alarm'], string> = {
+  ok: '–',
+  'high-cpu': 'High',
+  'low-cpu': 'Low',
+}
+
+function renderWeatherStation(
+  state: GameState,
+  judged: boolean,
+  onFollowCrowdKite: (choice: CrowdKiteChoice) => void,
+): HTMLElement[] {
+  const { level, lastRun } = state
+  if (!level.crowd) return []
+  const parts: HTMLElement[] = [h('h2', { textContent: 'Weather station' })]
+  const crowd = judged ? lastRun?.crowd : null
+  if (!crowd) {
+    const busiest = Math.max(
+      ...crowdTimeline(level.crowd, level.events).map((moment) => moment.kites),
+    )
+    parts.push(
+      h('p', {
+        class: 'note',
+        textContent: `A crowd is coming: up to ${busiest} kites per tick. Fly the kites to see how the sky copes.`,
+      }),
+    )
+    return parts
+  }
+
+  const peak = Math.max(1, ...crowd.ticks.map((tick) => tick.demand))
+  const surgeTicks = crowd.ticks.filter((tick) => tick.surge)
+  const surge = deliveredShare(surgeTicks)
+  parts.push(
+    h('p', {
+      class: 'cost-total',
+      textContent: `${crowd.delivered} of ${crowd.demand} kites delivered (${crowd.deliveredPercent}%)`,
+    }),
+  )
+  if (surgeTicks.length > 0) {
+    parts.push(
+      h('p', {
+        class: 'note',
+        textContent: `During the surge: ${surge.delivered} of ${surge.demand} (${surge.percent}%).`,
+      }),
+    )
+  }
+
+  // One bar per tick: solid for delivered, hatched for kites that did not get through.
+  const firstSurge = crowd.ticks.findIndex((tick) => tick.surge)
+  parts.push(
+    h(
+      'div',
+      {
+        class: 'crowd-chart',
+        attrs: {
+          role: 'img',
+          'aria-label': `Kites per tick, ${crowd.ticks.length} ticks; hatched parts of a bar did not get through`,
+        },
+      },
+      ...crowd.ticks.map((tick) => {
+        const failed = tick.dropped + tick.blocked
+        return h(
+          'div',
+          {
+            class: 'crowd-bar',
+            title: `Tick ${tick.tick + 1}: ${tick.delivered} delivered, ${failed} not`,
+          },
+          h('div', {
+            class: 'not-delivered',
+            attrs: { style: `height:${(failed / peak) * 48}px` },
+          }),
+          h('div', {
+            class: 'delivered',
+            attrs: { style: `height:${(tick.delivered / peak) * 48}px` },
+          }),
+        )
+      }),
+    ),
+  )
+  if (firstSurge >= 0) {
+    const width = (surgeTicks.length / crowd.ticks.length) * 100
+    parts.push(
+      h('div', {
+        class: 'surge-band',
+        textContent: 'surge',
+        attrs: { style: `margin-left:${(firstSurge / crowd.ticks.length) * 100}%;width:${width}%` },
+      }),
+    )
+  }
+  parts.push(
+    h('p', {
+      class: 'note',
+      textContent: `Targets in service: ${crowd.ticks[0]?.targetsInService ?? 0} at the start, ${crowd.peakTargetsInService} at the busiest, ${crowd.finalTargetsInService} at the end.`,
+    }),
+  )
+
+  // Open the journey of one kite from the crowd: the engine kept one for each fate.
+  const busiest = (fits: (tick: TickRecord) => boolean, by: (tick: TickRecord) => number) =>
+    crowd.ticks
+      .filter(fits)
+      .reduce<TickRecord | null>(
+        (best, tick) => (best === null || by(tick) > by(best) ? tick : best),
+        null,
+      )
+  const timedOut = busiest(
+    (tick) => tick.timedOut !== null,
+    (tick) => tick.dropped,
+  )
+  const served = busiest(
+    (tick) => tick.demand > 0,
+    (tick) => tick.demand,
+  )
+  const follow = h('div', { class: 'follow-buttons' })
+  if (timedOut) {
+    follow.append(
+      button(
+        'Follow a kite that timed out',
+        () => onFollowCrowdKite({ tick: timedOut.tick, fate: 'timed-out' }),
+        'follow-timed-out',
+        'link',
+      ),
+    )
+  }
+  if (served) {
+    follow.append(
+      button(
+        served.served.outcome === 'delivered'
+          ? 'Follow a kite that got through'
+          : 'Follow a kite that was stopped',
+        () => onFollowCrowdKite({ tick: served.tick, fate: 'served' }),
+        'follow-served',
+        'link',
+      ),
+    )
+  }
+  parts.push(follow)
+
+  parts.push(
+    h(
+      'details',
+      { class: 'crowd-log' },
+      h('summary', { textContent: 'Tick by tick' }),
+      h(
+        'table',
+        null,
+        h(
+          'tr',
+          null,
+          ...(
+            [
+              ['Tick', 13],
+              ['Kites', 15],
+              ['Timed out', 17],
+              ['In service', 19],
+              ['CPU', 18],
+              ['Alarm', 18],
+            ] as const
+          ).map(([text, percent]) =>
+            h('th', { textContent: text, attrs: { style: `width:${percent}%` } }),
+          ),
+        ),
+        ...crowd.ticks.map((tick) =>
+          h(
+            'tr',
+            { class: tick.surge ? 'in-surge' : '' },
+            ...[
+              tick.tick + 1,
+              tick.demand,
+              tick.dropped + tick.blocked,
+              tick.launching > 0
+                ? `${tick.targetsInService}+${tick.launching}`
+                : tick.targetsInService,
+              `${tick.cpuPercent}%`,
+              ALARM_WORDS[tick.alarm],
+            ].map((value) => h('td', { textContent: String(value) })),
+          ),
+        ),
+      ),
+      h('p', {
+        class: 'note',
+        textContent:
+          'In service "4+2": four targets serving, two more launching. Alarm: which of the scaling policy’s CloudWatch alarms is in ALARM. Shaded rows are the surge.',
+      }),
+    ),
+  )
   return parts
 }
 

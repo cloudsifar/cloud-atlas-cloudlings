@@ -199,35 +199,69 @@ only the S3 access decision applies.
 ## 12. Auto Scaling groups: `autoScaling.ts`
 
 - **Modelled.** A group runs `desired` instances, held within `min` and `max`, spread
-  evenly across its subnets. Its instances are identical. A load balancer that targets
-  the group targets its instances. Before any flow is evaluated the group is expanded
-  into ordinary instances (`expandAutoScalingGroups`), so every other rule (security
-  groups, network ACLs, health checks, IAM) applies to them unchanged.
+  evenly across its subnets. Desired capacity is where the group starts; a scaling
+  policy moves it from there. Its instances are identical. A load balancer that
+  targets the group targets its instances. Before any flow is evaluated the group is
+  expanded into ordinary instances (`expandAutoScalingGroups`), so every other rule
+  (security groups, network ACLs, health checks, IAM) applies to them unchanged.
+  `validateScene` reports a group whose settings break minimum ≤ desired ≤ maximum,
+  and the fleet card keeps them in that order as the player edits (`setGroupSettings`
+  in `src/game/edits.ts`).
 - **AWS references.**
   [Auto Scaling groups](https://docs.aws.amazon.com/autoscaling/ec2/userguide/auto-scaling-groups.html),
+  [scaling limits: desired capacity lies between minimum and maximum](https://docs.aws.amazon.com/autoscaling/ec2/userguide/asg-capacity-limits.html),
   [load balancers and Auto Scaling](https://docs.aws.amazon.com/autoscaling/ec2/userguide/autoscaling-load-balancer.html).
-- **Code.** `groupInstances`, `runningCount`, `expandAutoScalingGroups`.
-- **Tests.** `tests/engine/auto-scaling.test.ts`, "group instances".
+- **Code.** `groupInstances`, `runningCount`, `expandAutoScalingGroups`; the group case
+  in `validate.ts`.
+- **Tests.** `tests/engine/auto-scaling.test.ts`, "group instances";
+  `tests/game/edits.test.ts`.
 
 ## 13. Crowds, capacity and scaling: `crowd.ts`
 
-- **Modelled.** `simulateCrowd(scene, crowd)` steps through ticks. Each tick: instances
-  that finished launching start serving; one representative kite is evaluated to see
-  whether requests get through at all; capacity is the sum over the load balancer's
-  healthy targets; requests beyond capacity are `dropped`; CPU is the share of capacity
-  in use. A target tracking policy then decides: above the target, launch enough
-  instances to bring CPU back to it (in proportion); below it, remove one instance,
-  but only if the rest would still be at or under the target. New instances serve
-  after `LAUNCH_TICKS`.
+- **Modelled.** `simulateCrowd(scene, crowd, timeline)` steps through one moment per
+  tick (section 14). Each tick:
+  1. instances that finished launching start serving;
+  2. one representative kite is evaluated (`evaluateFlow`), to see whether the crowd
+     gets through at all;
+  3. capacity is the sum, over the load balancer's healthy targets, of what each size
+     serves per tick; kites beyond capacity time out (outcome `dropped`);
+  4. CPU is the share of capacity in use, capped at 100%;
+  5. a target tracking policy decides: above the target, launch enough instances to
+     bring CPU back to it (in proportion); below it, remove one instance, but only if
+     the rest would still be at or under the target. New instances serve after
+     `LAUNCH_TICKS`.
+
+  Each tick's record keeps two journeys for playback and the trace inspector: `served`
+  (a kite that got a target, or, if the crowd cannot get through, what stopped it) and
+  `timedOut` (a kite beyond capacity: the same checks up to the load balancer, then a
+  failing `capacity` step at the load balancer, HTTP 504). It also keeps each group's
+  own serving and launching instances (`fleets`), so the fleet's cloud can grow.
+
 - **AWS references.**
   [Target tracking scaling policies](https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-scaling-target-tracking.html),
-  [dynamic scaling](https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-scale-based-on-demand.html).
-- **Code.** `simulateCrowd`; `healthyTargets` in `flow.ts`; predicates
-  `crowd-delivered-at-least` and `crowd-scaled-out-and-back-in`.
-- **Tests.** `tests/engine/auto-scaling.test.ts`, "capacity", "target tracking scaling",
-  "crowd predicates".
-- **Not modelled yet.** Replacing unhealthy instances; events during a crowd (AZ
-  failure, instance failure); the cost of instance-hours over the run.
+  [dynamic scaling](https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-scale-based-on-demand.html),
+  [Application Load Balancer troubleshooting: HTTP 504 when a target does not answer before the idle timeout; add targets if they are too busy](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-troubleshooting.html).
+- **Code.** `simulateCrowd`, `deliveredShare`; `healthyTargets` in `flow.ts`; the
+  `capacity` check kind in `trace.ts`; predicates `crowd-delivered-at-least` (whole run,
+  or `during: 'surge'`) and `crowd-scaled-out-and-back-in`.
+- **Tests.** `tests/engine/auto-scaling.test.ts`: "capacity", "timed-out kites",
+  "target tracking scaling", "crowd predicates".
+- **Not modelled yet.** Replacing unhealthy instances; scene events during a crowd (AZ
+  failure, instance failure); the cost of instance-hours over the run; the load
+  balancer's own capacity.
+
+## 14. The timeline: `timeline.ts`
+
+- **Modelled.** Nothing from AWS: this is the level's story. A level states its usual
+  crowd (`kitesPerTick`, and how many `ticks` the run lasts) and its scripted events.
+  `crowdTimeline(crowd, events)` turns them into one `CrowdMoment` per tick: how many
+  kites fly, and whether a surge is under way. A crowd surge climbs in a straight line
+  from the usual crowd to its peak over `rampTicks`, holds for `holdTicks`, and falls
+  back the same way; where surges overlap the bigger crowd wins. Why the timeline is
+  separate from the simulation: `docs/adr/0005-crowds-and-the-event-timeline.md`.
+- **Code.** `crowdTimeline`, `surgeKitesAt`, `surgeWindow`.
+- **Tests.** `tests/engine/timeline.test.ts`; level-file checks in
+  `tests/levels/levels.test.ts`, "crowds and events".
 
 ## Not built yet
 

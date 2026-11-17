@@ -27,7 +27,8 @@
     "simplifications": [
       "Targets always receive traffic on HTTP 80; the load balancer handles HTTPS (certificates are assumed).",
       "One listener and one set of targets. Real load balancers can have several, with rules.",
-      "Health is judged instantly. Real health checks take a few intervals to change their mind."
+      "Health is judged instantly. Real health checks take a few intervals to change their mind.",
+      "The load balancer itself never runs out of capacity. Real ones scale automatically, but a sudden spike can briefly outpace them."
     ],
     "atlasPage": "TODO(Simon)"
   },
@@ -121,6 +122,9 @@
       "Every instance serves a fixed number of kites per tick, and a new instance takes 2 ticks to start serving. Real launch times and capacities vary.",
       "Only target tracking on CPU is offered. Step, simple, scheduled and predictive scaling are left out.",
       "The group scales in one instance per tick when CPU is below the target; AWS decides the pace itself, more cautiously.",
+      "A kite that finds every target busy times out in the same tick. Real requests wait in a queue first, and some are served late.",
+      "Every kite in a crowd is treated alike, so one journey stands for all of them.",
+      "A group keeps at least one instance; AWS allows a minimum of zero.",
       "Launch templates, health-check replacement and instance warm-up settings are left out."
     ],
     "atlasPage": "TODO(Simon)"

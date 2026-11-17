@@ -2,7 +2,7 @@
 // the store, the sky view and the panels together and redraws the panels
 // whenever the game state or the screen's own state (which card is open) changes.
 
-import type { Resource } from '../engine'
+import { HTTPS_PORT, type CrowdRecord, type Resource } from '../engine'
 import {
   centreOf,
   createSkyView,
@@ -15,7 +15,14 @@ import {
   type GameState,
   type Snap,
 } from '../game'
-import { REGION_NAMES, type Level, type PaletteEntry } from '../levels'
+import {
+  kiteToFlow,
+  REGION_NAMES,
+  type Kite,
+  type KiteRun,
+  type Level,
+  type PaletteEntry,
+} from '../levels'
 import { renderConfigCard, type CardSubject } from './configCards'
 import { button, h, redraw } from './dom'
 import {
@@ -26,6 +33,7 @@ import {
   renderPalette,
   renderResults,
   renderTraceInspector,
+  type CrowdKiteChoice,
 } from './panels'
 
 export type GameNavigation = {
@@ -45,6 +53,8 @@ export function mountGameScreen(
   // What this screen itself remembers (the game state lives in the store).
   let openCard: CardSubject | null = null
   let selectedKiteId: string | null = null
+  /** A kite from the crowd whose journey is open, chosen on the weather station. */
+  let selectedCrowdKite: CrowdKiteChoice | null = null
   let factCardId: string | null = null
   let explanation: { resourceId: string; text: string } | null = null
   let message: string | null = null
@@ -91,6 +101,7 @@ export function mountGameScreen(
   const sky = createSkyView(canvas, store, {
     onSelectResource(id) {
       selectedKiteId = null
+      selectedCrowdKite = null
       openCard = { kind: 'resource', id }
       store.noteCardOpened(id)
       playSound('card-open')
@@ -98,6 +109,7 @@ export function mountGameScreen(
     },
     onSelectSubnet(id) {
       selectedKiteId = null
+      selectedCrowdKite = null
       openCard = { kind: 'subnet', id }
       store.noteCardOpened(id)
       playSound('card-open')
@@ -106,6 +118,7 @@ export function mountGameScreen(
     onSelectKite(id) {
       openCard = null
       selectedKiteId = id
+      selectedCrowdKite = null
       if (!store.getState().lastRun)
         showMessage("Fly the kites first, then click a Cloudling to see its kite's journey.")
       else playSound('card-open')
@@ -114,6 +127,7 @@ export function mountGameScreen(
     onSelectNothing() {
       openCard = null
       selectedKiteId = null
+      selectedCrowdKite = null
       draw()
     },
     onPlaced: place,
@@ -124,6 +138,7 @@ export function mountGameScreen(
   function fly(): void {
     openCard = null
     selectedKiteId = null
+    selectedCrowdKite = null
     explanation = null
     store.startRun()
     sky.play()
@@ -166,6 +181,7 @@ export function mountGameScreen(
           () => {
             openCard = null
             selectedKiteId = null
+            selectedCrowdKite = null
             explanation = null
             store.reset()
           },
@@ -192,10 +208,20 @@ export function mountGameScreen(
     )
     redraw(
       sidePanel,
-      ...renderObjectives(state, (objectiveId) => {
-        playSound('hint')
-        store.revealHint(objectiveId)
-      }),
+      ...renderObjectives(
+        state,
+        (objectiveId) => {
+          playSound('hint')
+          store.revealHint(objectiveId)
+        },
+        (choice) => {
+          openCard = null
+          selectedKiteId = null
+          selectedCrowdKite = choice
+          playSound('card-open')
+          draw()
+        },
+      ),
     )
     redraw(
       narrator,
@@ -209,15 +235,18 @@ export function mountGameScreen(
     const layout = layoutScene(state.scene)
     const floating: (HTMLElement | null)[] = []
 
-    const kiteRun =
-      selectedKiteId && state.lastRun && state.lastRunIsCurrent && !flying
-        ? state.lastRun.kiteRuns.find((candidate) => candidate.kite.id === selectedKiteId)
-        : undefined
+    const showingRun = state.lastRun !== null && state.lastRunIsCurrent && !flying
+    const kiteRun = !showingRun
+      ? undefined
+      : selectedCrowdKite && state.lastRun?.crowd
+        ? crowdKiteRun(level, state.lastRun.crowd, selectedCrowdKite)
+        : state.lastRun?.kiteRuns.find((candidate) => candidate.kite.id === selectedKiteId)
     let card: HTMLElement | null = null
     let cardAnchorX = 640
     if (kiteRun) {
       card = renderTraceInspector(kiteRun, state.scene, () => {
         selectedKiteId = null
+        selectedCrowdKite = null
         draw()
       })
       cardAnchorX = 0 // the trace card always sits on the right, clear of the Cloudlings
@@ -324,6 +353,7 @@ export function mountGameScreen(
     else if (openCard || selectedKiteId) {
       openCard = null
       selectedKiteId = null
+      selectedCrowdKite = null
     } else explanation = null
     draw()
   }
@@ -336,4 +366,30 @@ export function mountGameScreen(
     window.clearTimeout(messageTimer)
     sky.destroy()
   }
+}
+
+/**
+ * One kite from the crowd, ready for the trace inspector. The journey is the engine's
+ * own (crowd.ts keeps one for a served kite and one for a timed-out kite on each
+ * tick); this only gives it a Cloudling to belong to.
+ */
+function crowdKiteRun(
+  level: Level,
+  crowd: CrowdRecord,
+  choice: CrowdKiteChoice,
+): KiteRun | undefined {
+  const tick = crowd.ticks[choice.tick]
+  const result = choice.fate === 'timed-out' ? tick?.timedOut : tick?.served
+  if (!tick || !result || !level.crowd) return undefined
+  const kite: Kite = {
+    id: 'crowd',
+    kind: 'friendly',
+    groundPosition: 0,
+    ip: level.crowd.ip,
+    destinationId: level.crowd.loadBalancerId,
+    port: HTTPS_PORT,
+    payload: 'clean',
+    label: `one of ${tick.demand} kites in the crowd, tick ${tick.tick + 1}`,
+  }
+  return { kite, flow: kiteToFlow(kite, tick.tick), result }
 }

@@ -62,6 +62,8 @@ export type TickRecord = {
   targetsInService: number
   /** Instances an Auto Scaling group has started that are not serving yet. */
   launching: number
+  /** Each Auto Scaling group's own instances: serving this tick, and still launching. */
+  fleets: { groupId: string; inService: number; launching: number }[]
   cpuPercent: number
   alarm: AlarmState
   /**
@@ -161,6 +163,8 @@ export function simulateCrowd(
     const dropped = reachable ? demand - delivered : 0
     const cpuPercent = capacity === 0 ? 0 : Math.min(100, Math.round((demand / capacity) * 100))
 
+    const servingAtStart = groups.map((state) => state.inService)
+
     // 5. Scaling decisions, taken on this tick's CPU, felt on later ticks.
     let alarm: AlarmState = 'ok'
     for (const state of groups) {
@@ -193,6 +197,11 @@ export function simulateCrowd(
       blocked: reachable ? 0 : demand,
       targetsInService: targets.length,
       launching: groups.reduce((sum, state) => sum + state.launches.length, 0),
+      fleets: groups.map((state, index) => ({
+        groupId: state.group.id,
+        inService: servingAtStart[index] ?? state.inService,
+        launching: state.launches.length,
+      })),
       cpuPercent,
       alarm,
       served,

@@ -6,10 +6,13 @@
 // change took effect", red-with-smoke means compromised.
 
 import {
+  failingStep,
   isPublicSubnet,
   resolveRoute,
   resourcesOfKind,
+  runningCount,
   type CheckKind,
+  type CrowdRecord,
   type Resource,
   type ResourceKind,
   type Scene,
@@ -38,6 +41,17 @@ import {
   PENCIL,
   type Mood,
 } from './placeholderArt'
+import {
+  alongPath,
+  ARRIVAL,
+  bellRingingAt,
+  crowdFrameAt,
+  crowdPaths,
+  crowdSpots,
+  fateOf,
+  WEATHER_STATION,
+  type CrowdFrame,
+} from './crowdPlayback'
 import { frameAt, type KiteFrame, type KiteScript } from './playback'
 
 const PAPER = '#f6efdc'
@@ -160,6 +174,8 @@ export type SkyViewModel = {
   /** The kites' timetable, and how far into it we are. Empty when there is no run to show. */
   scripts: KiteScript[]
   runTime: number
+  /** For crowd levels: the crowd simulation on show, played on the same clock. Null otherwise. */
+  crowd: CrowdRecord | null
   /** Resources a hostile kite has got into; they stay red until the cause is fixed. */
   compromisedIds: string[]
   /** When each recently changed resource began to glow gold (animation-clock time). */
@@ -481,30 +497,50 @@ function drawSunRays(
   context.restore()
 }
 
+/**
+ * An Auto Scaling group: one small altocumulus cloudlet per instance, in up to two
+ * offset rows. Instances still launching are drawn faint, so the fleet visibly grows.
+ */
+function drawFleet(
+  context: CanvasRenderingContext2D,
+  rect: Rect,
+  inService: number,
+  launching: number,
+  look: { tint: string[]; sunlight: number; burst: number; opacity: number },
+): void {
+  const total = Math.max(1, inService + launching)
+  const rows = total <= 3 ? 1 : 2
+  const columns = Math.ceil(total / rows)
+  const width = Math.round(Math.min(50, (rect.width - 8) / (columns + (rows > 1 ? 0.5 : 0))))
+  const height = Math.round(Math.min(rect.height / rows - 2, width * 0.66))
+  const gridWidth = columns * width + (rows > 1 ? width / 2 : 0)
+  const left = rect.x + (rect.width - gridWidth) / 2
+  const top = rect.y + (rect.height - rows * height) / 2
+  for (let index = 0; index < inService + launching; index++) {
+    const row = Math.floor(index / columns)
+    const column = index % columns
+    drawCloud(
+      context,
+      'altocumulus',
+      left + column * width + (row % 2) * (width / 2),
+      top + row * height,
+      width,
+      height,
+      { ...look, opacity: index < inService ? look.opacity : look.opacity * 0.35 },
+    )
+  }
+}
+
 function drawClouds(
   context: CanvasRenderingContext2D,
   model: SkyViewModel,
   burstFor: Record<string, number>,
+  crowdFrame: CrowdFrame | null,
 ): void {
   const { scene, layout, time } = model
   for (const resource of scene.resources) {
     const rect = layout.clouds[resource.id]
     if (!rect) continue
-    if (resource.kind === 'auto-scaling-group') {
-      // The fleet's limits, lettered above it: the number running changes during a flight.
-      const policy = resource.scaling
-        ? `CPU target ${resource.scaling.targetCpuPercent}%`
-        : 'no scaling'
-      caption(
-        context,
-        `${resource.min} to ${resource.max} instances · ${policy}`,
-        rect.x + rect.width / 2,
-        rect.y - 8,
-        12,
-        'center',
-        '#3c4a78',
-      )
-    }
     const locked = model.lockedIds.includes(resource.id)
     const compromised = model.compromisedIds.includes(resource.id)
     const unhealthy = resource.kind === 'ec2-instance' && !resource.healthy
@@ -523,12 +559,26 @@ function drawClouds(
       context.shadowColor = 'rgba(40, 18, 18, 0.9)'
       context.shadowBlur = 16
     }
-    drawCloud(context, GENUS_OF[resource.kind], rect.x, y, rect.width, rect.height, {
+    const look = {
       tint: tintFor(resource, compromised),
       sunlight,
       burst: burstFor[resource.id] ?? 0,
       opacity: locked ? 0.62 : 1,
-    })
+    }
+    if (resource.kind === 'auto-scaling-group') {
+      // A fleet is a patch of cloudlets, one per instance, that grows and shrinks.
+      // During a crowd run the engine's record says how many are serving and launching.
+      const fleet = crowdFrame?.tick.fleets.find((candidate) => candidate.groupId === resource.id)
+      drawFleet(
+        context,
+        { ...rect, y },
+        fleet?.inService ?? runningCount(resource),
+        fleet?.launching ?? 0,
+        look,
+      )
+    } else {
+      drawCloud(context, GENUS_OF[resource.kind], rect.x, y, rect.width, rect.height, look)
+    }
     context.restore()
 
     // Security groups: a pencilled outline traced around each cloud that wears one.
@@ -554,6 +604,20 @@ function drawClouds(
         ? rect.y + rect.height + 12
         : y + rect.height + ('securityGroupIds' in resource ? 16 : 10)
     caption(context, resource.name, centreOf(rect).x, labelY, 12)
+    if (resource.kind === 'auto-scaling-group') {
+      const policy = resource.scaling
+        ? `CPU target ${resource.scaling.targetCpuPercent}%`
+        : 'no scaling'
+      caption(
+        context,
+        `${resource.min}–${resource.max} instances · ${policy}`,
+        centreOf(rect).x,
+        labelY + 12,
+        11,
+        'center',
+        '#3c4a78',
+      )
+    }
     if (compromised)
       caption(context, '⚡ compromised', centreOf(rect).x, labelY + 14, 11, 'center', '#8c1f1f')
     if (locked) drawPadlock(context, rect.x + rect.width - 2, y + 4)
@@ -841,6 +905,220 @@ function drawKiteAndCloudling(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Crowds and the weather station
+// ---------------------------------------------------------------------------
+
+/**
+ * A crowd run, one tick at a time. Every Cloudling present flies a kite each tick:
+ * it climbs the path the engine's journey for its fate took, then either vanishes
+ * into the cloud with a little rain falling back (delivered), goes slack and drifts
+ * down (timed out), or meets the control that stopped it (blocked). Who gets which
+ * fate comes from the engine's counts (crowdPlayback.ts); nothing is decided here.
+ */
+function drawCrowd(
+  context: CanvasRenderingContext2D,
+  model: SkyViewModel,
+  frame: CrowdFrame,
+  costume: string,
+): void {
+  const spots = crowdSpots(model.level.population)
+  const paths = crowdPaths(frame.tick, model.scene, model.layout)
+  const stoppedBy = failingStep(frame.tick.served)?.check
+  const { tick, previous, progress } = frame
+  const settled = progress >= 1
+  const present = Math.min(spots.length, tick.demand)
+  const before = previous ? Math.min(spots.length, previous.demand) : present
+  const ease = (amount: number) => 1 - (1 - amount) * (1 - amount)
+  const lerp = (from: Point, to: Point, amount: number): Point => ({
+    x: from.x + (to.x - from.x) * amount,
+    y: from.y + (to.y - from.y) * amount,
+  })
+
+  // The back row first, so the front row stands in front of it.
+  const members = Array.from({ length: Math.max(present, before) }, (_, member) => member).sort(
+    (first, second) => (spots[first]?.y ?? 0) - (spots[second]?.y ?? 0),
+  )
+  for (const member of members) {
+    const feet = spots[member]
+    if (!feet) continue
+    const rest = { x: feet.x + 16, y: feet.y - 78 }
+    context.save()
+
+    if (member >= present) {
+      // Drifting away: present last tick, gone this one.
+      const fade = 1 - progress * 3
+      if (fade > 0) {
+        context.globalAlpha = fade
+        drawCloudling(context, feet.x, feet.y, false, 'idle', costume, model.time)
+      }
+      context.restore()
+      continue
+    }
+    // Arriving: fades in at the start of the tick.
+    if (member >= before && !settled) context.globalAlpha = Math.min(1, progress * 4)
+
+    const fate = fateOf(member, tick) ?? 'delivered'
+    // Kites leave in small staggered groups rather than all at once.
+    const stagger = (member % 6) * 0.03
+    const local = Math.min(1, Math.max(0, (progress - stagger) / (1 - stagger)))
+    const outcome = !settled && local >= ARRIVAL
+    const mood: Mood = !outcome
+      ? 'idle'
+      : fate === 'delivered'
+        ? model.reducedMotion
+          ? 'idle'
+          : 'cheer'
+        : 'droop'
+    const hand = drawCloudling(context, feet.x, feet.y, false, mood, costume, model.time)
+    if (settled && member < model.level.population.length) {
+      const kite = model.level.population[member]
+      if (kite) caption(context, kite.label, feet.x, feet.y + 14, 11, 'center', '#2f4a2b')
+    }
+
+    const path = paths[fate]
+    const end = path[path.length - 1] ?? rest
+    if (settled) {
+      drawString(context, hand, rest, 0, model.time)
+      drawKite(context, rest.x, rest.y, false, 'flying', model.reducedMotion ? 0 : model.time, 0.6)
+    } else if (!outcome) {
+      const at = alongPath(rest, path, ease(local / ARRIVAL))
+      drawString(context, hand, at, 0, model.time)
+      drawKite(context, at.x, at.y, false, 'flying', model.time, 0.6)
+    } else {
+      const after = (local - ARRIVAL) / (1 - ARRIVAL)
+      if (fate === 'delivered') {
+        // The kite has vanished into the cloud; a little rain falls back on its Cloudling.
+        if (after < 0.7)
+          drawRain(context, { x: feet.x, y: feet.y - 92 + after * 26 }, model.time, 1 - after)
+      } else {
+        const offset = blockOffset(fate === 'timed-out' ? undefined : stoppedBy, after)
+        const sag = Math.max(0, (after - 0.45) / 0.55)
+        const at = lerp(
+          { x: end.x + offset.x, y: end.y + offset.y },
+          { x: rest.x, y: rest.y + 26 },
+          sag,
+        )
+        drawString(context, hand, at, 0.4 + sag * 0.4, model.time)
+        drawKite(
+          context,
+          at.x,
+          at.y,
+          false,
+          stoppedBy === 'nacl' && fate === 'blocked' && sag === 0 ? 'tangled' : 'flying',
+          model.time,
+          0.6,
+        )
+      }
+    }
+    context.restore()
+  }
+}
+
+/**
+ * CloudWatch, as a weather station on the ground: a barometer dial for the fleet's
+ * CPU, an anemometer that spins faster as more kites fly, and a bell that rings when
+ * an alarm goes into ALARM. Shown in levels that have a crowd.
+ */
+function drawWeatherStation(
+  context: CanvasRenderingContext2D,
+  model: SkyViewModel,
+  frame: CrowdFrame | null,
+): void {
+  const { x, y } = WEATHER_STATION
+  const tick = frame?.tick
+  context.save()
+  context.strokeStyle = PENCIL
+  context.lineCap = 'round'
+  context.lineWidth = 2
+
+  // Post and tripod feet.
+  context.beginPath()
+  context.moveTo(x, y)
+  context.lineTo(x, y - 74)
+  context.moveTo(x - 11, y)
+  context.lineTo(x, y - 14)
+  context.lineTo(x + 11, y)
+  context.stroke()
+
+  // Anemometer: three cups on arms, spinning with the number of kites in the air.
+  const spin =
+    model.reducedMotion || !tick || (frame?.progress ?? 1) >= 1
+      ? 0.4
+      : (model.time / 1000) * (1 + tick.demand / 5)
+  context.lineWidth = 1.4
+  for (let arm = 0; arm < 3; arm++) {
+    const angle = spin + (arm * Math.PI * 2) / 3
+    const cup = { x: x + Math.cos(angle) * 13, y: y - 78 + Math.sin(angle) * 4 }
+    context.beginPath()
+    context.moveTo(x, y - 78)
+    context.lineTo(cup.x, cup.y)
+    context.stroke()
+    context.beginPath()
+    context.arc(cup.x, cup.y, 3, 0, Math.PI * 2)
+    context.fillStyle = '#e9e2cf'
+    context.fill()
+    context.stroke()
+  }
+
+  // Barometer dial: the fleet's CPU, from 0% (left) to 100% (right).
+  const dial = { x, y: y - 44 }
+  context.beginPath()
+  context.arc(dial.x, dial.y, 12, 0, Math.PI * 2)
+  context.fillStyle = '#fffdf5'
+  context.fill()
+  context.stroke()
+  const cpu = tick?.cpuPercent ?? 0
+  const needle = Math.PI * 0.75 + (cpu / 100) * Math.PI * 1.5
+  context.beginPath()
+  context.moveTo(dial.x, dial.y)
+  context.lineTo(dial.x + Math.cos(needle) * 9, dial.y + Math.sin(needle) * 9)
+  context.strokeStyle = tick && tick.alarm !== 'ok' ? '#9b2c22' : PENCIL
+  context.stroke()
+
+  // The bell, which swings while it rings.
+  const ringing = model.crowd !== null && bellRingingAt(model.crowd, model.runTime)
+  const swing = ringing && !model.reducedMotion ? Math.sin(model.time / 55) * 0.55 : 0
+  context.strokeStyle = PENCIL
+  context.beginPath()
+  context.moveTo(x, y - 64)
+  context.lineTo(x + 15, y - 64)
+  context.stroke()
+  context.save()
+  context.translate(x + 15, y - 64)
+  context.rotate(swing)
+  context.beginPath()
+  context.moveTo(-6, 11)
+  context.quadraticCurveTo(-5, 1, 0, 1)
+  context.quadraticCurveTo(5, 1, 6, 11)
+  context.closePath()
+  context.fillStyle = '#d9b44a'
+  context.fill()
+  context.stroke()
+  context.restore()
+  context.restore()
+
+  // Its words stack above it, clear of the Cloudlings' own labels.
+  caption(context, 'CloudWatch', x - 18, y - 124, 12, 'left')
+  if (tick && tick.alarm !== 'ok') {
+    // A square red badge with words, so the alarm never depends on colour alone.
+    const which = tick.alarm === 'high-cpu' ? 'high' : 'low'
+    const text = `ALARM (CPU ${which}) · CPU ${cpu}%`
+    context.save()
+    context.font = `11px ${CAPTION_FONT}`
+    const width = context.measureText(text).width + 12
+    context.fillStyle = '#9b2c22'
+    context.fillRect(x - 18, y - 115, width, 16)
+    context.fillStyle = '#ffffff'
+    context.textBaseline = 'middle'
+    context.fillText(text, x - 12, y - 107)
+    context.restore()
+  } else if (tick) {
+    caption(context, `OK · CPU ${cpu}%`, x - 18, y - 107, 11, 'left', '#2f5f34')
+  }
+  if (ringing) caption(context, 'ding!', x + 26, y - 74, 11, 'left', '#7a5a12')
+}
+
 function drawDrag(context: CanvasRenderingContext2D, model: SkyViewModel): void {
   const drag = model.drag
   if (!drag) return
@@ -898,17 +1176,35 @@ export function drawSky(context: CanvasRenderingContext2D, model: SkyViewModel):
     if (last?.step.at.kind === 'resource')
       burstFor[last.step.at.id] = Math.max(0, 1 - frame.endingProgress * 2.5)
   }
-  drawClouds(context, model, burstFor)
+  // In a crowd run, the cloud that served this tick's kites flashes as they arrive.
+  const crowdFrame = model.crowd ? crowdFrameAt(model.crowd, model.runTime) : null
+  if (crowdFrame && !model.reducedMotion && crowdFrame.tick.delivered > 0) {
+    const served = [...crowdFrame.tick.served.trace]
+      .reverse()
+      .find((step) => step.leg === 'request')
+    const flash = Math.max(0, 1 - (crowdFrame.progress - ARRIVAL) * 4)
+    if (served?.at.kind === 'resource' && crowdFrame.progress >= ARRIVAL) {
+      // An Auto Scaling group's instances ("asg#2") flash as their group's cloud.
+      const cloudId = served.at.id.split('#')[0] ?? served.at.id
+      burstFor[cloudId] = Math.max(burstFor[cloudId] ?? 0, flash)
+    }
+  }
+  drawClouds(context, model, burstFor, crowdFrame)
   drawHighlight(context, model)
+  if (model.level.crowd) drawWeatherStation(context, model, crowdFrame)
 
-  for (const kite of model.level.population) {
-    drawKiteAndCloudling(
-      context,
-      model,
-      kite,
-      model.scripts.find((script) => script.kiteRun.kite.id === kite.id),
-      theme.costume,
-    )
+  if (crowdFrame && model.crowd) {
+    drawCrowd(context, model, crowdFrame, theme.costume)
+  } else {
+    for (const kite of model.level.population) {
+      drawKiteAndCloudling(
+        context,
+        model,
+        kite,
+        model.scripts.find((script) => script.kiteRun.kite.id === kite.id),
+        theme.costume,
+      )
+    }
   }
   drawDrag(context, model)
 

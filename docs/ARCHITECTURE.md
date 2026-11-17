@@ -43,6 +43,9 @@ something; if the UI needs to know, the engine returns it.
 5. **Playback** (`src/game/playback.ts`) turns each kite's trace into a timed path: the
    kite pauses at every check, and where a check failed, that control's own animation
    plays at that point. Sounds are triggered alongside (`src/game/sound.ts`).
+   In a crowd level, `src/game/crowdPlayback.ts` does the same for the crowd: it places
+   each tick's kites on the ground and the clock, takes their paths from the engine's
+   representative journeys, and blends their sounds into a few voices.
 6. **Afterwards**, clicking a Cloudling opens the trace inspector, which lists the same
    trace steps as text.
 

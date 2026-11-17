@@ -92,7 +92,11 @@ function playTone(audio: AudioContext, output: AudioNode, tone: Tone, at: number
   }
 }
 
-export function playSound(id: SoundId): void {
+/**
+ * Plays an effect. `volume` (0 to 1) scales it: a crowd's blended cheer is louder
+ * for a bigger crowd, but it is still one cheer.
+ */
+export function playSound(id: SoundId, volume = 1): void {
   if (!context || !effectsGain) return
   const now = context.currentTime
   const active = (playing.get(id) ?? []).filter((endTime) => endTime > now)
@@ -101,6 +105,7 @@ export function playSound(id: SoundId): void {
   const length = Math.max(...tones.map((tone) => tone.start + tone.duration))
   // Throttle: skip if too many copies are sounding or the last one only just began.
   if (active.length >= MAX_SIMULTANEOUS || now - (lastStart - length) < MIN_REPEAT_SECONDS) return
-  for (const tone of tones) playTone(context, effectsGain, tone, now)
+  for (const tone of tones)
+    playTone(context, effectsGain, { ...tone, gain: tone.gain * volume }, now)
   playing.set(id, [...active, now + length])
 }

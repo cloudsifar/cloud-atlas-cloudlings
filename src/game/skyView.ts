@@ -18,6 +18,7 @@ import {
   type Point,
   type Snap,
 } from './layout'
+import { crowdCuesBetween, crowdRunDuration } from './crowdPlayback'
 import { buildScripts, runDuration, soundsBetween, type KiteScript } from './playback'
 import { drawSky, type DragView } from './render'
 import { playSound } from './sound'
@@ -134,8 +135,10 @@ export function createSkyView(
 
     // Which run, if any, is on show? Only one that still describes the current scene.
     const showRun = state.lastRun !== null && state.lastRunIsCurrent
+    // In a crowd level the crowd is what flies; the named kites are its regulars.
+    const crowd = showRun ? (state.lastRun?.crowd ?? null) : null
     if (showRun && state.lastRun && scriptsScene !== state.scene) {
-      scripts = buildScripts(state.lastRun, state.scene, layout)
+      scripts = crowd ? [] : buildScripts(state.lastRun, state.scene, layout)
       scriptsScene = state.scene
     }
     if (!showRun) {
@@ -152,10 +155,15 @@ export function createSkyView(
           : 0
         : timestamp - runStartedAt
       if (!reducedMotion) {
-        for (const sound of soundsBetween(scripts, previousRunTime, runTime)) playSound(sound)
+        if (crowd) {
+          for (const cue of crowdCuesBetween(crowd, previousRunTime, runTime))
+            playSound(cue.sound, cue.volume)
+        } else {
+          for (const sound of soundsBetween(scripts, previousRunTime, runTime)) playSound(sound)
+        }
       }
       previousRunTime = runTime
-      if (runTime >= runDuration(scripts)) store.finishRun()
+      if (runTime >= (crowd ? crowdRunDuration(crowd) : runDuration(scripts))) store.finishRun()
     }
 
     const compromisedIds =
@@ -174,6 +182,7 @@ export function createSkyView(
       editable: state.phase !== 'flying',
       scripts,
       runTime,
+      crowd,
       compromisedIds,
       sunlightStartedAt,
       highlight,

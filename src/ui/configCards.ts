@@ -16,6 +16,7 @@ import {
   type SecurityGroupPeer,
   type ServiceAction,
   REQUESTS_PER_TICK,
+  type Ec2Instance,
 } from '../engine'
 import {
   addRoleStatement,
@@ -464,7 +465,15 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
       break
     }
     case 'auto-scaling-group': {
-      const stepper = (label: string, field: 'min' | 'max', value: number) =>
+      // Desired capacity always lies between the minimum and the maximum, as in AWS;
+      // setGroupSettings keeps it there when a limit moves.
+      const stepper = (
+        label: string,
+        field: 'min' | 'desired' | 'max',
+        value: number,
+        lowest: number,
+        highest: number,
+      ) =>
         h(
           'div',
           { class: 'stepper' },
@@ -477,7 +486,7 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
               ),
             `${field}-down`,
             '',
-            locked || value <= 1,
+            locked || value <= lowest,
           ),
           h('output', {
             textContent: String(value),
@@ -491,17 +500,31 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
               ),
             `${field}-up`,
             '',
-            locked || value >= 12,
+            locked || value >= highest,
           ),
         )
-      const perInstance = REQUESTS_PER_TICK[resource.size]
+      const sizes: Option<Ec2Instance['size']>[] = (['small', 'medium', 'large'] as const).map(
+        (size) => ({
+          value: size,
+          label: `${size[0]!.toUpperCase()}${size.slice(1)}: serves ${REQUESTS_PER_TICK[size]} kites per tick`,
+        }),
+      )
       body.append(
         h('p', {
           class: 'note',
-          textContent: `Instances of size ${resource.size}, spread across ${resource.subnetIds.map(subnetName).join(' and ')}. Each serves ${perInstance} kites per tick.`,
+          textContent: `Identical instances, spread across ${resource.subnetIds.map(subnetName).join(' and ')}.`,
         }),
-        stepper('Minimum instances', 'min', resource.min),
-        stepper('Maximum instances', 'max', resource.max),
+        dropdown(
+          'Instance size',
+          sizes,
+          resource.size,
+          (size) => actions.edit((current) => setGroupSettings(current, resource.id, { size })),
+          'size',
+          locked,
+        ),
+        stepper('Minimum instances', 'min', resource.min, 1, 12),
+        stepper('Desired (to start with)', 'desired', resource.desired, resource.min, resource.max),
+        stepper('Maximum instances', 'max', resource.max, 1, 12),
         dropdown(
           'Scaling policy (target tracking)',
           [
