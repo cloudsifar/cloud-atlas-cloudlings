@@ -349,7 +349,7 @@
       "id": "red-1",
       "kind": "hostile",
       "groundPosition": 5,
-      "ip": "198.51.100.66",
+      "ip": "192.0.2.66",
       "destinationId": "photos",
       "port": 443,
       "payload": "clean",

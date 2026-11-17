@@ -315,7 +315,7 @@
       "id": "red-1",
       "kind": "hostile",
       "groundPosition": 4,
-      "ip": "198.51.100.66",
+      "ip": "192.0.2.66",
       "destinationId": "alb",
       "port": 22,
       "payload": "clean",

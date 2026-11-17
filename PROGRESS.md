@@ -48,8 +48,6 @@ Running log. Newest state first; updated at the end of every milestone.
   "public: routes to the Internet Gateway" notes and sits close to the gateway cloud.
 - **The results card opens the moment the kites land**, covering the sky. "Keep
   building" closes it. A short delay would let the player watch the ending.
-- The hostile kites use addresses in `198.51.100.0/24`. Level 7 uses that range as the
-  "known bad" range, so the earlier levels' red kites may want moving to `192.0.2.0/24`.
 - New security group rules default to HTTPS 443 in the port dropdown; Level 2 needs
   HTTP 80, which is easy to miss. The narrator names the port, and the step does not
   advance until the right rule exists.
@@ -77,8 +75,8 @@ None found so far. Two places where the brief's wording was made more exact:
   describes. Described in `docs/ENGINE.md`, section 9.
 - "Blocked by Block Public Access": with it on, the trace reports the anonymous request
   as stopped by Block Public Access even when the bucket policy grants nothing to the
-  public (in AWS the request would also fail on the missing grant). **To do:** add this
-  to `docs/SIMPLIFICATIONS.md` and to the S3 fact card.
+  public (in AWS the request would also fail on the missing grant). Recorded in
+  `docs/SIMPLIFICATIONS.md` (11b). **To do:** disclose it on the S3 fact card.
 
 ## Log
 

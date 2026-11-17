@@ -279,7 +279,7 @@
       "id": "red-1",
       "kind": "hostile",
       "groundPosition": 4,
-      "ip": "198.51.100.66",
+      "ip": "192.0.2.66",
       "destinationId": "app-a",
       "port": 80,
       "payload": "clean",
