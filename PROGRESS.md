@@ -9,7 +9,7 @@ Running log. Newest state first; updated at the end of every milestone.
       balancer target selection) with tests citing AWS docs; `docs/ENGINE.md`,
       `docs/SIMPLIFICATIONS.md`
 - [x] **Milestone 2** — Levels 1–3 playable with placeholder art
-- [ ] **Milestone 3** — in progress: Level 4 (Skyway) done; Levels 5–12 and the rest of
+- [ ] **Milestone 3** — in progress: Levels 4 (Skyway) and 5 (Crowd Day) done; Levels 6–12 and the rest of
       the engine to do. See "Handover: what to build next" below
 - [ ] Milestone 4 — shell (partly started: start screen, level select with ticks and stars,
       Guided Run from Level 1 with "Next level", settings)
@@ -17,11 +17,11 @@ Running log. Newest state first; updated at the end of every milestone.
 
 ## What was verified, and how
 
-- **Tests:** 128 pass with `npm run offline:test` (the Vitest test files run on Node's
+- **Tests:** 156 pass with `npm run offline:test` (the Vitest test files run on Node's
   test runner through a small stand-in for Vitest; see ADR 0002).
 - **Type-check:** `tsc --noEmit` is clean apart from the two packages that could not be
   installed (`vitest`, `@types/node`).
-- **In a browser (headless Chromium, 1280×720, esbuild bundle):** Levels 1, 2, 3 and 4 were
+- **In a browser (headless Chromium, 1280×720, esbuild bundle):** Levels 1 to 5 were
   each played from start to three stars through the real interface: dragging clouds from
   the tray, adding routes and rules on config cards, ticking targets, attaching the role,
   flying the kites, opening the trace inspector. No console errors.
@@ -58,7 +58,7 @@ Running log. Newest state first; updated at the end of every milestone.
 - Engine: WAF, Auto Scaling, capacity and timeouts, events (`applyEvent`), RDS, DynamoDB,
   SQS, SNS, Lambda, KMS, SSM, Route 53, CloudWatch, EBS, EFS, DynamoDB gateway endpoint
   flows, and the cost penalty for idle oversized instances.
-- Levels 5–12.
+- Levels 6–12.
 - Demo Mode, Field Guide, About screen, phone path, link
   preview tags, regional scenes beyond N. Virginia, costumes.
 - `docs/ASSET_LIST.md`, `CREDITS.md`, font choice ADR (the game currently uses system
@@ -89,24 +89,18 @@ goes in the engine as a predicate with a test.
 5. Fact cards in `content/fact-cards.json`; docs: `ENGINE.md`, `SIMPLIFICATIONS.md`,
    `LEVEL_AUTHORING.md`, this file.
 
-**Level 5, Crowd Day (brief, Section 11).** Needs, in the engine:
+**Level 5, Crowd Day: done, with these gaps.**
 
-- Time. Today every kite is evaluated once, independently. Level 5 needs ticks: a
-  pure `simulate(scene, population, events) → per-tick results`, with a seeded or
-  fixed schedule so the same scene gives the same verdict.
-- Capacity: each instance size handles a fixed number of kites per tick; requests
-  beyond total healthy capacity get outcome `dropped` (already in `FlowOutcome`'s
-  design; check `trace.ts`).
-- Auto Scaling group as a new resource kind (min, desired, max, subnets), drawn as an
-  altocumulus cluster; launches and terminations take a few ticks.
-- CloudWatch alarm (metric, threshold, OK/ALARM) that scales the group out and in.
-- Events: `applyEvent(scene, event) → scene`, pure. `LevelEvent` in
-  `src/levels/schema.ts` is currently `never`; crowd surge goes there first.
-- Predicates: "at least N% of friendly kites delivered", "capacity back at minimum
-  after the surge".
-- The cost penalty for idle oversized instances belongs with this capacity model.
-- Playback (`src/game/playback.ts`) currently plays one script per kite; crowds of 40
-  need batching and throttled sound (brief, Sections 8 and 13).
+- The crowd is simulated and shown as a chart and table on the weather station. It is
+  not animated as forty Cloudlings on the ground; only the four named kites fly.
+- The fleet's cloud does not grow and shrink during playback; its caption shows limits.
+- CloudWatch is a panel, not yet a weather station drawn on the ground with a bell.
+- Instance size cannot be changed by the player, so "idle oversized instances are
+  penalised" is still not modelled.
+- An Auto Scaling group does not yet replace unhealthy instances (needed for Level 6).
+- `LevelEvent` is still `never`: the surge is level data (`crowd.phases`), not an event
+  on a timeline. Level 6 needs real events (`applyEvent(scene, event) → scene`), and
+  `simulateCrowd` should then take them.
 
 **Level 6, Storm Front.** Needs AZ failure as an event (everything in the AZ becomes
 unhealthy, including a NAT Gateway; the ALB stops routing there; the ASG relaunches
@@ -118,7 +112,7 @@ serves no reads), and an instance → database flow in `flow.ts`.
 
 - Load sprite files named in `assets/manifest.json` (currently only sizes are used).
 - Delay the results card until the kites' endings have played.
-- Disclose simplifications 11b and 13 on fact cards.
+- Disclose simplifications 11b, 17 and 23 on fact cards.
 - Fix the label overlaps in the low band.
 - Write `docs/ASSET_LIST.md` and `CREDITS.md`; choose and bundle fonts, with an ADR.
 - Regional costumes are a tunic colour only; the four regional skylines exist.
@@ -147,3 +141,6 @@ None found so far. Two places where the brief's wording was made more exact:
   endpoint routes on route cards, `removableIds`, the skyway drawing, running-cost
   panel. Played to three stars in a browser; Levels 1 and 3 replayed as a regression
   check.
+- **Session 1, continued.** Level 5 (Crowd Day): Auto Scaling groups, the crowd
+  simulation with capacity and target tracking, weather-station panel. Played to a
+  met objective in a browser; the reference solution earns three stars in the tests.

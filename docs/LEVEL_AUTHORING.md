@@ -15,23 +15,26 @@ reference, and this guide is the tour.
 
 ## Fields
 
-| Field                            | What goes in it                                                                                    |
-| -------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `id`, `slug`, `title`, `concept` | Number, file-name slug, display title, one line on what the level teaches                          |
-| `guidance`                       | `"full"`, `"hints"` or `"minimal"`                                                                 |
-| `region`                         | `"us-east-1"`, `"eu-central-1"`, `"sa-east-1"` or `"ap-northeast-1"`: scenery only                 |
-| `azs`                            | `1` or `2`                                                                                         |
-| `narration`                      | Narrator steps, in order. May be `[]`                                                              |
-| `initialScene`                   | The scene the player starts from: a complete engine `Scene`                                        |
-| `lockedIds`                      | Ids of anything the player may not change (resources, security groups, route tables, network ACLs) |
-| `palette`                        | Clouds the player may add, each written out in full with a fixed id                                |
-| `population`                     | The Cloudlings and their kites                                                                     |
-| `events`                         | Must be `[]` for now (scripted events arrive with Milestone 3)                                     |
-| `objectives`                     | Goals, each a machine-checkable predicate with player-facing text                                  |
-| `stars.wellArchitected`          | The third star: its text and the predicates that must all hold                                     |
-| `hints`                          | One entry per objective, three tiers each                                                          |
-| `factCards`                      | Ids from `content/fact-cards.json`, shown on the results card                                      |
-| `referenceSolution`              | The intended finished scene. Never shown to players; the tests use it                              |
+| Field                            | What goes in it                                                                                                                                   |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`, `slug`, `title`, `concept` | Number, file-name slug, display title, one line on what the level teaches                                                                         |
+| `guidance`                       | `"full"`, `"hints"` or `"minimal"`                                                                                                                |
+| `region`                         | `"us-east-1"`, `"eu-central-1"`, `"sa-east-1"` or `"ap-northeast-1"`: scenery only                                                                |
+| `azs`                            | `1` or `2`                                                                                                                                        |
+| `narration`                      | Narrator steps, in order. May be `[]`                                                                                                             |
+| `initialScene`                   | The scene the player starts from: a complete engine `Scene`                                                                                       |
+| `lockedIds`                      | Ids of anything the player may not change (resources, security groups, route tables, network ACLs)                                                |
+| `palette`                        | Clouds the player may add, each written out in full with a fixed id                                                                               |
+| `removableIds`                   | Optional. Ids of resources in the initial scene the player may remove (e.g. `["nat"]`). Palette clouds are always removable                       |
+| `gatewayEndpoints`               | Optional. `["s3"]` and/or `["dynamodb"]`: offers that gateway endpoint as a route on route cards. It is a route, not a palette cloud              |
+| `population`                     | The Cloudlings and their kites                                                                                                                    |
+| `crowd`                          | Optional. A crowd over time: `{ loadBalancerId, ip, phases: [{ ticks, kitesPerTick }] }`. Simulated tick by tick and shown on the weather station |
+| `events`                         | Must be `[]` for now (scripted events arrive with Milestone 3)                                                                                    |
+| `objectives`                     | Goals, each a machine-checkable predicate with player-facing text                                                                                 |
+| `stars.wellArchitected`          | The third star: its text and the predicates that must all hold                                                                                    |
+| `hints`                          | One entry per objective, three tiers each                                                                                                         |
+| `factCards`                      | Ids from `content/fact-cards.json`, shown on the results card                                                                                     |
+| `referenceSolution`              | The intended finished scene. Never shown to players; the tests use it                                                                             |
 
 Every level is self-contained: it starts from its own `initialScene` and never depends
 on another level. To build on an earlier level, copy that level's `referenceSolution`
@@ -91,20 +94,24 @@ carries a complete resource with a fixed id (for example the bucket `photos`).
 
 The predicates available today (`src/engine/predicates.ts`):
 
-| Predicate                           | True when                                                                                     |
-| ----------------------------------- | --------------------------------------------------------------------------------------------- |
-| `flows-delivered`                   | Every selected kite was delivered, response included                                          |
-| `flows-stopped` (optional `by`)     | Every selected kite was stopped; with `by`, stopped by that control                           |
-| `resource-exists`                   | A resource with that id is in the scene                                                       |
-| `route-present`                     | The route table has that destination pointing at that kind of target                          |
-| `security-group-allows`             | The group has exactly that inbound rule                                                       |
-| `listener-is`                       | The load balancer's listener is `http` or `https`                                             |
-| `targets-registered`                | The load balancer has at least that many targets                                              |
-| `targets-in-both-azs`               | Its targets cover both Availability Zones                                                     |
-| `targets-accept-only-load-balancer` | Every inbound rule on every target names the load balancer's security group and nothing wider |
-| `role-attached`                     | Each listed instance has a role                                                               |
-| `role-allows`                       | The role allows that action on that resource                                                  |
-| `bucket-locked-down`                | Block Public Access is on and the bucket policy grants nothing to everyone                    |
+| Predicate                                 | True when                                                                                                            |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `flows-delivered`                         | Every selected kite was delivered, response included                                                                 |
+| `flows-stopped` (optional `by`)           | Every selected kite was stopped; with `by`, stopped by that control                                                  |
+| `resource-exists`                         | A resource with that id is in the scene                                                                              |
+| `route-present`                           | The route table has that destination pointing at that kind of target                                                 |
+| `security-group-allows`                   | The group has exactly that inbound rule                                                                              |
+| `listener-is`                             | The load balancer's listener is `http` or `https`                                                                    |
+| `targets-registered`                      | The load balancer has at least that many targets                                                                     |
+| `targets-in-both-azs`                     | Its targets cover both Availability Zones                                                                            |
+| `targets-accept-only-load-balancer`       | Every inbound rule on every target names the load balancer's security group and nothing wider                        |
+| `role-attached`                           | Each listed instance has a role                                                                                      |
+| `role-allows`                             | The role allows that action on that resource                                                                         |
+| `bucket-locked-down`                      | Block Public Access is on and the bucket policy grants nothing to everyone                                           |
+| `service-routed-through-gateway-endpoint` | Every subnet holding an instance sends that service's traffic to a gateway endpoint                                  |
+| `cost-at-most`                            | The running cost is at most that many coins. Using it anywhere in a level makes the side panel show the running cost |
+| `crowd-delivered-at-least`                | At least that percentage of the whole crowd was delivered (needs `crowd`)                                            |
+| `crowd-scaled-out-and-back-in`            | More targets were in service at the busiest tick than at the end (needs `crowd`)                                     |
 
 Select kites with `{ "intent": "legitimate" }`, `{ "intent": "hostile" }` or
 `{ "flowIds": ["green-1"] }`. Values for `by`: `route`, `nacl`, `security-group`,
