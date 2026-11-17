@@ -1,0 +1,15 @@
+{
+  "note": "Maps each sprite id to its file, size and anchor. `file: null` means the game draws a placeholder in code (src/game/placeholderArt.ts) at exactly this size. To swap in final art: add the WebP under assets/final/, set `file`, keep or adjust the size and anchor. No code changes.",
+  "sprites": {
+    "cloud.stratocumulus.internet-gateway": { "file": null, "width": 120, "height": 46, "anchor": [0.5, 0.5] },
+    "cloud.stratocumulus.nat-gateway": { "file": null, "width": 104, "height": 50, "anchor": [0.5, 0.5] },
+    "cloud.cumulus.load-balancer": { "file": null, "width": 300, "height": 78, "anchor": [0.5, 0.5] },
+    "cloud.altocumulus.ec2-instance": { "file": null, "width": 110, "height": 66, "anchor": [0.5, 0.5] },
+    "cloud.cumulonimbus.s3-bucket": { "file": null, "width": 150, "height": 380, "anchor": [0.5, 0.5] },
+    "cloud.cirrus.iam-role": { "file": null, "width": 130, "height": 50, "anchor": [0.5, 0.5] },
+    "cloudling.friendly": { "file": null, "width": 34, "height": 58, "anchor": [0.5, 1] },
+    "cloudling.hostile": { "file": null, "width": 34, "height": 58, "anchor": [0.5, 1] },
+    "kite.friendly": { "file": null, "width": 30, "height": 38, "anchor": [0.5, 0.5] },
+    "kite.hostile": { "file": null, "width": 44, "height": 26, "anchor": [0.5, 0.5] }
+  }
+}

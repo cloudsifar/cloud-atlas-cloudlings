@@ -1,0 +1,668 @@
+/* Cloud Atlas: Cloudlings — styles for the DOM around the canvas.
+   The look: a 1990s illustrated encyclopedia on warm cream paper.
+   Everything sits inside a 1280×720 stage that is scaled to fit the window,
+   so all sizes here are in stage pixels. */
+
+:root {
+  --paper: #f6efdc;
+  --paper-dark: #ebe1c6;
+  --ink: #2f2c3a;
+  --ink-soft: #55516a;
+  --rule: #8c8598;
+  --accent: #2b5a88;
+  --good: #23602e;
+  --bad: #8f1f1f;
+  --point: #b85f14;
+  /* TODO(Simon): bundle open-licensed fonts (see docs/adr/0005). Until then these fall back to system fonts. */
+  --caption-font:
+    'Patrick Hand', 'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Sans MS', cursive;
+  --body-font: 'Atkinson Hyperlegible', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #3b3948;
+  color: var(--ink);
+  font-family: var(--body-font);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1280px;
+  height: 720px;
+  transform-origin: center;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5 {
+  font-family: var(--caption-font);
+  margin: 0;
+  font-weight: normal;
+}
+h2 {
+  font-size: 18px;
+  border-bottom: 1px dashed var(--rule);
+  margin: 8px 0 6px;
+}
+h3 {
+  font-size: 16px;
+}
+h4 {
+  font-size: 15px;
+  margin-top: 4px;
+}
+h5 {
+  font-size: 13px;
+  margin: 8px 0 2px;
+  color: var(--ink-soft);
+}
+p {
+  margin: 4px 0;
+}
+
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  border: 1.5px solid var(--ink-soft);
+  border-radius: 7px;
+  background: #fffdf5;
+  padding: 4px 10px;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: #1c3f61;
+  font-family: var(--caption-font);
+  font-size: 16px;
+  padding: 4px 16px;
+}
+button.quiet {
+  background: transparent;
+}
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+}
+:focus-visible {
+  outline: 3px solid var(--point);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.note,
+.subtitle,
+.step-count,
+.empty {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+.locked-note {
+  color: var(--ink-soft);
+  font-style: italic;
+  font-size: 12px;
+}
+.button-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* A dashed, pulsing outline: the narrator or a hint is pointing here. */
+.pointed-at {
+  outline: 3px dashed var(--point);
+  outline-offset: 3px;
+  animation: point 1s ease-in-out infinite alternate;
+}
+@keyframes point {
+  from {
+    outline-offset: 2px;
+  }
+  to {
+    outline-offset: 6px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pointed-at {
+    animation: none;
+  }
+}
+
+/* ---- in-game layout ------------------------------------------------------ */
+
+canvas.sky {
+  position: absolute;
+  inset: 0;
+  width: 1280px;
+  height: 720px;
+  touch-action: none;
+}
+
+.top-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: rgba(246, 239, 220, 0.94);
+  border-bottom: 1.5px solid var(--rule);
+}
+.level-title {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+.level-title strong {
+  font-family: var(--caption-font);
+  font-size: 20px;
+  font-weight: normal;
+}
+.level-title span {
+  color: var(--ink-soft);
+}
+
+.palette,
+.side-panel {
+  position: absolute;
+  top: 44px;
+  bottom: 0;
+  width: 192px;
+  padding: 4px 10px 10px;
+  background: rgba(246, 239, 220, 0.95);
+  overflow-y: auto;
+}
+.palette {
+  left: 0;
+  border-right: 1.5px solid var(--rule);
+}
+.side-panel {
+  right: 0;
+  border-left: 1.5px solid var(--rule);
+}
+.palette h3 {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 8px 0 4px;
+}
+
+/* Specimen cards, as in an encyclopedia plate. */
+.specimen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 4px;
+  background: #fffdf5;
+  border: 1.5px solid var(--ink-soft);
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 var(--paper-dark);
+  touch-action: none;
+  cursor: grab;
+}
+.specimen-name {
+  font-family: var(--caption-font);
+  font-size: 14px;
+}
+.family-icon {
+  width: 72px;
+  height: 40px;
+}
+
+.objectives,
+.findings,
+.rules,
+.stars,
+.trace {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.objectives li {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 2px 4px;
+  margin-bottom: 8px;
+}
+.objectives li > :nth-child(n + 4) {
+  grid-column: 2;
+}
+.objectives .tick {
+  font-size: 15px;
+  line-height: 1.1;
+}
+.objectives li.met {
+  color: var(--good);
+}
+.hint {
+  background: #fff7d6;
+  border-left: 3px solid var(--point);
+  padding: 3px 6px;
+  font-size: 12px;
+}
+.findings li {
+  font-size: 12px;
+  margin: 0 0 6px 4px;
+  padding-left: 8px;
+  border-left: 3px solid var(--rule);
+}
+
+.narrator {
+  position: absolute;
+  left: 196px;
+  right: 196px;
+  bottom: 0;
+  height: 84px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: rgba(255, 253, 245, 0.96);
+  border: 1.5px solid var(--ink-soft);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+}
+.narrator-portrait {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink-soft);
+  background: radial-gradient(circle at 50% 42%, #bdb6d0 0 34%, #5b5470 35% 46%, #e8e0cb 47%);
+}
+.narrator-text {
+  flex: 1;
+  font-size: 13.5px;
+}
+.narrator-text p {
+  margin: 0;
+}
+
+/* ---- floating cards -------------------------------------------------------- */
+
+.card-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.card-layer > * {
+  pointer-events: auto;
+}
+
+.config-card {
+  position: absolute;
+  top: 52px;
+  width: 316px;
+  max-height: 574px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  background: #fffdf5;
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: 4px 4px 0 rgba(60, 50, 30, 0.25);
+}
+.config-card.on-right {
+  right: 198px;
+}
+.config-card.on-left {
+  left: 198px;
+}
+.trace-card {
+  width: 350px;
+}
+.card-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  border-bottom: 1px dashed var(--rule);
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+.card-header h3 {
+  font-size: 19px;
+}
+.card-header .link {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+button.close,
+button.remove {
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+  font-size: 16px;
+}
+.card-section {
+  margin-bottom: 10px;
+}
+.card-footer {
+  border-top: 1px dashed var(--rule);
+  padding-top: 8px;
+}
+
+.rules li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px dotted var(--paper-dark);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.field select,
+.field input {
+  color: var(--ink);
+  padding: 2px 4px;
+  border: 1.5px solid var(--ink-soft);
+  border-radius: 5px;
+  background: #fff;
+  max-width: 100%;
+}
+.add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-end;
+  margin-top: 6px;
+  padding: 6px;
+  background: var(--paper);
+  border-radius: 5px;
+}
+.static-field {
+  padding-bottom: 4px;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.explanation {
+  position: absolute;
+  width: 260px;
+  padding: 8px 30px 8px 10px;
+  background: #fff7d6;
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  font-family: var(--caption-font);
+  font-size: 14px;
+  box-shadow: 3px 3px 0 rgba(60, 50, 30, 0.2);
+}
+.explanation .close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  max-width: 560px;
+  padding: 8px 14px;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 8px;
+}
+
+.outcome {
+  padding: 5px 8px;
+  border-radius: 4px;
+  border-left: 4px solid;
+}
+.outcome.good {
+  color: var(--good);
+  border-color: var(--good);
+  background: #edf6ea;
+}
+.outcome.bad {
+  color: var(--bad);
+  border-color: var(--bad);
+  background: #fbecea;
+}
+.trace .leg-heading {
+  font-family: var(--caption-font);
+  font-size: 15px;
+  margin: 10px 0 4px;
+  border-bottom: 1px dashed var(--rule);
+}
+.trace-step {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 0 6px;
+  padding: 5px 0;
+  border-bottom: 1px dotted var(--paper-dark);
+}
+.trace-step > * {
+  grid-column: 2;
+}
+.trace-step .step-number {
+  grid-column: 1;
+  grid-row: 1 / span 3;
+  font-family: var(--caption-font);
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+.step-mark {
+  font-size: 11px;
+  font-weight: bold;
+}
+.trace-step.pass .step-mark {
+  color: var(--good);
+}
+.trace-step.fail .step-mark {
+  color: var(--bad);
+}
+.trace-step.fail {
+  background: #fbecea;
+}
+.rule-ref {
+  font-size: 11px;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.modal {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(47, 44, 58, 0.45);
+}
+.fact-card {
+  width: 470px;
+  max-height: 620px;
+  overflow-y: auto;
+  padding: 18px 22px;
+  background: #fffdf5;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: 6px 6px 0 rgba(40, 30, 20, 0.3);
+}
+.fact-card h3 {
+  font-size: 24px;
+  margin-bottom: 6px;
+}
+.fact-card ul {
+  padding-left: 18px;
+}
+.atlas-ref {
+  font-style: italic;
+  color: var(--ink-soft);
+  margin: 10px 0;
+}
+.stars {
+  margin: 10px 0;
+}
+.stars li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.stars li.met {
+  color: var(--good);
+}
+.big-star {
+  font-size: 26px;
+}
+.results details {
+  margin: 4px 0;
+}
+.results summary {
+  cursor: pointer;
+  font-family: var(--caption-font);
+  font-size: 15px;
+}
+.results .button-row {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+/* ---- start screen and menu ------------------------------------------------- */
+
+.key-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.start-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+}
+.title-logo {
+  font-size: 84px;
+  line-height: 0.95;
+  color: #2b3f6b;
+  text-shadow: 3px 3px 0 #fffdf5;
+}
+.title-logo span {
+  display: block;
+  font-size: 0.62em;
+  color: #a8501c;
+}
+.title-logo.small {
+  font-size: 44px;
+}
+.tagline {
+  font-family: var(--caption-font);
+  font-size: 22px;
+  background: rgba(255, 253, 245, 0.8);
+  padding: 2px 12px;
+  border-radius: 8px;
+}
+.start-button {
+  font-size: 30px !important;
+  padding: 8px 44px !important;
+  margin-top: 18px;
+}
+
+.menu {
+  position: absolute;
+  inset: 0;
+  padding: 22px 40px;
+  overflow-y: auto;
+}
+.menu-columns {
+  display: grid;
+  grid-template-columns: 1fr 330px;
+  gap: 40px;
+  margin-top: 8px;
+}
+.level-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 8px 0;
+}
+.level-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  padding: 10px;
+  border-radius: 4px;
+  box-shadow: 3px 3px 0 var(--paper-dark);
+  min-height: 150px;
+}
+.level-card strong {
+  font-family: var(--caption-font);
+  font-size: 19px;
+  font-weight: normal;
+}
+.level-number {
+  font-family: var(--caption-font);
+  font-size: 26px;
+  color: var(--accent);
+  line-height: 1;
+}
+.level-region,
+.level-concept {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.level-progress {
+  margin-top: auto;
+  font-size: 12px;
+  color: var(--good);
+}
+.menu .field {
+  margin: 6px 0;
+}

@@ -1,0 +1,27 @@
+{
+  "note": "Maps each sound id to its file. `file: null` means the game synthesises a placeholder from `placeholder` (a list of tones played together). To swap in a final sound: add the file under assets/final/sounds/, set `file`. Tone fields: wave (sine|triangle|square|sawtooth|noise), from/to (Hz, glides between them), start/duration (seconds), gain (0-1).",
+  "music": { "file": null },
+  "effects": {
+    "delivered": { "file": null, "placeholder": [{ "wave": "sine", "from": 520, "to": 880, "start": 0, "duration": 0.12, "gain": 0.5 }] },
+    "cheer": { "file": null, "placeholder": [{ "wave": "triangle", "from": 660, "to": 990, "start": 0, "duration": 0.18, "gain": 0.35 }, { "wave": "triangle", "from": 880, "to": 1320, "start": 0.12, "duration": 0.2, "gain": 0.3 }] },
+    "rain": { "file": null, "placeholder": [{ "wave": "noise", "from": 5000, "to": 3000, "start": 0, "duration": 0.35, "gain": 0.18 }] },
+    "forwarded": { "file": null, "placeholder": [{ "wave": "noise", "from": 600, "to": 1800, "start": 0, "duration": 0.3, "gain": 0.2 }] },
+    "change-applied": { "file": null, "placeholder": [{ "wave": "square", "from": 523, "to": 523, "start": 0, "duration": 0.1, "gain": 0.18 }, { "wave": "square", "from": 659, "to": 659, "start": 0.1, "duration": 0.1, "gain": 0.18 }, { "wave": "square", "from": 784, "to": 784, "start": 0.2, "duration": 0.22, "gain": 0.18 }] },
+    "blocked-security-group": { "file": null, "placeholder": [{ "wave": "sine", "from": 180, "to": 90, "start": 0, "duration": 0.16, "gain": 0.6 }] },
+    "blocked-nacl": { "file": null, "placeholder": [{ "wave": "sawtooth", "from": 300, "to": 420, "start": 0, "duration": 0.22, "gain": 0.25 }] },
+    "no-route": { "file": null, "placeholder": [{ "wave": "sine", "from": 440, "to": 440, "start": 0, "duration": 0.14, "gain": 0.4 }, { "wave": "sine", "from": 392, "to": 370, "start": 0.16, "duration": 0.2, "gain": 0.4 }] },
+    "blocked-iam": { "file": null, "placeholder": [{ "wave": "noise", "from": 7000, "to": 9000, "start": 0, "duration": 0.25, "gain": 0.15 }] },
+    "blocked-public-access": { "file": null, "placeholder": [{ "wave": "square", "from": 140, "to": 100, "start": 0, "duration": 0.09, "gain": 0.3 }, { "wave": "square", "from": 110, "to": 80, "start": 0.1, "duration": 0.1, "gain": 0.3 }] },
+    "timed-out": { "file": null, "placeholder": [{ "wave": "sine", "from": 500, "to": 160, "start": 0, "duration": 0.45, "gain": 0.4 }] },
+    "hostile-foiled": { "file": null, "placeholder": [{ "wave": "triangle", "from": 784, "to": 784, "start": 0, "duration": 0.09, "gain": 0.3 }, { "wave": "triangle", "from": 1047, "to": 1047, "start": 0.09, "duration": 0.16, "gain": 0.3 }, { "wave": "sawtooth", "from": 150, "to": 110, "start": 0.3, "duration": 0.18, "gain": 0.2 }] },
+    "friendly-failed": { "file": null, "placeholder": [{ "wave": "sine", "from": 440, "to": 330, "start": 0, "duration": 0.2, "gain": 0.4 }, { "wave": "sine", "from": 330, "to": 247, "start": 0.22, "duration": 0.3, "gain": 0.4 }] },
+    "breach": { "file": null, "placeholder": [{ "wave": "noise", "from": 200, "to": 60, "start": 0, "duration": 0.6, "gain": 0.6 }, { "wave": "sawtooth", "from": 110, "to": 82, "start": 0.2, "duration": 0.6, "gain": 0.3 }] },
+    "placed": { "file": null, "placeholder": [{ "wave": "noise", "from": 900, "to": 300, "start": 0, "duration": 0.14, "gain": 0.25 }] },
+    "drift-back": { "file": null, "placeholder": [{ "wave": "sine", "from": 300, "to": 360, "start": 0, "duration": 0.1, "gain": 0.3 }, { "wave": "sine", "from": 360, "to": 300, "start": 0.1, "duration": 0.12, "gain": 0.3 }] },
+    "card-open": { "file": null, "placeholder": [{ "wave": "noise", "from": 3000, "to": 5000, "start": 0, "duration": 0.08, "gain": 0.1 }] },
+    "hint": { "file": null, "placeholder": [{ "wave": "sine", "from": 1320, "to": 1320, "start": 0, "duration": 0.12, "gain": 0.3 }] },
+    "objective-ticked": { "file": null, "placeholder": [{ "wave": "square", "from": 1760, "to": 1760, "start": 0, "duration": 0.04, "gain": 0.15 }] },
+    "level-complete": { "file": null, "placeholder": [{ "wave": "triangle", "from": 523, "to": 523, "start": 0, "duration": 0.14, "gain": 0.35 }, { "wave": "triangle", "from": 659, "to": 659, "start": 0.15, "duration": 0.14, "gain": 0.35 }, { "wave": "triangle", "from": 784, "to": 784, "start": 0.3, "duration": 0.3, "gain": 0.35 }] },
+    "click": { "file": null, "placeholder": [{ "wave": "square", "from": 900, "to": 900, "start": 0, "duration": 0.02, "gain": 0.08 }] }
+  }
+}
