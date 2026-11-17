@@ -1,0 +1,4 @@
+dist
+node_modules
+.offline-build
+package-lock.json
