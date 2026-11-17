@@ -266,8 +266,13 @@ export function mountGameScreen(
           attrs: { 'aria-label': 'Close explanation', 'data-focus-key': 'explanation-close' },
         }),
       )
-      box.style.left = `${Math.min(Math.max(explained.x + explained.width / 2 - 130, 204), 816)}px`
-      box.style.top = `${Math.max(explained.y - 74, 50)}px`
+      // Beside the cloud, never on top of it: to its right if there is room, otherwise to its left.
+      const boxWidth = 260
+      const gap = 14
+      const rightOfCloud = explained.x + explained.width + gap
+      const left = rightOfCloud + boxWidth <= 1076 ? rightOfCloud : explained.x - boxWidth - gap
+      box.style.left = `${Math.max(left, 204)}px`
+      box.style.top = `${Math.max(explained.y - 6, 50)}px`
       floating.push(box)
     }
     if (message)
