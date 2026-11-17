@@ -3,6 +3,9 @@
 
 import {
   evaluateFlow,
+  expandAutoScalingGroups,
+  simulateCrowd,
+  type CrowdRecord,
   evaluateObjectives,
   evaluatePredicate,
   scoreScene,
@@ -27,6 +30,8 @@ export type Stars = {
 
 export type LevelRun = {
   kiteRuns: KiteRun[]
+  /** The crowd simulation, for levels that have a crowd; otherwise null. */
+  crowd: CrowdRecord | null
   objectives: ObjectiveResult[]
   /** What stands between the player and the least-privilege star. */
   findings: Finding[]
@@ -54,8 +59,10 @@ export function runLevel(level: Level, scene: Scene): LevelRun {
     const flow = kiteToFlow(kite, index)
     return { kite, flow, result: evaluateFlow(scene, flow) }
   })
-  const objectives = evaluateObjectives(scene, kiteRuns, level.objectives)
-  const findings = scoreScene(scene, kiteRuns, level.lockedIds)
+  const crowd = level.crowd ? simulateCrowd(scene, level.crowd) : null
+  const objectives = evaluateObjectives(scene, kiteRuns, level.objectives, crowd)
+  // Least privilege is judged on the instances that exist, including a group's.
+  const findings = scoreScene(expandAutoScalingGroups(scene), kiteRuns, level.lockedIds)
 
   // The second and third stars are only meaningful on a scene that works.
   const works = objectives.every((objective) => objective.met)
@@ -65,11 +72,12 @@ export function runLevel(level: Level, scene: Scene): LevelRun {
     wellArchitected:
       works &&
       level.stars.wellArchitected.predicates.every((predicate) =>
-        evaluatePredicate(scene, kiteRuns, predicate),
+        evaluatePredicate(scene, kiteRuns, predicate, crowd),
       ),
   }
   return {
     kiteRuns,
+    crowd,
     objectives,
     findings,
     stars,

@@ -14,6 +14,7 @@ import type {
   Scene,
   SecurityGroupRule,
   Subnet,
+  AutoScalingGroup,
 } from '../engine'
 import type { PaletteEntry } from '../levels'
 
@@ -183,6 +184,21 @@ export function setTargetRegistered(
   })
 }
 
+/** Changes an Auto Scaling group's settings, keeping min ≤ desired ≤ max and min at least 1. */
+export function setGroupSettings(
+  scene: Scene,
+  groupId: string,
+  change: Partial<Pick<AutoScalingGroup, 'min' | 'max' | 'scaling' | 'roleId'>>,
+): Scene {
+  return changeResource(scene, 'auto-scaling-group', groupId, (group) => {
+    Object.assign(group, change)
+    group.min = Math.max(1, group.min)
+    group.max = Math.max(group.min, group.max)
+    // The group starts each flight at its minimum; scaling takes it from there.
+    group.desired = group.min
+  })
+}
+
 export function setInstanceRole(scene: Scene, instanceId: string, roleId: string | null): Scene {
   return changeResource(scene, 'ec2-instance', instanceId, (instance) => {
     instance.roleId = roleId
@@ -232,7 +248,10 @@ export function connect(scene: Scene, fromId: string, toId: string): ConnectionR
   const to = scene.resources.find((resource) => resource.id === toId)
   if (!from || !to) return { ok: false, reason: 'There is nothing there to connect to.' }
 
-  if (from.kind === 'load-balancer' && to.kind === 'ec2-instance') {
+  if (
+    from.kind === 'load-balancer' &&
+    (to.kind === 'ec2-instance' || to.kind === 'auto-scaling-group')
+  ) {
     return { ok: true, scene: setTargetRegistered(scene, from.id, to.id, true) }
   }
   if (from.kind === 'iam-role' && to.kind === 'ec2-instance') {
@@ -241,7 +260,8 @@ export function connect(scene: Scene, fromId: string, toId: string): ConnectionR
   if (from.kind === 'load-balancer') {
     return {
       ok: false,
-      reason: 'A load balancer sends requests to compute: connect it to an EC2 instance.',
+      reason:
+        'A load balancer sends requests to compute: connect it to an EC2 instance or an Auto Scaling group.',
     }
   }
   if (from.kind === 'iam-role') {

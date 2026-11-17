@@ -167,11 +167,40 @@ export type S3Bucket = {
 
 export type IamRole = { kind: 'iam-role'; id: string; name: string; statements: PolicyStatement[] }
 
+/**
+ * A target tracking scaling policy: "keep average CPU near this percentage".
+ * EC2 Auto Scaling creates and manages the CloudWatch alarms for it.
+ */
+export type TargetTrackingPolicy = { targetCpuPercent: number }
+
+/**
+ * An Auto Scaling group: a fleet of identical instances whose size can change.
+ * Its instances are not stored; they are derived from `desired` (see autoScaling.ts),
+ * which is what makes "replace the fixed instances with a group" a small edit.
+ */
+export type AutoScalingGroup = {
+  kind: 'auto-scaling-group'
+  id: string
+  name: string
+  /** The subnets (and so the Availability Zones) instances are spread across. */
+  subnetIds: string[]
+  securityGroupIds: string[]
+  roleId: string | null
+  size: Ec2Instance['size']
+  min: number
+  /** How many instances the group is trying to keep running. Always within min..max. */
+  desired: number
+  max: number
+  /** null means the group never changes size by itself. */
+  scaling: TargetTrackingPolicy | null
+}
+
 export type Resource =
   | InternetGateway
   | NatGateway
   | LoadBalancer
   | Ec2Instance
+  | AutoScalingGroup
   | S3Bucket
   | IamRole
 

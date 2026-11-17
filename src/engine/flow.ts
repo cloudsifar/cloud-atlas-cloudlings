@@ -6,6 +6,7 @@
 // The rules themselves live in the rule modules (routing, securityGroups,
 // networkAcls, iam, s3); this file only puts them in the order AWS applies them.
 
+import { expandAutoScalingGroups } from './autoScaling'
 import { addressInSubnet, S3_ENDPOINT_ADDRESS } from './address'
 import {
   findResource,
@@ -77,7 +78,9 @@ function naclStep(
  * Throws only for source/destination pairings the game does not model, which
  * the level validator rules out before a level can ship.
  */
-export function evaluateFlow(scene: Scene, flow: Flow): FlowResult {
+export function evaluateFlow(authoredScene: Scene, flow: Flow): FlowResult {
+  // Auto Scaling groups become ordinary instances first (see autoScaling.ts).
+  const scene = expandAutoScalingGroups(authoredScene)
   const destination = findResource(scene, flow.destination.id)
   if (!destination) {
     return {
@@ -400,6 +403,23 @@ function targetPassesHealthCheck(
  * If every registered target is unhealthy the load balancer "fails open" and
  * routes to all of them anyway. With no registered targets it answers 503 itself.
  */
+/**
+ * The load balancer's registered targets that are passing health checks right now:
+ * the instances requests are shared between. Used by the crowd simulation to work
+ * out how much capacity is behind the load balancer.
+ */
+export function healthyTargets(authoredScene: Scene, loadBalancerId: string): Ec2Instance[] {
+  const scene = expandAutoScalingGroups(authoredScene)
+  const loadBalancer = findResourceOfKind(scene, 'load-balancer', loadBalancerId)
+  const firstSubnetId = loadBalancer?.subnetIds[0]
+  if (!loadBalancer || firstSubnetId === undefined) return []
+  const nodeSubnet = requireSubnet(scene, firstSubnetId)
+  return loadBalancer.targetIds
+    .map((id) => findResourceOfKind(scene, 'ec2-instance', id))
+    .filter((instance): instance is Ec2Instance => instance !== undefined)
+    .filter((target) => targetPassesHealthCheck(scene, loadBalancer, nodeSubnet, target))
+}
+
 function selectTarget(
   scene: Scene,
   loadBalancer: LoadBalancer,

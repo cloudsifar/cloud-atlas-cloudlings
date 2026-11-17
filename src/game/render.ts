@@ -490,6 +490,21 @@ function drawClouds(
   for (const resource of scene.resources) {
     const rect = layout.clouds[resource.id]
     if (!rect) continue
+    if (resource.kind === 'auto-scaling-group') {
+      // The fleet's limits, lettered above it: the number running changes during a flight.
+      const policy = resource.scaling
+        ? `CPU target ${resource.scaling.targetCpuPercent}%`
+        : 'no scaling'
+      caption(
+        context,
+        `${resource.min} to ${resource.max} instances · ${policy}`,
+        rect.x + rect.width / 2,
+        rect.y - 8,
+        12,
+        'center',
+        '#3c4a78',
+      )
+    }
     const locked = model.lockedIds.includes(resource.id)
     const compromised = model.compromisedIds.includes(resource.id)
     const unhealthy = resource.kind === 'ec2-instance' && !resource.healthy

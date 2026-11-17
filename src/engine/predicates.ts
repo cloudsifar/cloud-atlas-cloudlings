@@ -4,7 +4,9 @@
 // from this list. The same vocabulary serves objectives, star criteria and the
 // narrator's "has the player done this yet?" checks.
 
+import { expandAutoScalingGroups } from './autoScaling'
 import { costOfScene } from './cost'
+import type { CrowdRecord } from './crowd'
 import {
   findResourceOfKind,
   requireSubnet,
@@ -62,6 +64,11 @@ export type Predicate =
   | { kind: 'service-routed-through-gateway-endpoint'; service: 's3' | 'dynamodb' }
   /** The scene's running cost is no more than this many coins (see cost.ts). */
   | { kind: 'cost-at-most'; coins: number }
+  // --- about the crowd (levels with a `crowd`; see crowd.ts) ------------------
+  /** At least this percentage of the whole crowd's kites were delivered. */
+  | { kind: 'crowd-delivered-at-least'; percent: number }
+  /** More targets were in service at the busiest moment than at the end: capacity grew, then shrank. */
+  | { kind: 'crowd-scaled-out-and-back-in' }
 
 export type Objective = {
   id: string
@@ -82,7 +89,15 @@ function samePeer(first: SecurityGroupPeer, second: SecurityGroupPeer): boolean 
   return JSON.stringify(first) === JSON.stringify(second)
 }
 
-export function evaluatePredicate(scene: Scene, runs: FlowRun[], predicate: Predicate): boolean {
+export function evaluatePredicate(
+  authoredScene: Scene,
+  runs: FlowRun[],
+  predicate: Predicate,
+  /** The crowd simulation's record, for levels that have a crowd. */
+  crowd: CrowdRecord | null = null,
+): boolean {
+  // Predicates about instances should see an Auto Scaling group's instances too.
+  const scene = expandAutoScalingGroups(authoredScene)
   switch (predicate.kind) {
     case 'flows-delivered': {
       const selected = selectRuns(runs, predicate.flows)
@@ -194,7 +209,16 @@ export function evaluatePredicate(scene: Scene, runs: FlowRun[], predicate: Pred
       )
     }
     case 'cost-at-most':
-      return costOfScene(scene).total <= predicate.coins
+      // Costed on the scene as built: a group is charged for the instances it starts with.
+      return costOfScene(authoredScene).total <= predicate.coins
+    case 'crowd-delivered-at-least':
+      return crowd !== null && crowd.deliveredPercent >= predicate.percent
+    case 'crowd-scaled-out-and-back-in':
+      return (
+        crowd !== null &&
+        crowd.peakTargetsInService > crowd.finalTargetsInService &&
+        crowd.finalTargetsInService > 0
+      )
   }
 }
 
@@ -202,10 +226,11 @@ export function evaluateObjectives(
   scene: Scene,
   runs: FlowRun[],
   objectives: Objective[],
+  crowd: CrowdRecord | null = null,
 ): ObjectiveResult[] {
   return objectives.map((objective) => ({
     id: objective.id,
     text: objective.text,
-    met: evaluatePredicate(scene, runs, objective.predicate),
+    met: evaluatePredicate(scene, runs, objective.predicate, crowd),
   }))
 }

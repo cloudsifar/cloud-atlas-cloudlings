@@ -5,7 +5,23 @@ export * from './model'
 export * from './trace'
 export { PORT_OPTIONS, describePort, portOptionCovers, HTTP_PORT, HTTPS_PORT } from './ports'
 export { cidrContains, addressInSubnet } from './address'
-export { evaluateFlow } from './flow'
+export { evaluateFlow, healthyTargets } from './flow'
+export {
+  expandAutoScalingGroups,
+  groupInstances,
+  groupInstanceId,
+  runningCount,
+} from './autoScaling'
+export {
+  simulateCrowd,
+  REQUESTS_PER_TICK,
+  LAUNCH_TICKS,
+  type AlarmState,
+  type Crowd,
+  type CrowdPhase,
+  type CrowdRecord,
+  type TickRecord,
+} from './crowd'
 export { resolveRoute, isPublicSubnet, type RouteDecision, type RouteQuery } from './routing'
 export { evaluateSecurityGroups, type ConnectionPeer } from './securityGroups'
 export { evaluateNetworkAcl } from './networkAcls'

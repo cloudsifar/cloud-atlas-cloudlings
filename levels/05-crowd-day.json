@@ -1,0 +1,485 @@
+{
+  "id": 5,
+  "slug": "crowd-day",
+  "title": "Crowd Day",
+  "concept": "Elasticity: an Auto Scaling group adds capacity when a crowd arrives and removes it when the crowd leaves.",
+  "guidance": "hints",
+  "region": "eu-central-1",
+  "azs": 2,
+  "narration": [
+    {
+      "id": "brief",
+      "text": "Word has spread. Today the usual handful of Cloudlings becomes a crowd of forty, then drifts away again. Two small instances serve five kites each per tick: fly the kites and watch the weather station to see what that means.",
+      "advanceWhen": {
+        "kind": "run-finished"
+      }
+    },
+    {
+      "id": "task",
+      "text": "Most of the crowd was turned away: there was never enough capacity. You could run eight instances all day, but you would pay for them all day. Build a fleet that grows with the crowd and shrinks afterwards.",
+      "highlight": "palette:asg",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    }
+  ],
+  "initialScene": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": []
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "https",
+        "targetIds": ["app-a", "app-b"]
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-a",
+        "name": "EC2 instance A",
+        "subnetId": "private-a",
+        "securityGroupIds": ["sg-app"],
+        "roleId": null,
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-b",
+        "name": "EC2 instance B",
+        "subnetId": "private-b",
+        "securityGroupIds": ["sg-app"],
+        "roleId": null,
+        "size": "small",
+        "healthy": true
+      }
+    ]
+  },
+  "lockedIds": ["igw", "rt-public", "rt-private", "nacl-default", "sg-alb"],
+  "palette": [
+    {
+      "resource": {
+        "kind": "auto-scaling-group",
+        "id": "asg",
+        "name": "web fleet",
+        "subnetIds": ["private-a", "private-b"],
+        "securityGroupIds": ["sg-app"],
+        "roleId": null,
+        "size": "small",
+        "min": 1,
+        "desired": 1,
+        "max": 2,
+        "scaling": null
+      }
+    }
+  ],
+  "removableIds": ["app-a", "app-b"],
+  "population": [
+    {
+      "id": "green-1",
+      "kind": "friendly",
+      "groundPosition": 0,
+      "ip": "203.0.113.10",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "visits the website"
+    },
+    {
+      "id": "green-2",
+      "kind": "friendly",
+      "groundPosition": 1,
+      "ip": "203.0.113.11",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "visits the website"
+    },
+    {
+      "id": "green-3",
+      "kind": "friendly",
+      "groundPosition": 2,
+      "ip": "203.0.113.12",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "visits the website"
+    },
+    {
+      "id": "green-4",
+      "kind": "friendly",
+      "groundPosition": 3,
+      "ip": "203.0.113.13",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "visits the website"
+    }
+  ],
+  "crowd": {
+    "loadBalancerId": "alb",
+    "ip": "203.0.113.50",
+    "phases": [
+      {
+        "ticks": 3,
+        "kitesPerTick": 4
+      },
+      {
+        "ticks": 2,
+        "kitesPerTick": 10
+      },
+      {
+        "ticks": 2,
+        "kitesPerTick": 20
+      },
+      {
+        "ticks": 2,
+        "kitesPerTick": 30
+      },
+      {
+        "ticks": 10,
+        "kitesPerTick": 40
+      },
+      {
+        "ticks": 2,
+        "kitesPerTick": 20
+      },
+      {
+        "ticks": 10,
+        "kitesPerTick": 4
+      }
+    ]
+  },
+  "events": [],
+  "objectives": [
+    {
+      "id": "crowd-served",
+      "text": "At least 95% of the crowd's kites are delivered",
+      "predicate": {
+        "kind": "crowd-delivered-at-least",
+        "percent": 95
+      }
+    }
+  ],
+  "stars": {
+    "wellArchitected": {
+      "text": "Capacity grows for the crowd and shrinks again afterwards",
+      "predicates": [
+        {
+          "kind": "crowd-scaled-out-and-back-in"
+        }
+      ]
+    }
+  },
+  "hints": [
+    {
+      "objectiveId": "crowd-served",
+      "nudge": "Open \"Tick by tick\" on the weather station. When do kites start being dropped, and how many targets are in service then?",
+      "pointer": {
+        "text": "An Auto Scaling group can run more instances when it is busy. Drag one in, then make the load balancer send requests to it.",
+        "highlight": "palette:asg"
+      },
+      "nearAnswer": "Place the Auto Scaling group. On its card set the maximum to 8 and choose \"Keep average CPU near 50%\". On the load balancer's card, tick the group as a target. A lower CPU target leaves more headroom while new instances are still starting."
+    }
+  ],
+  "factCards": ["auto-scaling-group", "cloudwatch", "concept-elasticity"],
+  "referenceSolution": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": []
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "https",
+        "targetIds": ["asg"]
+      },
+      {
+        "kind": "auto-scaling-group",
+        "id": "asg",
+        "name": "web fleet",
+        "subnetIds": ["private-a", "private-b"],
+        "securityGroupIds": ["sg-app"],
+        "roleId": null,
+        "size": "small",
+        "min": 2,
+        "desired": 2,
+        "max": 8,
+        "scaling": {
+          "targetCpuPercent": 50
+        }
+      }
+    ]
+  }
+}

@@ -4,6 +4,7 @@
 
 import {
   costOfScene,
+  expandAutoScalingGroups,
   failingStep,
   type ResourceKind,
   type ResourceRef,
@@ -176,6 +177,95 @@ export function renderObjectives(
     )
   }
 
+  // The weather station: CloudWatch's view of the crowd, for levels that have one.
+  if (level.crowd) {
+    parts.push(h('h2', { textContent: 'Weather station' }))
+    const crowd = judged ? lastRun?.crowd : null
+    if (!crowd) {
+      const busiest = Math.max(...level.crowd.phases.map((phase) => phase.kitesPerTick))
+      parts.push(
+        h('p', {
+          class: 'note',
+          textContent: `A crowd is coming: up to ${busiest} kites per tick. Fly the kites to see how the sky copes.`,
+        }),
+      )
+    } else {
+      const peak = Math.max(1, ...crowd.ticks.map((tick) => tick.demand))
+      parts.push(
+        h('p', {
+          class: 'cost-total',
+          textContent: `${crowd.delivered} of ${crowd.demand} kites delivered (${crowd.deliveredPercent}%)`,
+        }),
+        h(
+          'div',
+          {
+            class: 'crowd-chart',
+            attrs: {
+              role: 'img',
+              'aria-label': 'Kites per tick; hatched bars are kites that were dropped',
+            },
+          },
+          ...crowd.ticks.map((tick) => {
+            const failed = tick.dropped + tick.blocked
+            return h(
+              'div',
+              {
+                class: 'crowd-bar',
+                title: `Tick ${tick.tick + 1}: ${tick.delivered} delivered, ${failed} not`,
+              },
+              h('div', {
+                class: 'not-delivered',
+                attrs: { style: `height:${(failed / peak) * 48}px` },
+              }),
+              h('div', {
+                class: 'delivered',
+                attrs: { style: `height:${(tick.delivered / peak) * 48}px` },
+              }),
+            )
+          }),
+        ),
+        h('p', {
+          class: 'note',
+          textContent: `Targets in service: ${crowd.ticks[0]?.targetsInService ?? 0} at the start, ${crowd.peakTargetsInService} at the busiest, ${crowd.finalTargetsInService} at the end.`,
+        }),
+        h(
+          'details',
+          { class: 'crowd-log' },
+          h('summary', { textContent: 'Tick by tick' }),
+          h(
+            'table',
+            null,
+            h(
+              'tr',
+              null,
+              ...['Tick', 'Kites', 'Dropped', 'Targets', 'CPU', 'Alarm'].map((text) =>
+                h('th', { textContent: text }),
+              ),
+            ),
+            ...crowd.ticks.map((tick) =>
+              h(
+                'tr',
+                null,
+                ...[
+                  tick.tick + 1,
+                  tick.demand,
+                  tick.dropped + tick.blocked,
+                  tick.launching > 0
+                    ? `${tick.targetsInService} (+${tick.launching})`
+                    : tick.targetsInService,
+                  `${tick.cpuPercent}%`,
+                  { ok: 'OK', 'high-cpu': 'ALARM: high CPU', 'low-cpu': 'ALARM: low CPU' }[
+                    tick.alarm
+                  ],
+                ].map((value) => h('td', { textContent: String(value) })),
+              ),
+            ),
+          ),
+        ),
+      )
+    }
+  }
+
   parts.push(h('h2', { textContent: 'Stars' }))
   const stars = judged ? lastRun?.stars : undefined
   const starRow = (earned: boolean | undefined, text: string) =>
@@ -259,7 +349,11 @@ function describeRef(scene: Scene, ref: ResourceRef): string {
     case 'subnet':
       return scene.subnets.find((subnet) => subnet.id === ref.id)?.name ?? 'Subnet'
     case 'resource':
-      return scene.resources.find((resource) => resource.id === ref.id)?.name ?? 'Resource'
+      // Looked up with Auto Scaling groups expanded, so "asg#2" has a name.
+      return (
+        expandAutoScalingGroups(scene).resources.find((resource) => resource.id === ref.id)?.name ??
+        'Resource'
+      )
   }
 }
 

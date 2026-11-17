@@ -11,6 +11,7 @@
 // - An Internet Gateway and an IAM role have no charge.
 // - A larger instance costs more whether or not the extra capacity is used.
 
+import { runningCount } from './autoScaling'
 import type { Resource, Scene } from './model'
 
 const INSTANCE_COINS = { small: 2, medium: 4, large: 8 } as const
@@ -24,6 +25,9 @@ export function coinsFor(resource: Resource): number {
       return 4
     case 'ec2-instance':
       return INSTANCE_COINS[resource.size]
+    case 'auto-scaling-group':
+      // The group itself is free; you pay for the instances it is running.
+      return runningCount(resource) * INSTANCE_COINS[resource.size]
     case 's3-bucket':
       return 1
     case 'internet-gateway':

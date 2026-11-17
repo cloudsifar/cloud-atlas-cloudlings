@@ -15,6 +15,7 @@ import {
   type SecurityGroup,
   type SecurityGroupPeer,
   type ServiceAction,
+  REQUESTS_PER_TICK,
 } from '../engine'
 import {
   addRoleStatement,
@@ -23,6 +24,7 @@ import {
   removeRoute,
   removeSecurityGroupRule,
   setBlockPublicAccess,
+  setGroupSettings,
   setInstanceRole,
   setListener,
   setPublicRead,
@@ -352,6 +354,7 @@ const KIND_SUBTITLE: Record<Resource['kind'], string> = {
   'nat-gateway': 'Outbound-only door for private subnets',
   'load-balancer': 'The front door: shares requests between targets',
   'ec2-instance': 'A virtual server',
+  'auto-scaling-group': 'A fleet of instances that grows and shrinks',
   's3-bucket': 'Object storage, outside the VPC',
   'iam-role': 'Permissions a resource can wear',
 }
@@ -389,7 +392,10 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
       )
       break
     case 'load-balancer': {
-      const instances = resourcesOfKind(scene, 'ec2-instance')
+      const instances = [
+        ...resourcesOfKind(scene, 'ec2-instance'),
+        ...resourcesOfKind(scene, 'auto-scaling-group'),
+      ]
       body.append(
         h('p', {
           class: 'note',
@@ -425,7 +431,9 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
             'label',
             { class: 'check' },
             box,
-            `${instance.name} (${subnetName(instance.subnetId)})`,
+            instance.kind === 'ec2-instance'
+              ? `${instance.name} (${subnetName(instance.subnetId)})`
+              : `${instance.name} (Auto Scaling group: all its instances)`,
           )
         }),
       )
@@ -452,6 +460,72 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
           'role',
           locked,
         ),
+      )
+      break
+    }
+    case 'auto-scaling-group': {
+      const stepper = (label: string, field: 'min' | 'max', value: number) =>
+        h(
+          'div',
+          { class: 'stepper' },
+          h('span', { textContent: label }),
+          button(
+            '−',
+            () =>
+              actions.edit((current) =>
+                setGroupSettings(current, resource.id, { [field]: value - 1 }),
+              ),
+            `${field}-down`,
+            '',
+            locked || value <= 1,
+          ),
+          h('output', {
+            textContent: String(value),
+            attrs: { 'aria-label': `${label}: ${value}` },
+          }),
+          button(
+            '+',
+            () =>
+              actions.edit((current) =>
+                setGroupSettings(current, resource.id, { [field]: value + 1 }),
+              ),
+            `${field}-up`,
+            '',
+            locked || value >= 12,
+          ),
+        )
+      const perInstance = REQUESTS_PER_TICK[resource.size]
+      body.append(
+        h('p', {
+          class: 'note',
+          textContent: `Instances of size ${resource.size}, spread across ${resource.subnetIds.map(subnetName).join(' and ')}. Each serves ${perInstance} kites per tick.`,
+        }),
+        stepper('Minimum instances', 'min', resource.min),
+        stepper('Maximum instances', 'max', resource.max),
+        dropdown(
+          'Scaling policy (target tracking)',
+          [
+            { value: '', label: 'None: stay at the minimum' },
+            ...[40, 50, 60, 70, 80].map((percent) => ({
+              value: String(percent),
+              label: `Keep average CPU near ${percent}%`,
+            })),
+          ],
+          resource.scaling ? String(resource.scaling.targetCpuPercent) : '',
+          (value) =>
+            actions.edit((current) =>
+              setGroupSettings(current, resource.id, {
+                scaling: value === '' ? null : { targetCpuPercent: Number(value) },
+              }),
+            ),
+          'scaling',
+          locked,
+        ),
+        h('p', {
+          class: 'note',
+          textContent:
+            'With a policy, CloudWatch alarms watch the fleet’s CPU. Above the target the group launches instances (they take 2 ticks to start serving); below it, the group removes them one at a time.',
+        }),
       )
       break
     }

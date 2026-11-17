@@ -196,6 +196,39 @@ only the S3 access decision applies.
 - **Not modelled yet.** The brief's penalty for idle oversized instances needs the
   capacity model that arrives with Level 5.
 
+## 12. Auto Scaling groups: `autoScaling.ts`
+
+- **Modelled.** A group runs `desired` instances, held within `min` and `max`, spread
+  evenly across its subnets. Its instances are identical. A load balancer that targets
+  the group targets its instances. Before any flow is evaluated the group is expanded
+  into ordinary instances (`expandAutoScalingGroups`), so every other rule (security
+  groups, network ACLs, health checks, IAM) applies to them unchanged.
+- **AWS references.**
+  [Auto Scaling groups](https://docs.aws.amazon.com/autoscaling/ec2/userguide/auto-scaling-groups.html),
+  [load balancers and Auto Scaling](https://docs.aws.amazon.com/autoscaling/ec2/userguide/autoscaling-load-balancer.html).
+- **Code.** `groupInstances`, `runningCount`, `expandAutoScalingGroups`.
+- **Tests.** `tests/engine/auto-scaling.test.ts`, "group instances".
+
+## 13. Crowds, capacity and scaling: `crowd.ts`
+
+- **Modelled.** `simulateCrowd(scene, crowd)` steps through ticks. Each tick: instances
+  that finished launching start serving; one representative kite is evaluated to see
+  whether requests get through at all; capacity is the sum over the load balancer's
+  healthy targets; requests beyond capacity are `dropped`; CPU is the share of capacity
+  in use. A target tracking policy then decides: above the target, launch enough
+  instances to bring CPU back to it (in proportion); below it, remove one instance,
+  but only if the rest would still be at or under the target. New instances serve
+  after `LAUNCH_TICKS`.
+- **AWS references.**
+  [Target tracking scaling policies](https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-scaling-target-tracking.html),
+  [dynamic scaling](https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-scale-based-on-demand.html).
+- **Code.** `simulateCrowd`; `healthyTargets` in `flow.ts`; predicates
+  `crowd-delivered-at-least` and `crowd-scaled-out-and-back-in`.
+- **Tests.** `tests/engine/auto-scaling.test.ts`, "capacity", "target tracking scaling",
+  "crowd predicates".
+- **Not modelled yet.** Replacing unhealthy instances; events during a crowd (AZ
+  failure, instance failure); the cost of instance-hours over the run.
+
 ## Not built yet
 
 WAF, Auto Scaling, capacity, RDS, DynamoDB, SQS, SNS, Lambda, KMS, SSM, Route 53,

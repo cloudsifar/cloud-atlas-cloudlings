@@ -23,6 +23,12 @@ const RESOURCE_FIELDS: Record<ResourceKind, Record<string, 'string' | 'boolean' 
     listener: 'string',
     targetIds: 'object',
   },
+  'auto-scaling-group': {
+    subnetIds: 'object',
+    securityGroupIds: 'object',
+    size: 'string',
+    scaling: 'object',
+  },
   'ec2-instance': {
     subnetId: 'string',
     securityGroupIds: 'object',

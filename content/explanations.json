@@ -22,5 +22,9 @@
   "iam-role": {
     "label": "IAM role",
     "placement": "IAM lives in the high band with the other AWS-managed services. Its threads reach down to whatever wears the role."
+  },
+  "auto-scaling-group": {
+    "label": "Auto Scaling group",
+    "placement": "A fleet of instances lives where instances live: the mid band, in private subnets, spread across both Availability Zones."
   }
 }

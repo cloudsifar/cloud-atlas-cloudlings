@@ -6,6 +6,7 @@
 
 import type {
   BackendCall,
+  Crowd,
   Objective,
   Predicate,
   Resource,
@@ -116,6 +117,12 @@ export type Level = {
    */
   gatewayEndpoints?: ('s3' | 'dynamodb')[]
   population: Kite[]
+  /**
+   * A crowd of friendly visitors over time, for levels about capacity and scaling.
+   * The named kites in `population` still fly one by one; the crowd is simulated
+   * tick by tick (src/engine/crowd.ts) and reported on the weather station.
+   */
+  crowd?: Crowd
   events: LevelEvent[]
   objectives: Objective[]
   stars: {

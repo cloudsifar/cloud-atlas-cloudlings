@@ -677,3 +677,54 @@ button.remove {
   padding-left: 18px;
   font-size: 13px;
 }
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+.stepper span {
+  flex: 1;
+}
+.stepper output {
+  min-width: 2ch;
+  text-align: center;
+  font-weight: 600;
+}
+
+.crowd-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 52px;
+  margin: 4px 0;
+  border-bottom: 1px solid var(--ink);
+}
+.crowd-bar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.crowd-bar .delivered {
+  background: #4f8a4a;
+}
+/* Hatched as well as coloured, so the dropped kites do not depend on colour alone. */
+.crowd-bar .not-delivered {
+  background: repeating-linear-gradient(45deg, #b3402e 0 2px, #f3d2c8 2px 4px);
+}
+.crowd-log {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.crowd-log table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.crowd-log th,
+.crowd-log td {
+  padding: 1px 3px;
+  text-align: right;
+  border-bottom: 1px dotted #c9bfa6;
+}

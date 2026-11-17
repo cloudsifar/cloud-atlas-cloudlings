@@ -28,6 +28,7 @@ export const GENUS_OF: Record<ResourceKind, CloudGenus> = {
   'nat-gateway': 'stratocumulus',
   'load-balancer': 'cumulus',
   'ec2-instance': 'altocumulus',
+  'auto-scaling-group': 'altocumulus',
   's3-bucket': 'cumulonimbus',
   'iam-role': 'cirrus',
 }
@@ -40,6 +41,7 @@ export const BAND_OF: Record<ResourceKind, SkyBand> = {
   'nat-gateway': 'low',
   'load-balancer': 'low',
   'ec2-instance': 'mid',
+  'auto-scaling-group': 'mid',
   's3-bucket': 'vertical',
   'iam-role': 'high',
 }
@@ -152,6 +154,10 @@ export function layoutScene(scene: Scene): SceneLayout {
         )
         break
       }
+      case 'auto-scaling-group':
+        // A cluster across both Availability Zone columns, like the load balancer below it.
+        clouds[resource.id] = centred({ x: vpcCentreX, y: midCentreY + 4 }, resource.kind)
+        break
       case 'ec2-instance':
       case 'nat-gateway':
         break // placed above
@@ -234,7 +240,8 @@ export function positionOfRef(
       return rect ? closestPointOnBorder(rect, previous) : previous
     }
     case 'resource': {
-      const rect = layout.clouds[ref.id]
+      // An Auto Scaling group's instances ("asg#2") are drawn as their group's cloud.
+      const rect = layout.clouds[ref.id] ?? layout.clouds[ref.id.split('#')[0] ?? '']
       return rect ? centreOf(rect) : previous
     }
   }

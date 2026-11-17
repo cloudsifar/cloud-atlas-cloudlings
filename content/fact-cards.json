@@ -113,5 +113,31 @@
       "Coins are illustrative units for comparing choices. They are not real AWS prices."
     ],
     "atlasPage": "TODO(Simon)"
+  },
+  "auto-scaling-group": {
+    "title": "Auto Scaling group",
+    "body": "A fleet of identical EC2 instances with a minimum, a maximum and a desired size. It spreads its instances across the subnets you choose, and so across Availability Zones. With a scaling policy it changes its own size: a target tracking policy keeps a measure such as average CPU near a target, launching instances when the fleet is busy and removing them when it is quiet. Attached to a load balancer, its instances register as targets automatically.",
+    "simplifications": [
+      "Every instance serves a fixed number of kites per tick, and a new instance takes 2 ticks to start serving. Real launch times and capacities vary.",
+      "Only target tracking on CPU is offered. Step, simple, scheduled and predictive scaling are left out.",
+      "The group scales in one instance per tick when CPU is below the target; AWS decides the pace itself, more cautiously.",
+      "Launch templates, health-check replacement and instance warm-up settings are left out."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "cloudwatch": {
+    "title": "CloudWatch",
+    "body": "The weather station. CloudWatch collects metrics, such as the CPU use of a fleet or the number of requests at a load balancer, and alarms watch a metric against a threshold. An alarm is either OK or in ALARM, and can trigger an action such as scaling a group. With a target tracking policy, EC2 Auto Scaling creates and manages the alarms for you.",
+    "simplifications": [
+      "Metrics are measured once per tick. Real metrics arrive on a schedule of seconds or minutes, and alarms wait for several readings.",
+      "CPU is modelled as the share of the fleet's capacity in use."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "concept-elasticity": {
+    "title": "Elasticity",
+    "body": "Matching capacity to demand as demand changes: more when it is busy, less when it is quiet, without anyone doing it by hand. It is one of the main reasons to build in the cloud. The alternative is to buy for the busiest day and pay for that capacity on every other day.",
+    "simplifications": [],
+    "atlasPage": "TODO(Simon)"
   }
 }

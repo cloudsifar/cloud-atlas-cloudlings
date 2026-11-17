@@ -71,7 +71,12 @@ export function createStore(level: Level): Store {
       case 'card-opened':
         return state.openedCards.includes(trigger.subjectId)
       case 'scene':
-        return evaluatePredicate(state.scene, state.lastRun?.kiteRuns ?? [], trigger.predicate)
+        return evaluatePredicate(
+          state.scene,
+          state.lastRun?.kiteRuns ?? [],
+          trigger.predicate,
+          state.lastRun?.crowd ?? null,
+        )
       case 'run-finished':
         return state.phase !== 'flying' && state.runCount > state.narrationRunBaseline
       case 'level-complete':
