@@ -12,6 +12,7 @@ import type {
   Resource,
   Scene,
   SecurityGroup,
+  ScenarioEvent,
   ServiceAction,
 } from '../engine'
 
@@ -85,8 +86,11 @@ export type Hint = {
   nearAnswer: string
 }
 
-/** Scripted events arrive with Milestone 3; until then the list must be empty. */
-export type LevelEvent = never
+/**
+ * Scripted events on the level's timeline (src/engine/timeline.ts). So far: crowd
+ * surges, which need the level to have a `crowd`. AZ and instance failures will follow.
+ */
+export type LevelEvent = ScenarioEvent
 
 export type Level = {
   id: number
@@ -118,9 +122,11 @@ export type Level = {
   gatewayEndpoints?: ('s3' | 'dynamodb')[]
   population: Kite[]
   /**
-   * A crowd of friendly visitors over time, for levels about capacity and scaling.
-   * The named kites in `population` still fly one by one; the crowd is simulated
-   * tick by tick (src/engine/crowd.ts) and reported on the weather station.
+   * The usual crowd of friendly visitors and how long the run lasts, for levels about
+   * capacity and scaling. The crowd is simulated tick by tick (src/engine/crowd.ts),
+   * changed by `events`, flown in the sky and reported on the weather station. The
+   * named kites in `population` are its regulars: their own journeys are what the trace
+   * inspector shows and what the least-privilege star is judged on.
    */
   crowd?: Crowd
   events: LevelEvent[]

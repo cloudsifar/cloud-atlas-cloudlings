@@ -94,6 +94,58 @@ describe('validateLevel', () => {
     ).toBe(true)
   })
 
+  describe('crowds and events', () => {
+    const crowdLevel = LEVELS.find((level) => level.crowd !== undefined)
+    const brokenCrowd = (change: (level: Record<string, unknown>) => void) => {
+      const copy = structuredClone(crowdLevel) as unknown as Record<string, unknown>
+      change(copy)
+      return validateLevel(copy, Object.keys(FACT_CARDS))
+    }
+    type Surge = { atTick: number; peakKitesPerTick: number; kind: string }
+    const surgeOf = (level: Record<string, unknown>) => (level.events as Surge[])[0]!
+
+    it('ships at least one level with a crowd, so these checks are exercised', () => {
+      expect(crowdLevel).toBeDefined()
+    })
+
+    it('rejects a crowd aimed at something that is not a load balancer', () => {
+      const errors = brokenCrowd(
+        (level) => ((level.crowd as { loadBalancerId: string }).loadBalancerId = 'nowhere'),
+      )
+      expect(errors[0]).toMatch('crowd.loadBalancerId')
+    })
+
+    it('rejects a crowd address outside the documentation ranges', () => {
+      const errors = brokenCrowd((level) => ((level.crowd as { ip: string }).ip = '8.8.8.8'))
+      expect(errors[0]).toMatch('crowd.ip')
+    })
+
+    it('rejects a surge that is still going when the run ends', () => {
+      const errors = brokenCrowd((level) => (surgeOf(level).atTick = 25))
+      expect(errors.some((error) => error.includes('must be over before the run ends'))).toBe(true)
+    })
+
+    it('rejects a surge no bigger than the usual crowd', () => {
+      const errors = brokenCrowd((level) => (surgeOf(level).peakKitesPerTick = 2))
+      expect(errors[0]).toMatch('peakKitesPerTick')
+    })
+
+    it('rejects an event it does not know', () => {
+      const errors = brokenCrowd((level) => (surgeOf(level).kind = 'meteor-strike'))
+      expect(errors[0]).toMatch('events[0].kind')
+    })
+
+    it('rejects a surge in a level with no crowd', () => {
+      const errors = brokenCrowd((level) => delete level.crowd)
+      expect(errors.some((error) => error.includes('needs the level to have a crowd'))).toBe(true)
+    })
+
+    it('rejects an objective about the surge in a level that has none', () => {
+      const errors = brokenCrowd((level) => (level.events = []))
+      expect(errors.some((error) => error.includes('has no crowd surge'))).toBe(true)
+    })
+  })
+
   it('rejects an objective with no hint and an unknown fact card', () => {
     expect(broken((level) => (level.hints = [])).some((error) => error.startsWith('hints:'))).toBe(
       true,

@@ -13,6 +13,7 @@ export const CHECK_LABELS: Record<CheckKind, string> = {
   'block-public-access': 'Block Public Access',
   'bucket-policy': 'Bucket policy',
   delivery: 'Delivery',
+  capacity: 'Capacity',
 }
 
 export const OUTCOME_LABELS: Record<FlowOutcome, string> = {

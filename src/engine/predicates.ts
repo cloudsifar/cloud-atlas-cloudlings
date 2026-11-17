@@ -6,7 +6,7 @@
 
 import { expandAutoScalingGroups } from './autoScaling'
 import { costOfScene } from './cost'
-import type { CrowdRecord } from './crowd'
+import { deliveredShare, type CrowdRecord } from './crowd'
 import {
   findResourceOfKind,
   requireSubnet,
@@ -65,8 +65,11 @@ export type Predicate =
   /** The scene's running cost is no more than this many coins (see cost.ts). */
   | { kind: 'cost-at-most'; coins: number }
   // --- about the crowd (levels with a `crowd`; see crowd.ts) ------------------
-  /** At least this percentage of the whole crowd's kites were delivered. */
-  | { kind: 'crowd-delivered-at-least'; percent: number }
+  /**
+   * At least this percentage of the crowd's kites were delivered: over the whole run,
+   * or, with `during: 'surge'`, only on the ticks while a crowd surge was under way.
+   */
+  | { kind: 'crowd-delivered-at-least'; percent: number; during?: 'surge' }
   /** More targets were in service at the busiest moment than at the end: capacity grew, then shrank. */
   | { kind: 'crowd-scaled-out-and-back-in' }
 
@@ -211,8 +214,13 @@ export function evaluatePredicate(
     case 'cost-at-most':
       // Costed on the scene as built: a group is charged for the instances it starts with.
       return costOfScene(authoredScene).total <= predicate.coins
-    case 'crowd-delivered-at-least':
-      return crowd !== null && crowd.deliveredPercent >= predicate.percent
+    case 'crowd-delivered-at-least': {
+      if (crowd === null) return false
+      const ticks =
+        predicate.during === 'surge' ? crowd.ticks.filter((tick) => tick.surge) : crowd.ticks
+      // A level that asks about a surge it never has cannot be satisfied by accident.
+      return ticks.length > 0 && deliveredShare(ticks).percent >= predicate.percent
+    }
     case 'crowd-scaled-out-and-back-in':
       return (
         crowd !== null &&

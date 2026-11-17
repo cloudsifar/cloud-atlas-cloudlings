@@ -52,6 +52,8 @@ export type CheckKind =
   | 'block-public-access'
   | 'bucket-policy'
   | 'delivery'
+  /** Enough healthy targets to serve the request in time? Only crowds can fail it (crowd.ts). */
+  | 'capacity'
 
 /** The exact rule that decided a check, in a form code can use (scoring reads these). */
 export type RuleMatch =

@@ -14,14 +14,22 @@ export {
 } from './autoScaling'
 export {
   simulateCrowd,
+  deliveredShare,
   REQUESTS_PER_TICK,
   LAUNCH_TICKS,
   type AlarmState,
-  type Crowd,
-  type CrowdPhase,
   type CrowdRecord,
   type TickRecord,
 } from './crowd'
+export {
+  crowdTimeline,
+  surgeKitesAt,
+  surgeWindow,
+  type Crowd,
+  type CrowdMoment,
+  type CrowdSurge,
+  type ScenarioEvent,
+} from './timeline'
 export { resolveRoute, isPublicSubnet, type RouteDecision, type RouteQuery } from './routing'
 export { evaluateSecurityGroups, type ConnectionPeer } from './securityGroups'
 export { evaluateNetworkAcl } from './networkAcls'

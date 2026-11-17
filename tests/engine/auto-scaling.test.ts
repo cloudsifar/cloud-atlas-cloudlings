@@ -4,6 +4,12 @@
 // - Auto Scaling groups (min, desired, max; balancing across Availability Zones):
 //   https://docs.aws.amazon.com/autoscaling/ec2/userguide/auto-scaling-groups.html
 //   https://docs.aws.amazon.com/autoscaling/ec2/userguide/auto-scaling-benefits.html
+// - Desired capacity lies between the minimum and the maximum, and is the capacity
+//   the group starts at and tries to keep:
+//   https://docs.aws.amazon.com/autoscaling/ec2/userguide/asg-capacity-limits.html
+// - A target too busy to answer before the load balancer's idle timeout gives the
+//   client HTTP 504; the remedy is more targets:
+//   https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-troubleshooting.html
 // - Attaching a load balancer registers the group's instances as targets:
 //   https://docs.aws.amazon.com/autoscaling/ec2/userguide/autoscaling-load-balancer.html
 // - Target tracking scaling policies (CloudWatch alarms created for you; scales out
@@ -26,8 +32,10 @@ import {
   LAUNCH_TICKS,
   REQUESTS_PER_TICK,
   simulateCrowd,
+  validateScene,
+  failingStep,
   type AutoScalingGroup,
-  type Crowd,
+  type CrowdMoment,
   type Scene,
 } from '../../src/engine'
 import { byId, GREEN_IP, sceneWith, webRequest, workingScene } from './fixtures'
@@ -56,11 +64,12 @@ const sceneWithGroup = (overrides: Partial<AutoScalingGroup> = {}): Scene =>
     if (loadBalancer.kind === 'load-balancer') loadBalancer.targetIds = ['asg']
   })
 
-const crowd = (...phases: [ticks: number, kitesPerTick: number][]): Crowd => ({
-  loadBalancerId: 'alb',
-  ip: GREEN_IP,
-  phases: phases.map(([ticks, kitesPerTick]) => ({ ticks, kitesPerTick })),
-})
+/** The crowd heads for the fixture's load balancer from one documentation address. */
+const CROWD = { loadBalancerId: 'alb', ip: GREEN_IP }
+
+/** A timeline built from [ticks, kitesPerTick] phases, e.g. timeline([2, 4], [10, 40]). */
+const timeline = (...phases: [ticks: number, kitesPerTick: number][]): CrowdMoment[] =>
+  phases.flatMap(([ticks, kites]) => Array.from({ length: ticks }, () => ({ kites, surge: false })))
 
 const SMALL = REQUESTS_PER_TICK.small
 
@@ -91,6 +100,23 @@ describe('group instances', () => {
     expect(loadBalancer.kind === 'load-balancer' && loadBalancer.targetIds).toHaveLength(3)
   })
 
+  it('starts at its desired capacity, not its minimum', () => {
+    const record = simulateCrowd(
+      sceneWithGroup({ min: 2, desired: 5, max: 8 }),
+      CROWD,
+      timeline([1, 4]),
+    )
+    expect(record.ticks[0]?.targetsInService).toBe(5)
+  })
+
+  it('is reported as broken unless minimum ≤ desired ≤ maximum', () => {
+    const problems = (overrides: Partial<AutoScalingGroup>) =>
+      validateScene(sceneWithGroup(overrides)).filter((problem) => problem.subjectId === 'asg')
+    expect(problems({ min: 2, desired: 2, max: 8 })).toEqual([])
+    expect(problems({ min: 3, desired: 2, max: 8 })).toHaveLength(1)
+    expect(problems({ min: 2, desired: 9, max: 8 })).toHaveLength(1)
+  })
+
   it('expanding twice changes nothing', () => {
     const once = expandAutoScalingGroups(sceneWithGroup())
     expect(expandAutoScalingGroups(once)).toEqual(once)
@@ -113,13 +139,13 @@ describe('group instances', () => {
 
 describe('capacity', () => {
   it('delivers everything while demand is within capacity', () => {
-    const record = simulateCrowd(workingScene(), crowd([3, 2 * SMALL]))
+    const record = simulateCrowd(workingScene(), CROWD, timeline([3, 2 * SMALL]))
     expect(record.deliveredPercent).toBe(100)
     expect(record.ticks.every((tick) => tick.dropped === 0)).toBe(true)
   })
 
   it('drops the requests beyond total healthy capacity, and no others', () => {
-    const record = simulateCrowd(workingScene(), crowd([1, 2 * SMALL + 7]))
+    const record = simulateCrowd(workingScene(), CROWD, timeline([1, 2 * SMALL + 7]))
     expect(record.ticks[0]?.delivered).toBe(2 * SMALL)
     expect(record.ticks[0]?.dropped).toBe(7)
     expect(record.ticks[0]?.cpuPercent).toBe(100)
@@ -130,7 +156,7 @@ describe('capacity', () => {
       const instance = byId(draft.resources, 'app-a')
       if (instance.kind === 'ec2-instance') instance.healthy = false
     })
-    const record = simulateCrowd(scene, crowd([1, 2 * SMALL]))
+    const record = simulateCrowd(scene, CROWD, timeline([1, 2 * SMALL]))
     expect(record.ticks[0]?.targetsInService).toBe(1)
     expect(record.ticks[0]?.delivered).toBe(SMALL)
   })
@@ -142,7 +168,7 @@ describe('capacity', () => {
 
   it('reports a misconfiguration as blocked, not as a capacity problem', () => {
     const scene = sceneWith((draft) => (byId(draft.securityGroups, 'sg-alb').inbound = []))
-    const record = simulateCrowd(scene, crowd([2, 4]))
+    const record = simulateCrowd(scene, CROWD, timeline([2, 4]))
     expect(record.delivered).toBe(0)
     expect(record.ticks.every((tick) => tick.blocked === 4 && tick.dropped === 0)).toBe(true)
   })
@@ -151,23 +177,67 @@ describe('capacity', () => {
     const run = () =>
       simulateCrowd(
         sceneWithGroup({ scaling: { targetCpuPercent: 50 } }),
-        crowd([2, 4], [8, 40], [6, 4]),
+        CROWD,
+        timeline([2, 4], [8, 40], [6, 4]),
       )
     expect(run()).toEqual(run())
   })
 })
 
+describe('timed-out kites', () => {
+  const busy = () => simulateCrowd(workingScene(), CROWD, timeline([1, 2 * SMALL + 7]))
+
+  it('records the journey of a kite that timed out: outcome dropped, stopped by capacity at the load balancer', () => {
+    const timedOut = busy().ticks[0]?.timedOut
+    expect(timedOut?.outcome).toBe('dropped')
+    const stop = timedOut ? failingStep(timedOut) : undefined
+    expect(stop?.check).toBe('capacity')
+    expect(stop?.at).toEqual({ kind: 'resource', id: 'alb' })
+    expect(stop?.explanation).toMatch(/504/)
+  })
+
+  it('passes the same checks as a served kite on its way to the load balancer', () => {
+    const [tick] = busy().ticks
+    const served = tick?.served.trace ?? []
+    const selection = served.findIndex((step) => step.check === 'target-selection')
+    const beforeStop = (tick?.timedOut?.trace ?? []).slice(0, -1)
+    expect(beforeStop).toEqual(served.slice(0, selection))
+    expect(beforeStop.every((step) => step.result === 'pass')).toBe(true)
+  })
+
+  it('records a served kite whose journey ends delivered', () => {
+    expect(busy().ticks[0]?.served.outcome).toBe('delivered')
+  })
+
+  it('has no timed-out journey when everyone was served', () => {
+    const record = simulateCrowd(workingScene(), CROWD, timeline([1, 2 * SMALL]))
+    expect(record.ticks[0]?.timedOut).toBeNull()
+  })
+
+  it('has no timed-out journey when the crowd is blocked: the served journey shows what stopped it', () => {
+    const scene = sceneWith((draft) => (byId(draft.securityGroups, 'sg-alb').inbound = []))
+    const [tick] = simulateCrowd(scene, CROWD, timeline([1, 40])).ticks
+    expect(tick?.timedOut).toBeNull()
+    expect(tick?.served.outcome).toBe('blocked')
+    expect(tick && failingStep(tick.served)?.check).toBe('security-group')
+  })
+})
+
 describe('target tracking scaling', () => {
-  const surge = crowd([2, 4], [10, 40], [12, 4])
+  const surge = timeline([2, 4], [10, 40], [12, 4])
 
   it('does nothing without a scaling policy: the group stays at its size', () => {
-    const record = simulateCrowd(sceneWithGroup(), surge)
+    const record = simulateCrowd(sceneWithGroup(), CROWD, surge)
     expect(record.peakTargetsInService).toBe(2)
     expect(record.deliveredPercent < 60).toBe(true)
   })
 
   it('scales out when CPU is above the target, and the new instances serve only after launching', () => {
-    const record = simulateCrowd(sceneWithGroup({ scaling: { targetCpuPercent: 50 } }), surge)
+    const record = simulateCrowd(
+      sceneWithGroup({ scaling: { targetCpuPercent: 50 } }),
+      CROWD,
+      surge,
+    )
     const firstBusyTick = 2
     expect(record.ticks[firstBusyTick]?.alarm).toBe('high-cpu')
     expect(record.ticks[firstBusyTick]?.launching).toBeGreaterThan(0)
@@ -181,11 +251,13 @@ describe('target tracking scaling', () => {
   it('scales out in proportion: further above the target means more instances at once', () => {
     const gentle = simulateCrowd(
       sceneWithGroup({ scaling: { targetCpuPercent: 50 } }),
-      crowd([1, 6]),
+      CROWD,
+      timeline([1, 6]),
     )
     const steep = simulateCrowd(
       sceneWithGroup({ scaling: { targetCpuPercent: 50 } }),
-      crowd([1, 40]),
+      CROWD,
+      timeline([1, 40]),
     )
     expect(gentle.ticks[0]?.launching).toBe(1)
     expect(steep.ticks[0]?.launching).toBeGreaterThan(1)
@@ -194,13 +266,18 @@ describe('target tracking scaling', () => {
   it('never exceeds max', () => {
     const record = simulateCrowd(
       sceneWithGroup({ max: 3, scaling: { targetCpuPercent: 50 } }),
+      CROWD,
       surge,
     )
     expect(record.peakTargetsInService).toBe(3)
   })
 
   it('scales in gradually, one instance per tick, once the crowd has gone', () => {
-    const record = simulateCrowd(sceneWithGroup({ scaling: { targetCpuPercent: 50 } }), surge)
+    const record = simulateCrowd(
+      sceneWithGroup({ scaling: { targetCpuPercent: 50 } }),
+      CROWD,
+      surge,
+    )
     const afterSurge = record.ticks.slice(12).map((tick) => tick.targetsInService)
     for (let index = 1; index < afterSurge.length; index += 1) {
       const change = afterSurge[index - 1]! - afterSurge[index]!
@@ -212,7 +289,8 @@ describe('target tracking scaling', () => {
   it('never goes below min', () => {
     const record = simulateCrowd(
       sceneWithGroup({ scaling: { targetCpuPercent: 50 } }),
-      crowd([20, 0]),
+      CROWD,
+      timeline([20, 0]),
     )
     expect(record.finalTargetsInService).toBe(2)
   })
@@ -220,7 +298,7 @@ describe('target tracking scaling', () => {
   it('does not scale in if that would push CPU back over the target', () => {
     // Three instances at 60%: two would run at 90%, well over a 70% target.
     const scene = sceneWithGroup({ desired: 3, scaling: { targetCpuPercent: 70 } })
-    const record = simulateCrowd(scene, crowd([6, 9]))
+    const record = simulateCrowd(scene, CROWD, timeline([6, 9]))
     expect(record.finalTargetsInService).toBe(3)
     expect(record.ticks.every((tick) => tick.alarm === 'ok')).toBe(true)
   })
@@ -228,18 +306,20 @@ describe('target tracking scaling', () => {
   it('a lower CPU target keeps more headroom, so fewer kites are dropped', () => {
     const at80 = simulateCrowd(
       sceneWithGroup({ scaling: { targetCpuPercent: 80 } }),
-      crowd([2, 4], [2, 12], [2, 24], [10, 40]),
+      CROWD,
+      timeline([2, 4], [2, 12], [2, 24], [10, 40]),
     )
     const at40 = simulateCrowd(
       sceneWithGroup({ scaling: { targetCpuPercent: 40 } }),
-      crowd([2, 4], [2, 12], [2, 24], [10, 40]),
+      CROWD,
+      timeline([2, 4], [2, 12], [2, 24], [10, 40]),
     )
     expect(at40.delivered).toBeGreaterThan(at80.delivered)
   })
 })
 
 describe('crowd predicates', () => {
-  const surge = crowd([2, 4], [10, 40], [12, 4])
+  const surge = timeline([2, 4], [10, 40], [12, 4])
 
   it('are false when the level has no crowd record', () => {
     expect(
@@ -252,7 +332,7 @@ describe('crowd predicates', () => {
 
   it('crowd-delivered-at-least compares against the whole crowd', () => {
     const scene = workingScene()
-    const record = simulateCrowd(scene, crowd([1, 2 * SMALL], [1, 4 * SMALL]))
+    const record = simulateCrowd(scene, CROWD, timeline([1, 2 * SMALL], [1, 4 * SMALL]))
     // 10 of 10, then 10 of 20: 20 of 30 delivered, which is 66%.
     expect(record.deliveredPercent).toBe(66)
     expect(
@@ -263,6 +343,41 @@ describe('crowd predicates', () => {
     ).toBe(false)
   })
 
+  it('crowd-delivered-at-least can count only the ticks of a surge', () => {
+    const scene = workingScene()
+    const moments: CrowdMoment[] = [
+      { kites: 2 * SMALL, surge: false }, // all 10 delivered
+      { kites: 4 * SMALL, surge: true }, // 10 of 20 delivered
+    ]
+    const record = simulateCrowd(scene, CROWD, moments)
+    const duringSurge = (percent: number) =>
+      evaluatePredicate(
+        scene,
+        [],
+        { kind: 'crowd-delivered-at-least', percent, during: 'surge' },
+        record,
+      )
+    expect(duringSurge(50)).toBe(true)
+    expect(duringSurge(51)).toBe(false)
+    // Over the whole run the same record reaches 66%.
+    expect(
+      evaluatePredicate(scene, [], { kind: 'crowd-delivered-at-least', percent: 66 }, record),
+    ).toBe(true)
+  })
+
+  it('crowd-delivered-at-least during a surge is false when there was no surge', () => {
+    const scene = workingScene()
+    const record = simulateCrowd(scene, CROWD, timeline([3, 4]))
+    expect(
+      evaluatePredicate(
+        scene,
+        [],
+        { kind: 'crowd-delivered-at-least', percent: 0, during: 'surge' },
+        record,
+      ),
+    ).toBe(false)
+  })
+
   it('crowd-scaled-out-and-back-in needs capacity to have grown and then shrunk', () => {
     const fixed = workingScene()
     expect(
@@ -270,7 +385,7 @@ describe('crowd predicates', () => {
         fixed,
         [],
         { kind: 'crowd-scaled-out-and-back-in' },
-        simulateCrowd(fixed, surge),
+        simulateCrowd(fixed, CROWD, surge),
       ),
     ).toBe(false)
     const scaled = sceneWithGroup({ scaling: { targetCpuPercent: 50 } })
@@ -279,7 +394,7 @@ describe('crowd predicates', () => {
         scaled,
         [],
         { kind: 'crowd-scaled-out-and-back-in' },
-        simulateCrowd(scaled, surge),
+        simulateCrowd(scaled, CROWD, surge),
       ),
     ).toBe(true)
   })

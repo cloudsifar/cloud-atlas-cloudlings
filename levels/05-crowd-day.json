@@ -9,14 +9,14 @@
   "narration": [
     {
       "id": "brief",
-      "text": "Word has spread. Today the usual handful of Cloudlings becomes a crowd of forty, then drifts away again. Two small instances serve five kites each per tick: fly the kites and watch the weather station to see what that means.",
+      "text": "Word has spread. Today the usual four Cloudlings become a crowd of forty, then drift away again. Two small instances serve five kites each per tick. Fly the kites, then watch the crowd and the CloudWatch weather station.",
       "advanceWhen": {
         "kind": "run-finished"
       }
     },
     {
       "id": "task",
-      "text": "Most of the crowd was turned away: there was never enough capacity. You could run eight instances all day, but you would pay for them all day. Build a fleet that grows with the crowd and shrinks afterwards.",
+      "text": "Most of the crowd timed out: there was never enough capacity. You could run eight instances all day, but you would pay for all eight all day. Build a fleet that grows with the crowd and shrinks again afterwards.",
       "highlight": "palette:asg",
       "advanceWhen": {
         "kind": "acknowledged"
@@ -255,45 +255,26 @@
   "crowd": {
     "loadBalancerId": "alb",
     "ip": "203.0.113.50",
-    "phases": [
-      {
-        "ticks": 3,
-        "kitesPerTick": 4
-      },
-      {
-        "ticks": 2,
-        "kitesPerTick": 10
-      },
-      {
-        "ticks": 2,
-        "kitesPerTick": 20
-      },
-      {
-        "ticks": 2,
-        "kitesPerTick": 30
-      },
-      {
-        "ticks": 10,
-        "kitesPerTick": 40
-      },
-      {
-        "ticks": 2,
-        "kitesPerTick": 20
-      },
-      {
-        "ticks": 10,
-        "kitesPerTick": 4
-      }
-    ]
+    "kitesPerTick": 4,
+    "ticks": 30
   },
-  "events": [],
+  "events": [
+    {
+      "kind": "crowd-surge",
+      "atTick": 3,
+      "rampTicks": 6,
+      "holdTicks": 6,
+      "peakKitesPerTick": 40
+    }
+  ],
   "objectives": [
     {
       "id": "crowd-served",
-      "text": "At least 95% of the crowd's kites are delivered",
+      "text": "At least 95% of the crowd's kites are delivered during the surge",
       "predicate": {
         "kind": "crowd-delivered-at-least",
-        "percent": 95
+        "percent": 95,
+        "during": "surge"
       }
     }
   ],
@@ -310,12 +291,12 @@
   "hints": [
     {
       "objectiveId": "crowd-served",
-      "nudge": "Open \"Tick by tick\" on the weather station. When do kites start being dropped, and how many targets are in service then?",
+      "nudge": "Open \"Tick by tick\" on the weather station. When do kites start timing out, and how many targets are in service then?",
       "pointer": {
-        "text": "An Auto Scaling group can run more instances when it is busy. Drag one in, then make the load balancer send requests to it.",
+        "text": "An Auto Scaling group can run more instances when it is busy. Drag one in, make the load balancer send requests to it, and the fixed instances are no longer needed.",
         "highlight": "palette:asg"
       },
-      "nearAnswer": "Place the Auto Scaling group. On its card set the maximum to 8 and choose \"Keep average CPU near 50%\". On the load balancer's card, tick the group as a target. A lower CPU target leaves more headroom while new instances are still starting."
+      "nearAnswer": "Place the Auto Scaling group. On its card set the maximum to 8 and choose \"Keep average CPU near 50%\". On the load balancer's card, tick the group as a target. New instances take two ticks to start, so a lower CPU target leaves headroom while they launch."
     }
   ],
   "factCards": ["auto-scaling-group", "cloudwatch", "concept-elasticity"],

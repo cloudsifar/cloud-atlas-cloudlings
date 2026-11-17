@@ -4,7 +4,14 @@
 // Returns a list of human-readable errors; an empty list means the level is valid.
 // Every message starts with the JSON path of the problem.
 
-import { cidrContains, validateScene, type ResourceKind, type Scene } from '../engine'
+import {
+  cidrContains,
+  surgeWindow,
+  validateScene,
+  type CrowdSurge,
+  type ResourceKind,
+  type Scene,
+} from '../engine'
 import { REGION_CODES, type Level } from './schema'
 
 type JsonObject = Record<string, unknown>
@@ -130,8 +137,6 @@ export function validateLevel(value: unknown, knownFactCardIds: string[]): strin
   const level = value as unknown as Level
 
   // --- cross-references ------------------------------------------------------
-  if (level.events.length > 0) errors.push('events: scripted events are not supported yet')
-
   for (const problem of validateScene(level.initialScene)) {
     if (problem.severity === 'broken-reference') errors.push(`initialScene: ${problem.message}`)
   }
@@ -228,6 +233,8 @@ export function validateLevel(value: unknown, knownFactCardIds: string[]): strin
     if (typeof kite.label !== 'string') errors.push(`${path}.label: expected a string`)
   })
 
+  checkCrowdAndEvents(level, errors)
+
   const objectiveIds = new Set(level.objectives.map((objective) => objective.id))
   if (objectiveIds.size !== level.objectives.length)
     errors.push('objectives: two objectives share an id')
@@ -253,6 +260,82 @@ export function validateLevel(value: unknown, knownFactCardIds: string[]): strin
   }
 
   return errors
+}
+
+/**
+ * The crowd and the timeline: the crowd must head for a load balancer the level can
+ * contain, every event must fit inside the run, and predicates about a crowd or a
+ * surge need the level to have one.
+ */
+function checkCrowdAndEvents(level: Level, errors: string[]): void {
+  const wholeNumber = (value: unknown, least: number) =>
+    typeof value === 'number' && Number.isInteger(value) && value >= least
+  const crowd = level.crowd
+  if (crowd !== undefined) {
+    if (!isObject(crowd)) {
+      errors.push('crowd: expected { loadBalancerId, ip, kitesPerTick, ticks }')
+      return
+    }
+    const loadBalancer = level.referenceSolution.resources.find(
+      (resource) => resource.id === crowd.loadBalancerId,
+    )
+    if (loadBalancer?.kind !== 'load-balancer') {
+      errors.push(
+        `crowd.loadBalancerId: "${String(crowd.loadBalancerId)}" is not a load balancer in the reference solution`,
+      )
+    }
+    if (
+      typeof crowd.ip !== 'string' ||
+      !DOCUMENTATION_RANGES.some((range) => safeContains(range, crowd.ip))
+    ) {
+      errors.push(`crowd.ip: expected an address in ${DOCUMENTATION_RANGES.join(', ')}`)
+    }
+    if (!wholeNumber(crowd.kitesPerTick, 1))
+      errors.push('crowd.kitesPerTick: expected a whole number of at least 1')
+    if (!wholeNumber(crowd.ticks, 1) || crowd.ticks > 120)
+      errors.push('crowd.ticks: expected a whole number from 1 to 120')
+  }
+
+  level.events.forEach((event: unknown, index) => {
+    const path = `events[${index}]`
+    if (!isObject(event) || event.kind !== 'crowd-surge') {
+      errors.push(`${path}.kind: expected "crowd-surge"`)
+      return
+    }
+    if (crowd === undefined) {
+      errors.push(`${path}: a crowd surge needs the level to have a crowd`)
+      return
+    }
+    for (const field of ['atTick', 'rampTicks'] as const) {
+      if (!wholeNumber(event[field], 0)) errors.push(`${path}.${field}: expected a whole number`)
+    }
+    if (!wholeNumber(event.holdTicks, 1))
+      errors.push(`${path}.holdTicks: expected a whole number of at least 1`)
+    if (!wholeNumber(event.peakKitesPerTick, crowd.kitesPerTick + 1)) {
+      errors.push(`${path}.peakKitesPerTick: expected more than the usual ${crowd.kitesPerTick}`)
+    }
+    const surge = event as unknown as CrowdSurge
+    if (surgeWindow(surge).last >= crowd.ticks) {
+      errors.push(`${path}: the surge must be over before the run ends at tick ${crowd.ticks}`)
+    }
+  })
+
+  const predicates = [
+    ...level.objectives.map((objective) => objective.predicate),
+    ...level.stars.wellArchitected.predicates,
+  ]
+  const crowdPredicates = predicates.filter((predicate) => predicate.kind.startsWith('crowd-'))
+  if (crowdPredicates.length > 0 && crowd === undefined) {
+    errors.push('objectives: predicates about a crowd need the level to have a crowd')
+  }
+  const aboutSurge = crowdPredicates.some(
+    (predicate) => predicate.kind === 'crowd-delivered-at-least' && predicate.during === 'surge',
+  )
+  if (aboutSurge && !level.events.some((event) => event.kind === 'crowd-surge')) {
+    errors.push(
+      'objectives: a predicate counts kites "during the surge", but the level has no crowd surge',
+    )
+  }
 }
 
 function safeContains(range: string, ip: string): boolean {

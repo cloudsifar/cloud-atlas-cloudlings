@@ -4,6 +4,7 @@
 
 import {
   costOfScene,
+  crowdTimeline,
   expandAutoScalingGroups,
   failingStep,
   type ResourceKind,
@@ -182,7 +183,9 @@ export function renderObjectives(
     parts.push(h('h2', { textContent: 'Weather station' }))
     const crowd = judged ? lastRun?.crowd : null
     if (!crowd) {
-      const busiest = Math.max(...level.crowd.phases.map((phase) => phase.kitesPerTick))
+      const busiest = Math.max(
+        ...crowdTimeline(level.crowd, level.events).map((moment) => moment.kites),
+      )
       parts.push(
         h('p', {
           class: 'note',

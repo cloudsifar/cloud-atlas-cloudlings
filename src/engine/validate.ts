@@ -163,6 +163,21 @@ export function validateScene(scene: Scene): SceneProblem[] {
           broken(resource.id, `"${resource.name}" has a role that does not exist.`)
         }
         break
+      case 'auto-scaling-group':
+        requireGroups(resource.securityGroupIds)
+        if (resource.subnetIds.length === 0 || !resource.subnetIds.every((id) => subnetIds.has(id)))
+          broken(resource.id, `"${resource.name}" names a subnet that does not exist.`)
+        if (resource.roleId !== null && !resourceIds.has(resource.roleId)) {
+          broken(resource.id, `"${resource.name}" has a role that does not exist.`)
+        }
+        // AWS behaviour modelled: desired capacity must lie between the minimum and the maximum.
+        if (!(resource.min <= resource.desired && resource.desired <= resource.max)) {
+          broken(
+            resource.id,
+            `"${resource.name}" needs minimum ≤ desired ≤ maximum (it has ${resource.min}, ${resource.desired}, ${resource.max}).`,
+          )
+        }
+        break
       case 's3-bucket':
         for (const statement of resource.policy) {
           if (statement.principal.kind === 'role' && !resourceIds.has(statement.principal.roleId)) {

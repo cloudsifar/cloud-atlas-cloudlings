@@ -2,6 +2,7 @@
 // Pure: the same level and scene always give the same LevelRun.
 
 import {
+  crowdTimeline,
   evaluateFlow,
   expandAutoScalingGroups,
   simulateCrowd,
@@ -59,7 +60,10 @@ export function runLevel(level: Level, scene: Scene): LevelRun {
     const flow = kiteToFlow(kite, index)
     return { kite, flow, result: evaluateFlow(scene, flow) }
   })
-  const crowd = level.crowd ? simulateCrowd(scene, level.crowd) : null
+  // The crowd steps through the level's timeline: its usual size, changed by its events.
+  const crowd = level.crowd
+    ? simulateCrowd(scene, level.crowd, crowdTimeline(level.crowd, level.events))
+    : null
   const objectives = evaluateObjectives(scene, kiteRuns, level.objectives, crowd)
   // Least privilege is judged on the instances that exist, including a group's.
   const findings = scoreScene(expandAutoScalingGroups(scene), kiteRuns, level.lockedIds)

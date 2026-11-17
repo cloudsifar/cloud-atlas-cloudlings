@@ -398,12 +398,6 @@ function targetPassesHealthCheck(
 }
 
 /**
- * AWS behaviour modelled: requests go only to healthy targets, in round-robin
- * order, across all enabled Availability Zones (cross-zone load balancing is on).
- * If every registered target is unhealthy the load balancer "fails open" and
- * routes to all of them anyway. With no registered targets it answers 503 itself.
- */
-/**
  * The load balancer's registered targets that are passing health checks right now:
  * the instances requests are shared between. Used by the crowd simulation to work
  * out how much capacity is behind the load balancer.
@@ -420,6 +414,12 @@ export function healthyTargets(authoredScene: Scene, loadBalancerId: string): Ec
     .filter((target) => targetPassesHealthCheck(scene, loadBalancer, nodeSubnet, target))
 }
 
+/**
+ * AWS behaviour modelled: requests go only to healthy targets, in round-robin
+ * order, across all enabled Availability Zones (cross-zone load balancing is on).
+ * If every registered target is unhealthy the load balancer "fails open" and
+ * routes to all of them anyway. With no registered targets it answers 503 itself.
+ */
 function selectTarget(
   scene: Scene,
   loadBalancer: LoadBalancer,

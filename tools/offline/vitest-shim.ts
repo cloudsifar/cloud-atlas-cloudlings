@@ -15,6 +15,7 @@ type Matchers = {
   toHaveLength(expected: number): void
   toMatch(expected: RegExp | string): void
   toBeUndefined(): void
+  toBeNull(): void
   toBeDefined(): void
   toBeGreaterThan(expected: number): void
   toThrow(expected?: RegExp | string): void
@@ -48,6 +49,7 @@ function buildMatchers(actual: unknown, negate: boolean, message?: string): Matc
         `to match ${String(expected)}`,
       ),
     toBeUndefined: () => check(actual === undefined, 'to be undefined'),
+    toBeNull: () => check(actual === null, 'to be null'),
     toBeDefined: () => check(actual !== undefined, 'to be defined'),
     toBeGreaterThan: (expected) => check((actual as number) > expected, `to be > ${expected}`),
     toThrow: (expected) => {

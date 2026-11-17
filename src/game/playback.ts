@@ -65,6 +65,7 @@ const BLOCK_SOUND: Record<CheckKind, SoundId> = {
   listener: 'timed-out',
   'target-selection': 'timed-out',
   delivery: 'timed-out',
+  capacity: 'timed-out',
 }
 
 function endingOf(kiteRun: KiteRun): Ending {

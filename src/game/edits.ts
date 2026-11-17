@@ -184,18 +184,27 @@ export function setTargetRegistered(
   })
 }
 
-/** Changes an Auto Scaling group's settings, keeping min ≤ desired ≤ max and min at least 1. */
+/**
+ * Changes an Auto Scaling group's settings. As in AWS, desired capacity always lies
+ * between the minimum and the maximum, so changing one limit can move it. The game
+ * keeps at least one instance (a minimum of 0 is left out; docs/SIMPLIFICATIONS.md).
+ */
 export function setGroupSettings(
   scene: Scene,
   groupId: string,
-  change: Partial<Pick<AutoScalingGroup, 'min' | 'max' | 'scaling' | 'roleId'>>,
+  change: Partial<
+    Pick<AutoScalingGroup, 'min' | 'desired' | 'max' | 'size' | 'scaling' | 'roleId'>
+  >,
 ): Scene {
   return changeResource(scene, 'auto-scaling-group', groupId, (group) => {
     Object.assign(group, change)
     group.min = Math.max(1, group.min)
-    group.max = Math.max(group.min, group.max)
-    // The group starts each flight at its minimum; scaling takes it from there.
-    group.desired = group.min
+    group.max = Math.max(1, group.max)
+    // Raising the minimum past the maximum lifts the maximum, and lowering the maximum
+    // below the minimum lowers the minimum: whichever limit the player moved wins.
+    if (change.max !== undefined) group.min = Math.min(group.min, group.max)
+    else group.max = Math.max(group.min, group.max)
+    group.desired = Math.min(Math.max(group.desired, group.min), group.max)
   })
 }
 
