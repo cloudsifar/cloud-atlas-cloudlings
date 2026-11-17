@@ -85,7 +85,7 @@
       "text": "Fly the kites again.",
       "highlight": "button:fly",
       "advanceWhen": {
-        "kind": "run-finished"
+        "kind": "level-complete"
       }
     },
     {

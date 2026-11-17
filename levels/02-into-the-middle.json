@@ -49,17 +49,22 @@
       "advanceWhen": {
         "kind": "scene",
         "predicate": {
-          "kind": "targets-accept-only-load-balancer",
-          "loadBalancerId": "alb"
+          "kind": "security-group-allows",
+          "securityGroupId": "sg-app",
+          "ports": "http",
+          "peer": {
+            "kind": "security-group",
+            "securityGroupId": "sg-alb"
+          }
         }
       }
     },
     {
       "id": "second-run",
-      "text": "Fly the kites again.",
+      "text": "Fly the kites again. If an objective is still unticked afterwards, its hint will point at what is left.",
       "highlight": "button:fly",
       "advanceWhen": {
-        "kind": "run-finished"
+        "kind": "level-complete"
       }
     },
     {

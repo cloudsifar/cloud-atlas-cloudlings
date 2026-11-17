@@ -52,11 +52,11 @@ function drawPlaceholderKeyArt(canvas: HTMLCanvasElement): void {
   drawCloud(context, 'cirrus', 480, 60, 260, 70, { ...look, tint: ['#86b4dc'] })
 
   context.save()
-  context.translate(360, 640)
+  context.translate(190, 640)
   context.scale(2.6, 2.6)
   const hand = drawCloudling(context, 0, 0, false, 'idle', '#e8bd3f', 0)
-  drawString(context, hand, { x: 120, y: -150 }, 0, 0)
-  drawKite(context, 120, -150, false, 'flying', 0, 1.6)
+  drawString(context, hand, { x: 62, y: -128 }, 0, 0)
+  drawKite(context, 62, -128, false, 'flying', 0, 1.6)
   context.restore()
 
   context.font = `18px ${CAPTION_FONT}`

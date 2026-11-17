@@ -74,6 +74,13 @@ export function createStore(level: Level): Store {
         return evaluatePredicate(state.scene, state.lastRun?.kiteRuns ?? [], trigger.predicate)
       case 'run-finished':
         return state.phase !== 'flying' && state.runCount > state.narrationRunBaseline
+      case 'level-complete':
+        return (
+          state.phase !== 'flying' &&
+          state.runCount > state.narrationRunBaseline &&
+          state.lastRun !== null &&
+          state.lastRun.objectives.every((objective) => objective.met)
+        )
     }
   }
 

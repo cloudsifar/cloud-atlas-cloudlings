@@ -63,8 +63,10 @@ export type NarrationTrigger =
   | { kind: 'card-opened'; subjectId: string }
   /** The scene satisfies a predicate (e.g. a cloud was placed, a rule was added). */
   | { kind: 'scene'; predicate: Predicate }
-  /** The kites have flown. */
+  /** The kites have flown, whatever happened to them. */
   | { kind: 'run-finished' }
+  /** The kites have flown and every objective was met. Use this before a step that congratulates. */
+  | { kind: 'level-complete' }
 
 export type NarrationStep = {
   id: string

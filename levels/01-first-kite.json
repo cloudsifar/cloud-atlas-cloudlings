@@ -107,7 +107,7 @@
       "text": "Ready. Press \"Fly kites\" and watch. Three green kites are visitors; the red one is aiming at SSH 22.",
       "highlight": "button:fly",
       "advanceWhen": {
-        "kind": "run-finished"
+        "kind": "level-complete"
       }
     },
     {

@@ -258,11 +258,18 @@ function drawContainers(context: CanvasRenderingContext2D, model: SkyViewModel):
   const { scene, layout } = model
   const vpc = layout.vpc
 
-  // Band labels at the edge of the sky, in plain words.
-  caption(context, 'High – managed services', SKY.left + 8, SKY.high.top + 4, 12, 'left', '#5b6788')
-  caption(context, 'Mid – private', SKY.left + 8, SKY.mid.top + 20, 12, 'left', '#5b6788')
-  caption(context, 'Low – public', SKY.left + 8, SKY.low.top + 20, 12, 'left', '#5b6788')
-  caption(context, 'Ground – the internet', SKY.left + 8, SKY.horizonY + 14, 12, 'left', '#3f5a36')
+  // Band labels at the edge of the sky, in plain words, lettered up the margin.
+  const bandLabel = (text: string, top: number, bottom: number) => {
+    context.save()
+    context.translate(SKY.left + 14, (top + bottom) / 2)
+    context.rotate(-Math.PI / 2)
+    caption(context, text, 0, 0, 12, 'center', '#4c5878')
+    context.restore()
+  }
+  bandLabel('High – managed services', SKY.high.top, SKY.high.bottom + 6)
+  bandLabel('Mid – private', SKY.mid.top, SKY.mid.bottom)
+  bandLabel('Low – public', SKY.low.top, SKY.low.bottom)
+  caption(context, 'Ground – the internet', SKY.right - 10, SKY.horizonY + 12, 12, 'right', '#3f5a36')
 
   // The VPC: an atlas-style dashed border with a hand-lettered caption and leader line.
   context.save()
