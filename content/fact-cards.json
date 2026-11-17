@@ -1,0 +1,100 @@
+{
+  "vpc": {
+    "title": "VPC",
+    "body": "A Virtual Private Cloud is your own fenced-off region of the AWS network. Nothing gets in or out unless you build a way. Inside it, subnets divide the space; each subnet sits in one Availability Zone.",
+    "simplifications": [
+      "The game has one VPC with fixed subnets. Real VPCs can be laid out any way you like."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "internet-gateway": {
+    "title": "Internet Gateway",
+    "body": "The gate between your VPC and the internet. Attaching one is not enough on its own: a subnet only becomes public when its route table sends internet traffic (0.0.0.0/0) to the gateway.",
+    "simplifications": [],
+    "atlasPage": "TODO(Simon)"
+  },
+  "route-table": {
+    "title": "Route table",
+    "body": "A list of signposts for traffic leaving a subnet. Every route table has a local route for the VPC that cannot be removed. When several routes match, the most specific one wins.",
+    "simplifications": [
+      "Destinations are named choices (Internet, S3, DynamoDB) rather than address ranges you type."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "load-balancer": {
+    "title": "Application Load Balancer",
+    "body": "The front door. It receives web requests and shares them between healthy targets, across Availability Zones. An internet-facing load balancer lives in public subnets in at least two zones.",
+    "simplifications": [
+      "Targets always receive traffic on HTTP 80; the load balancer handles HTTPS (certificates are assumed).",
+      "One listener and one set of targets. Real load balancers can have several, with rules.",
+      "Health is judged instantly. Real health checks take a few intervals to change their mind."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "security-group": {
+    "title": "Security group",
+    "body": "A firewall worn by a resource: the pencilled outline around a cloud. It holds allow rules only; anything not allowed is refused. It is stateful: the reply to an allowed request is always let through. A rule's source can be another security group, meaning \"anything wearing that group\".",
+    "simplifications": ["Ports are picked from a short list of named choices."],
+    "atlasPage": "TODO(Simon)"
+  },
+  "network-acl": {
+    "title": "Network ACL",
+    "body": "A fence on a subnet's boundary. Rules are numbered and read lowest first; the first match decides, and it can allow or deny. It is stateless: replies need their own rule, usually for ephemeral ports 1024–65535.",
+    "simplifications": [
+      "Sources are \"anywhere\" or one of a few named address ranges.",
+      "Replies are checked against one representative ephemeral port."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "ec2-instance": {
+    "title": "EC2 instance",
+    "body": "A virtual server. It lives in exactly one subnet, wears security groups, and can be given an IAM role so the software on it can call other AWS services without any stored keys.",
+    "simplifications": [
+      "Instances in the game never have public addresses, so nothing on the ground can reach them directly.",
+      "Machine images and instance families are left out."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "nat-gateway": {
+    "title": "NAT Gateway",
+    "body": "A one-way door. It sits in a public subnet and lets resources in private subnets start connections out to the internet. It never lets the internet start a connection in. It lives in one Availability Zone, and it is charged by the hour and by the gigabyte.",
+    "simplifications": [],
+    "atlasPage": "TODO(Simon)"
+  },
+  "s3-bucket": {
+    "title": "S3 bucket",
+    "body": "Object storage, outside your VPC, holding as much as you care to put in it. Block Public Access is on by default and overrides any policy that would open the bucket to everyone. Every new object is encrypted at rest by default.",
+    "simplifications": [
+      "Block Public Access is one switch here; in AWS it is four related settings.",
+      "Bucket policies can grant to everyone or to a named role, nothing finer."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "iam-role": {
+    "title": "IAM role",
+    "body": "A set of permissions that a resource can wear. IAM denies everything by default; a statement must explicitly allow an action, and an explicit deny beats any allow. Grant only what is used: that is least privilege.",
+    "simplifications": [
+      "Permissions are grouped into families such as s3:Read and s3:Write, on one resource or on everything (*).",
+      "There are no users or access keys in the game: only roles."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "concept-public-subnet": {
+    "title": "What makes a subnet public?",
+    "body": "One thing only: its route table sends 0.0.0.0/0 to an Internet Gateway attached to the VPC. Not its name, not its position. And even then, a security group must allow each connection in.",
+    "simplifications": [],
+    "atlasPage": "TODO(Simon)"
+  },
+  "concept-security-group-chaining": {
+    "title": "Chaining security groups",
+    "body": "Instead of allowing an address range, a rule can name another security group. \"Allow HTTP from the load balancer's group\" stays correct however many load balancer nodes there are and whatever their addresses. Each tier trusts only the tier in front of it.",
+    "simplifications": [],
+    "atlasPage": "TODO(Simon)"
+  },
+  "concept-roles-not-keys": {
+    "title": "Roles, not keys",
+    "body": "Software on an instance gets its permissions from the instance's IAM role: short-lived credentials that AWS hands out and rotates. Nothing secret is stored on the server. Without a role, the instance cannot sign a request at all.",
+    "simplifications": [],
+    "atlasPage": "TODO(Simon)"
+  }
+}

@@ -1,0 +1,621 @@
+{
+  "id": 3,
+  "slug": "the-rain-store",
+  "title": "The Rain Store",
+  "concept": "Storing data in S3, and giving an application permission to use it with an IAM role.",
+  "guidance": "full",
+  "region": "us-east-1",
+  "azs": 2,
+  "narration": [
+    {
+      "id": "welcome",
+      "text": "The Cloudlings want to upload photos. The application needs somewhere to keep them. A NAT Gateway is already in place so the instances can reach out of the VPC; it is locked for now, and we will question that path in Level 4.",
+      "highlight": "resource:nat",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    },
+    {
+      "id": "place-bucket",
+      "text": "Drag the S3 bucket into the sky. S3 stands outside your VPC and spans every altitude.",
+      "highlight": "palette:photos",
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "resource-exists",
+          "resourceId": "photos"
+        }
+      }
+    },
+    {
+      "id": "first-run",
+      "text": "Fly the kites and watch the uploads. After a kite is delivered, the instance sends the photo on to the bucket as rain.",
+      "highlight": "button:fly",
+      "advanceWhen": {
+        "kind": "run-finished"
+      }
+    },
+    {
+      "id": "explain",
+      "text": "The rain evaporated at the bucket. The instances have no IAM role, so they have no credentials, and IAM denies everything that is not explicitly allowed. Notice the red kite too: Block Public Access shut it out.",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    },
+    {
+      "id": "place-role",
+      "text": "Drag the IAM role into the sky. It lives in the high band, with the services AWS manages for you.",
+      "highlight": "palette:app-role",
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "resource-exists",
+          "resourceId": "app-role"
+        }
+      }
+    },
+    {
+      "id": "allow-write",
+      "text": "Click the role and add a statement: Allow s3:Write on photo-bucket. Just that: the application only uploads.",
+      "highlight": "resource:app-role",
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "role-allows",
+          "roleId": "app-role",
+          "action": "s3:Write",
+          "resourceId": "photos"
+        }
+      }
+    },
+    {
+      "id": "attach",
+      "text": "Now give the role to both instances: click each instance and choose the role (or drag from the role's handle to each instance). A fine thread will join them.",
+      "highlight": "resource:app-a",
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "role-attached",
+          "instanceIds": ["app-a", "app-b"]
+        }
+      }
+    },
+    {
+      "id": "second-run",
+      "text": "Fly the kites again.",
+      "highlight": "button:fly",
+      "advanceWhen": {
+        "kind": "run-finished"
+      }
+    },
+    {
+      "id": "wrap",
+      "text": "The uploads land. No passwords or keys were stored anywhere: the instances borrow their permissions from the role. And the bucket stayed private the whole time.",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    }
+  ],
+  "initialScene": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "nat-gateway",
+              "natGatewayId": "nat"
+            }
+          }
+        ]
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "nat-gateway",
+        "id": "nat",
+        "name": "NAT Gateway",
+        "subnetId": "public-a"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "https",
+        "targetIds": ["app-a", "app-b"]
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-a",
+        "name": "EC2 instance A",
+        "subnetId": "private-a",
+        "securityGroupIds": ["sg-app"],
+        "roleId": null,
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-b",
+        "name": "EC2 instance B",
+        "subnetId": "private-b",
+        "securityGroupIds": ["sg-app"],
+        "roleId": null,
+        "size": "small",
+        "healthy": true
+      }
+    ]
+  },
+  "lockedIds": ["igw", "nat", "alb", "rt-public", "rt-private", "nacl-default", "sg-alb", "sg-app"],
+  "palette": [
+    {
+      "resource": {
+        "kind": "s3-bucket",
+        "id": "photos",
+        "name": "photo-bucket",
+        "blockPublicAccess": true,
+        "policy": [],
+        "dataClass": "sensitive",
+        "encryption": {
+          "kind": "sse-s3"
+        }
+      }
+    },
+    {
+      "resource": {
+        "kind": "iam-role",
+        "id": "app-role",
+        "name": "app-role",
+        "statements": []
+      }
+    }
+  ],
+  "population": [
+    {
+      "id": "green-1",
+      "kind": "friendly",
+      "groundPosition": 0,
+      "ip": "203.0.113.10",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "uploads a photo",
+      "backendCall": {
+        "destinationId": "photos",
+        "action": "s3:Write"
+      }
+    },
+    {
+      "id": "green-2",
+      "kind": "friendly",
+      "groundPosition": 1,
+      "ip": "203.0.113.24",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "uploads a photo",
+      "backendCall": {
+        "destinationId": "photos",
+        "action": "s3:Write"
+      }
+    },
+    {
+      "id": "green-3",
+      "kind": "friendly",
+      "groundPosition": 2,
+      "ip": "192.0.2.31",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "uploads a photo",
+      "backendCall": {
+        "destinationId": "photos",
+        "action": "s3:Write"
+      }
+    },
+    {
+      "id": "red-1",
+      "kind": "hostile",
+      "groundPosition": 5,
+      "ip": "198.51.100.66",
+      "destinationId": "photos",
+      "port": 443,
+      "payload": "clean",
+      "action": "s3:Read",
+      "label": "tries to read the bucket"
+    }
+  ],
+  "events": [],
+  "objectives": [
+    {
+      "id": "uploads-land",
+      "text": "Every upload lands in the bucket",
+      "predicate": {
+        "kind": "flows-delivered",
+        "flows": {
+          "intent": "legitimate"
+        }
+      }
+    },
+    {
+      "id": "red-blocked",
+      "text": "The red kite is stopped by Block Public Access",
+      "predicate": {
+        "kind": "flows-stopped",
+        "flows": {
+          "intent": "hostile"
+        },
+        "by": "block-public-access"
+      }
+    }
+  ],
+  "stars": {
+    "wellArchitected": {
+      "text": "Block Public Access left on, bucket policy not public",
+      "predicates": [
+        {
+          "kind": "bucket-locked-down",
+          "bucketId": "photos"
+        }
+      ]
+    }
+  },
+  "hints": [
+    {
+      "objectiveId": "uploads-land",
+      "nudge": "Follow the rain from an instance to the bucket. Which check stops it?",
+      "pointer": {
+        "text": "The instances need permission. Permissions come from an IAM role.",
+        "highlight": "palette:app-role"
+      },
+      "nearAnswer": "Place the bucket and the IAM role. On the role, allow s3:Write on photo-bucket. Give the role to both instances."
+    },
+    {
+      "objectiveId": "red-blocked",
+      "nudge": "A new bucket is private. Has anything changed that?",
+      "pointer": {
+        "text": "Open the bucket and look at Block Public Access.",
+        "highlight": "resource:photos"
+      },
+      "nearAnswer": "Place the bucket and leave Block Public Access on, with no public statement in its policy."
+    }
+  ],
+  "factCards": ["concept-roles-not-keys", "s3-bucket", "iam-role"],
+  "referenceSolution": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "nat-gateway",
+              "natGatewayId": "nat"
+            }
+          }
+        ]
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "nat-gateway",
+        "id": "nat",
+        "name": "NAT Gateway",
+        "subnetId": "public-a"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "https",
+        "targetIds": ["app-a", "app-b"]
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-a",
+        "name": "EC2 instance A",
+        "subnetId": "private-a",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-b",
+        "name": "EC2 instance B",
+        "subnetId": "private-b",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "s3-bucket",
+        "id": "photos",
+        "name": "photo-bucket",
+        "blockPublicAccess": true,
+        "policy": [],
+        "dataClass": "sensitive",
+        "encryption": {
+          "kind": "sse-s3"
+        }
+      },
+      {
+        "kind": "iam-role",
+        "id": "app-role",
+        "name": "app-role",
+        "statements": [
+          {
+            "effect": "allow",
+            "actions": ["s3:Write"],
+            "resource": "photos"
+          }
+        ]
+      }
+    ]
+  }
+}

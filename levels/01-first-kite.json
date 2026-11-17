@@ -1,0 +1,549 @@
+{
+  "id": 1,
+  "slug": "first-kite",
+  "title": "First Kite",
+  "concept": "What makes a subnet public, and how a request reaches an application through a load balancer.",
+  "guidance": "full",
+  "region": "us-east-1",
+  "azs": 2,
+  "narration": [
+    {
+      "id": "welcome",
+      "text": "Welcome to the sky above N. Virginia. The dashed border is your VPC: your own region of the AWS network. The Cloudlings on the ground are the internet, and their kites are requests. Right now there is no way in.",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    },
+    {
+      "id": "instances",
+      "text": "Two EC2 instances are already running in the mid band, in private subnets. They are locked for now; we will look inside them in the next level. Our job is to let the green kites reach them safely.",
+      "highlight": "resource:app-a",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    },
+    {
+      "id": "place-igw",
+      "text": "First, a gate. Drag the Internet Gateway from the tray into the sky.",
+      "highlight": "palette:igw",
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "resource-exists",
+          "resourceId": "igw"
+        }
+      }
+    },
+    {
+      "id": "add-route",
+      "text": "A gate is no use without a signpost. Click a public subnet in the low band and add a route: Internet (0.0.0.0/0) to the Internet Gateway. That route is what makes a subnet public.",
+      "highlight": "subnet:public-a",
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "route-present",
+          "routeTableId": "rt-public",
+          "destination": "internet",
+          "target": "internet-gateway"
+        }
+      }
+    },
+    {
+      "id": "place-alb",
+      "text": "Now the front door. Drag the Application Load Balancer into the sky. It will settle across both public subnets, one node in each Availability Zone.",
+      "highlight": "palette:alb",
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "resource-exists",
+          "resourceId": "alb"
+        }
+      }
+    },
+    {
+      "id": "open-sg",
+      "text": "The load balancer wears a security group, drawn as a pencilled outline, and it starts with no inbound rules, so everything is refused. Click the load balancer and add an inbound rule: HTTPS 443 from Anywhere.",
+      "highlight": "resource:alb",
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "security-group-allows",
+          "securityGroupId": "sg-alb",
+          "ports": "https",
+          "peer": {
+            "kind": "anywhere"
+          }
+        }
+      }
+    },
+    {
+      "id": "listener",
+      "text": "The green kites fly on HTTPS 443. On the same card, set the listener to HTTPS 443 so the load balancer is listening on that port.",
+      "highlight": "resource:alb",
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "listener-is",
+          "loadBalancerId": "alb",
+          "listener": "https"
+        }
+      }
+    },
+    {
+      "id": "targets",
+      "text": "Last, tell the load balancer where to send requests. On its card, tick both EC2 instances as targets (or drag from its handle to each instance).",
+      "highlight": "resource:alb",
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "targets-registered",
+          "loadBalancerId": "alb",
+          "atLeast": 2
+        }
+      }
+    },
+    {
+      "id": "fly",
+      "text": "Ready. Press \"Fly kites\" and watch. Three green kites are visitors; the red one is aiming at SSH 22.",
+      "highlight": "button:fly",
+      "advanceWhen": {
+        "kind": "run-finished"
+      }
+    },
+    {
+      "id": "inspect",
+      "text": "Click any Cloudling to see its kite's journey, check by check. The red kite bounced off the outline: no rule allows port 22, and a security group refuses whatever it does not allow.",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    }
+  ],
+  "initialScene": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": []
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": []
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-app",
+        "name": "app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "ec2-instance",
+        "id": "app-a",
+        "name": "EC2 instance A",
+        "subnetId": "private-a",
+        "securityGroupIds": ["sg-app"],
+        "roleId": null,
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-b",
+        "name": "EC2 instance B",
+        "subnetId": "private-b",
+        "securityGroupIds": ["sg-app"],
+        "roleId": null,
+        "size": "small",
+        "healthy": true
+      }
+    ]
+  },
+  "lockedIds": ["app-a", "app-b", "sg-app", "rt-private", "nacl-default"],
+  "palette": [
+    {
+      "resource": {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      }
+    },
+    {
+      "resource": {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": [],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "http",
+        "targetIds": []
+      },
+      "securityGroups": [
+        {
+          "id": "sg-alb",
+          "name": "alb-sg",
+          "inbound": [],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "population": [
+    {
+      "id": "green-1",
+      "kind": "friendly",
+      "groundPosition": 0,
+      "ip": "203.0.113.10",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "visits the website"
+    },
+    {
+      "id": "green-2",
+      "kind": "friendly",
+      "groundPosition": 1,
+      "ip": "203.0.113.24",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "visits the website"
+    },
+    {
+      "id": "green-3",
+      "kind": "friendly",
+      "groundPosition": 2,
+      "ip": "192.0.2.31",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "visits the website"
+    },
+    {
+      "id": "red-1",
+      "kind": "hostile",
+      "groundPosition": 4,
+      "ip": "198.51.100.66",
+      "destinationId": "alb",
+      "port": 22,
+      "payload": "clean",
+      "label": "probes SSH 22"
+    }
+  ],
+  "events": [],
+  "objectives": [
+    {
+      "id": "green-delivered",
+      "text": "Every green kite reaches an instance and gets an answer",
+      "predicate": {
+        "kind": "flows-delivered",
+        "flows": {
+          "intent": "legitimate"
+        }
+      }
+    },
+    {
+      "id": "red-blocked",
+      "text": "The red kite is turned away by the load balancer's security group",
+      "predicate": {
+        "kind": "flows-stopped",
+        "flows": {
+          "intent": "hostile"
+        },
+        "by": "security-group"
+      }
+    }
+  ],
+  "stars": {
+    "wellArchitected": {
+      "text": "The listener uses HTTPS, not HTTP",
+      "predicates": [
+        {
+          "kind": "listener-is",
+          "loadBalancerId": "alb",
+          "listener": "https"
+        }
+      ]
+    }
+  },
+  "hints": [
+    {
+      "objectiveId": "green-delivered",
+      "nudge": "Follow a green kite's journey: where does it stop? That is the next thing to build.",
+      "pointer": {
+        "text": "A kite needs four things in a row: a gate, a route to it, a load balancer that allows and listens on its port, and targets behind it.",
+        "highlight": "resource:alb"
+      },
+      "nearAnswer": "Attach the Internet Gateway. Public route table: Internet to Internet Gateway. Load balancer: inbound rule HTTPS 443 from Anywhere, listener HTTPS 443, both instances ticked as targets."
+    },
+    {
+      "objectiveId": "red-blocked",
+      "nudge": "A security group refuses anything it does not explicitly allow.",
+      "pointer": {
+        "text": "Look at the load balancer's inbound rules. Does anything there cover port 22?",
+        "highlight": "resource:alb"
+      },
+      "nearAnswer": "The load balancer's security group should have exactly one inbound rule: HTTPS 443 from Anywhere. Remove any rule for SSH 22 or All traffic."
+    }
+  ],
+  "factCards": ["concept-public-subnet", "internet-gateway", "load-balancer", "security-group"],
+  "referenceSolution": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": []
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "https",
+        "targetIds": ["app-a", "app-b"]
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-a",
+        "name": "EC2 instance A",
+        "subnetId": "private-a",
+        "securityGroupIds": ["sg-app"],
+        "roleId": null,
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-b",
+        "name": "EC2 instance B",
+        "subnetId": "private-b",
+        "securityGroupIds": ["sg-app"],
+        "roleId": null,
+        "size": "small",
+        "healthy": true
+      }
+    ]
+  }
+}

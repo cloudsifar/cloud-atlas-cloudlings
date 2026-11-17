@@ -1,0 +1,27 @@
+// Loads the level files that ship with the game.
+//
+// To add a level: drop its JSON file in levels/, import it here, and add it to
+// the list. Every file is validated on load, so a malformed level fails at once
+// with a message naming the field, rather than misbehaving in play.
+
+import level01 from '../../levels/01-first-kite.json'
+import level02 from '../../levels/02-into-the-middle.json'
+import level03 from '../../levels/03-the-rain-store.json'
+import factCards from '../../content/fact-cards.json'
+import type { Level } from './schema'
+import { validateLevel } from './validate'
+
+export type FactCard = { title: string; body: string; simplifications: string[]; atlasPage: string }
+
+export const FACT_CARDS: Record<string, FactCard> = factCards
+
+export function parseLevel(json: unknown): Level {
+  const errors = validateLevel(json, Object.keys(FACT_CARDS))
+  if (errors.length > 0) {
+    throw new Error(`Invalid level file:\n- ${errors.join('\n- ')}`)
+  }
+  // validateLevel has just established that the value has the Level shape.
+  return json as Level
+}
+
+export const LEVELS: Level[] = [level01, level02, level03].map(parseLevel)

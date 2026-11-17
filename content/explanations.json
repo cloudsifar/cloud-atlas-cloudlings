@@ -1,0 +1,26 @@
+{
+  "internet-gateway": {
+    "label": "Internet Gateway",
+    "placement": "The Internet Gateway sits on the VPC border, at the bottom of the low band: it is the gate between the ground and your sky."
+  },
+  "nat-gateway": {
+    "label": "NAT Gateway",
+    "placement": "A NAT Gateway lives in the low band, in a public subnet. It needs the Internet Gateway to do its job."
+  },
+  "load-balancer": {
+    "label": "Application Load Balancer",
+    "placement": "The load balancer lives in the low band and stretches across both Availability Zones. It is the one cloud kite strings are meant to reach."
+  },
+  "ec2-instance": {
+    "label": "EC2 instance",
+    "placement": "Instances live in the mid band, in private subnets, where kite strings cannot reach them directly."
+  },
+  "s3-bucket": {
+    "label": "S3 bucket",
+    "placement": "S3 stands outside the VPC and spans every altitude: it is a regional service, not something inside a subnet."
+  },
+  "iam-role": {
+    "label": "IAM role",
+    "placement": "IAM lives in the high band with the other AWS-managed services. Its threads reach down to whatever wears the role."
+  }
+}

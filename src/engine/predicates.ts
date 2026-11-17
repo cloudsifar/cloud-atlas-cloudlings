@@ -15,7 +15,7 @@ import {
   type SecurityGroupPeer,
   type ServiceAction,
 } from './model'
-import { isBucketPublic } from './s3'
+import { hasPublicStatement } from './s3'
 import { failingStep, type CheckKind, type Flow, type FlowResult } from './trace'
 
 /** One flow and what happened to it. */
@@ -50,7 +50,8 @@ export type Predicate =
   | { kind: 'targets-accept-only-load-balancer'; loadBalancerId: string }
   | { kind: 'role-attached'; instanceIds: string[] }
   | { kind: 'role-allows'; roleId: string; action: ServiceAction; resourceId: string }
-  | { kind: 'bucket-not-public'; bucketId: string }
+  /** Block Public Access is on and the bucket policy grants nothing to everyone. */
+  | { kind: 'bucket-locked-down'; bucketId: string }
 
 export type Objective = {
   id: string
@@ -166,9 +167,9 @@ export function evaluatePredicate(scene: Scene, runs: FlowRun[], predicate: Pred
         ) ?? false
       )
     }
-    case 'bucket-not-public': {
+    case 'bucket-locked-down': {
       const bucket = findResourceOfKind(scene, 's3-bucket', predicate.bucketId)
-      return bucket !== undefined && !isBucketPublic(bucket)
+      return bucket !== undefined && bucket.blockPublicAccess && !hasPublicStatement(bucket)
     }
   }
 }

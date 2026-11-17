@@ -145,7 +145,7 @@ describe('predicates', () => {
     expect(
       evaluatePredicate(open, run(open), { kind: 'flows-stopped', flows: { intent: 'hostile' } }),
     ).toBe(false)
-    expect(evaluatePredicate(open, [], { kind: 'bucket-not-public', bucketId: 'photos' })).toBe(
+    expect(evaluatePredicate(open, [], { kind: 'bucket-locked-down', bucketId: 'photos' })).toBe(
       false,
     )
   })
@@ -178,7 +178,7 @@ describe('predicates', () => {
     expect(
       yes({ kind: 'role-allows', roleId: 'app-role', action: 's3:Write', resourceId: 'photos' }),
     ).toBe(true)
-    expect(yes({ kind: 'bucket-not-public', bucketId: 'photos' })).toBe(true)
+    expect(yes({ kind: 'bucket-locked-down', bucketId: 'photos' })).toBe(true)
     expect(
       yes({ kind: 'role-allows', roleId: 'app-role', action: 's3:Read', resourceId: 'photos' }),
     ).toBe(false)
