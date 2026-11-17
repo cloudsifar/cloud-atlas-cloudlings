@@ -269,7 +269,15 @@ function drawContainers(context: CanvasRenderingContext2D, model: SkyViewModel):
   bandLabel('High – managed services', SKY.high.top, SKY.high.bottom + 6)
   bandLabel('Mid – private', SKY.mid.top, SKY.mid.bottom)
   bandLabel('Low – public', SKY.low.top, SKY.low.bottom)
-  caption(context, 'Ground – the internet', SKY.right - 10, SKY.horizonY + 12, 12, 'right', '#3f5a36')
+  caption(
+    context,
+    'Ground – the internet',
+    SKY.right - 10,
+    SKY.horizonY + 12,
+    12,
+    'right',
+    '#3f5a36',
+  )
 
   // The VPC: an atlas-style dashed border with a hand-lettered caption and leader line.
   context.save()
