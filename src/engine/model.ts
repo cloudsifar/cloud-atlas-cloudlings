@@ -19,14 +19,7 @@ export type Band = 'low' | 'mid'
  * Rules never hold raw numbers, so a rule can only ever say something the game teaches.
  */
 export type PortOption =
-  | 'http'
-  | 'https'
-  | 'ssh'
-  | 'mysql'
-  | 'postgresql'
-  | 'nfs'
-  | 'ephemeral'
-  | 'all'
+  'http' | 'https' | 'ssh' | 'mysql' | 'postgresql' | 'nfs' | 'ephemeral' | 'all'
 
 /** An address range a rule can name. */
 export type CidrPeer = { kind: 'anywhere' } | { kind: 'cidr'; cidr: string }
@@ -196,13 +189,7 @@ export type AutoScalingGroup = {
 }
 
 export type Resource =
-  | InternetGateway
-  | NatGateway
-  | LoadBalancer
-  | Ec2Instance
-  | AutoScalingGroup
-  | S3Bucket
-  | IamRole
+  InternetGateway | NatGateway | LoadBalancer | Ec2Instance | AutoScalingGroup | S3Bucket | IamRole
 
 export type ResourceKind = Resource['kind']
 

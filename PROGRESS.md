@@ -20,6 +20,13 @@ Running log. Newest state first; updated at the end of every milestone.
 - **Tests:** 187 pass with `npm run offline:test` (the Vitest test files run on Node's
   test runner through a small stand-in for Vitest; see ADR 0002).
 - **Type-check:** `tsc --noEmit -p tools/offline/tsconfig.json` is clean.
+- **Against the real installed packages** (the first `npm install`, on Windows, with
+  ESLint 9.39.5, typescript-eslint 8.73.0, Prettier 3.10.1, TypeScript 5.9.3 and
+  `@types/node` 22): `tsc --noEmit` (the project tsconfig) is clean; ESLint and
+  `prettier --check .` are clean on an LF copy of the tree after the fixes in ADR 0006
+  (two `process` globals in `tools/offline/*.mjs`, one Prettier reflow in
+  `src/engine/model.ts`). These ran on a Linux VM reading that Windows `node_modules`,
+  because those tools are plain JavaScript.
 - **In a browser (headless Chromium, 1280×720, esbuild bundle):**
   - Levels 1 to 4 played from start to their objectives through the real interface
     (dragging clouds from the tray, routes and rules on config cards, targets, roles,
@@ -36,9 +43,24 @@ Running log. Newest state first; updated at the end of every milestone.
 
 ## Not verified — do these first
 
-1. `npm install`, then `npm test`, `npm run build`, `npm run lint`. **None of these has
-   ever been run**: the build sandbox had no npm registry. Version ranges in
-   `package.json` are guesses and there is no lockfile. ESLint has never seen this code.
+1. **Vitest 4 and Vite on a real install.** `npm install` has now run (it found the
+   audit problems fixed in ADR 0006), and ESLint, Prettier and `tsc` pass against the
+   installed packages. Still to confirm on the upgraded tree: `npm audit` shows only
+   the accepted picomatch advisory; after `npm ci --ignore-scripts`, esbuild still
+   answers `--version`; `npm test` (Vitest 4, never yet run on this suite),
+   `npm run build` (Vite) and `npm run lint` pass on a checkout with LF line endings.
+   Then commit the lockfile. Reasons for each step are in ADR 0006.
+
+   ```sh
+   npm install                      # updates the lockfile for vitest ^4.1.12
+   npm audit                        # expect only GHSA-fc5q-39xc-vjpf (picomatch)
+   npm ls vitest @vitest/mocker tinypool picomatch esbuild
+   npm install-scripts deny esbuild # records the decision in package.json
+   rm -rf node_modules && npm ci --ignore-scripts
+   npx esbuild --version && npm test && npm run build && npm run lint
+   git add package.json package-lock.json && git commit
+   ```
+
 2. Firefox, Safari and Edge. Only Chromium was tried.
 3. Window sizes other than 1280×720, tablets, and the phone path.
 4. Sound. The synthesised placeholders exist but headless testing cannot hear them.
@@ -56,6 +78,12 @@ Running log. Newest state first; updated at the end of every milestone.
 
 ## Known issues
 
+- **`npm audit` reports one accepted advisory**, GHSA-fc5q-39xc-vjpf in `picomatch`
+  (ReDoS), about ten times, because Vite, Vitest and typescript-eslint all reach it.
+  No fixed picomatch exists yet. When one does: `npm update picomatch`, commit the
+  lockfile, and remove this line. See ADR 0006.
+- **ESLint 9 is past end of life** (6 August 2026). Upgrading to ESLint 10 and
+  `@eslint/js` 10 is a separate major change; not needed for any advisory.
 - **Asset swapping is half built.** `assets/manifest.json` sets each sprite's size and
   anchor, but the renderer does not yet load image files: setting `file` has no effect.
   Placeholders are always drawn in code.
@@ -200,3 +228,11 @@ None found so far. Two places where the brief's wording was made more exact:
   SIMPLIFICATIONS 24–26 (all crowd simplifications now on fact cards). Found and fixed
   on the way: `validateScene` had no case for Auto Scaling groups, the offline Vitest
   stand-in lacked `toBeNull`, and a doc comment in `flow.ts` sat on the wrong function.
+- **Session 2, continued: the first real install.** `npm install` on Windows reported
+  13 audit findings with three causes: `@vitest/mocker` and `tinypool` (both through
+  Vitest 3) and `picomatch` (through Vite, Vitest and typescript-eslint, no fix
+  published). Vitest moved to `^4.1.12`, the smallest change that clears the first two;
+  Vite, typescript-eslint and ESLint stay on their majors. picomatch is accepted and
+  tracked. Line endings normalised to LF with `.gitattributes`; esbuild's install
+  script denied (its binary comes from an optional dependency). ESLint's first run
+  found two undeclared `process` globals in the offline tools. ADR 0006.

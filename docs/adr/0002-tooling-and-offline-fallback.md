@@ -21,6 +21,9 @@ small fallbacks live in `tools/offline/`:
   Vite) and `npm run lint` (ESLint) have never been run. Version ranges in
   `package.json` are best guesses and there is no `package-lock.json`. The first job on
   a machine with network access is to run those four commands and fix whatever they report.
+  _Update:_ the first install showed the guesses were stale (Vitest 3 and ESLint 9 when
+  Vitest 4 and ESLint 10 were current) and pulled in vulnerable packages. ADR 0006 records
+  the fix and the lockfile.
 - Tests may only use matchers that the shim implements, or the shim must grow. Once
   Vitest is confirmed working, `tools/offline/` can be deleted.
 - `@types/node` is a dev dependency only because tests read files from disk.

@@ -19,9 +19,12 @@ npm run build      # static site in dist/, relative paths, no server needed
 npm run lint       # ESLint + Prettier
 ```
 
-> These four commands have **not yet been run**: the game was built in a sandbox with no
-> access to the npm registry. Until you have confirmed them, the fallbacks below are what
-> was actually used. See [`docs/adr/0002-tooling-and-offline-fallback.md`](docs/adr/0002-tooling-and-offline-fallback.md).
+> Node 20.19+ or 22.12+ (Vite 7 and Vitest 4). The game was first built in a sandbox with
+> no access to the npm registry, using the fallbacks below; see
+> [`docs/adr/0002-tooling-and-offline-fallback.md`](docs/adr/0002-tooling-and-offline-fallback.md).
+> The dependency choices and the one accepted `npm audit` advisory are in
+> [`docs/adr/0006-dependency-audit.md`](docs/adr/0006-dependency-audit.md);
+> [`PROGRESS.md`](PROGRESS.md) says which of these commands have been confirmed.
 
 ```sh
 npm run offline:test    # same test files on Node's test runner (needs a global `tsx`)
