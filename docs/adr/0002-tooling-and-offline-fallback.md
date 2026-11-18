@@ -26,4 +26,9 @@ small fallbacks live in `tools/offline/`:
   the fix and the lockfile.
 - Tests may only use matchers that the shim implements, or the shim must grow. Once
   Vitest is confirmed working, `tools/offline/` can be deleted.
+  _Update:_ Vitest 4 now runs the whole suite (ADR 0006), and it is the authority: a
+  test counts as passing when `npm test` passes. `tools/offline/` is kept because the
+  cloud sandbox where the game is being built still cannot reach the npm registry, and
+  the runner is how tests are run there between real runs. Delete it once that sandbox
+  can install packages, or once a CI job runs `npm test` on every push.
 - `@types/node` is a dev dependency only because tests read files from disk.

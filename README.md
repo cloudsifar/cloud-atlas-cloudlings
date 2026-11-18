@@ -6,7 +6,7 @@ kites that test whether the architecture works and is secure.
 
 Concept, teaching design and art direction by Simon Farrell. Implementation AI-assisted.
 
-**Status:** Levels 1–3 are playable with placeholder art. See [`PROGRESS.md`](PROGRESS.md)
+**Status:** Levels 1–5 are playable with placeholder art. See [`PROGRESS.md`](PROGRESS.md)
 for exactly what is done, what is next, and what has not been verified yet.
 
 ## Run it
@@ -19,12 +19,11 @@ npm run build      # static site in dist/, relative paths, no server needed
 npm run lint       # ESLint + Prettier
 ```
 
-> Node 20.19+ or 22.12+ (Vite 7 and Vitest 4). The game was first built in a sandbox with
-> no access to the npm registry, using the fallbacks below; see
-> [`docs/adr/0002-tooling-and-offline-fallback.md`](docs/adr/0002-tooling-and-offline-fallback.md).
-> The dependency choices and the one accepted `npm audit` advisory are in
-> [`docs/adr/0006-dependency-audit.md`](docs/adr/0006-dependency-audit.md);
-> [`PROGRESS.md`](PROGRESS.md) says which of these commands have been confirmed.
+> Node 20.19+ or 22.12+ (Vite 7 and Vitest 4). All four commands have been run and pass
+> (see [`PROGRESS.md`](PROGRESS.md)); the dependency choices are in
+> [`docs/adr/0006-dependency-audit.md`](docs/adr/0006-dependency-audit.md). The game is
+> built in a sandbox with no access to the npm registry, which uses the fallbacks below;
+> see [`docs/adr/0002-tooling-and-offline-fallback.md`](docs/adr/0002-tooling-and-offline-fallback.md).
 
 ```sh
 npm run offline:test    # same test files on Node's test runner (needs a global `tsx`)
