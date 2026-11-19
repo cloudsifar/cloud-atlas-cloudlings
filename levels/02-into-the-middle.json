@@ -33,6 +33,7 @@
       "id": "register",
       "text": "Click the load balancer and tick both instances as targets, one in each Availability Zone.",
       "highlight": "resource:alb",
+      "pulse": ["targets:alb"],
       "advanceWhen": {
         "kind": "scene",
         "predicate": {
@@ -46,6 +47,7 @@
       "id": "chain",
       "text": "Now look at an instance. Its security group allows HTTP 80 from Anywhere: far wider than it needs. Click an instance, remove that rule, and add HTTP 80 from the security group \"alb-sg\". Now only the load balancer may call.",
       "highlight": "resource:app-a",
+      "pulse": ["security-group:sg-app"],
       "advanceWhen": {
         "kind": "scene",
         "predicate": {

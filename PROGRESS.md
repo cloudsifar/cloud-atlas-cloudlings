@@ -252,3 +252,9 @@ None found so far. Two places where the brief's wording was made more exact:
   high band is "High – account"; public and private subnets are tinted; the VPC's range
   opens a CIDR card; the menu can be resumed; three sound levels changed. Level 3's
   narration now says where the bucket and role go.
+- **Session 3, continued: "over here" and headings.** In Levels 1–3, the heading of the
+  card section the narrator is asking about now pulses until the step is done (route
+  table, security group, listener, targets, role statements, instance role), checked
+  by a level test. Headings are bold and upright, not the handwritten face, and no
+  italics remain. Press Start 2P (OFL) is proposed for headings, waiting on the font
+  file. ADR 0008. 206 tests pass offline.

@@ -3,6 +3,9 @@
 import { describe, expect, it } from 'vitest'
 import { FACT_CARDS, LEVELS, runLevel, validateLevel } from '../../src/levels'
 
+/** Levels 1–3 are the beginner levels: every setting the narrator asks for pulses. */
+const BEGINNER_LEVELS = 3
+
 describe('shipped levels', () => {
   it('has levels numbered from 1 with no gaps', () => {
     expect(LEVELS.map((level) => level.id)).toEqual(LEVELS.map((_, index) => index + 1))
@@ -43,6 +46,18 @@ describe('shipped levels', () => {
         }
         expect(run.kiteRuns.length).toBe(level.population.length)
       })
+
+      if (level.id <= BEGINNER_LEVELS) {
+        it('points at the card section for every step that asks for a setting to change', () => {
+          // Beginner levels pulse the section heading the player has to change (ADR 0008).
+          // Placing a cloud is not a setting: the tray highlight covers that.
+          for (const step of level.narration) {
+            if (step.advanceWhen.kind !== 'scene') continue
+            if (step.advanceWhen.predicate.kind === 'resource-exists') continue
+            expect(step.pulse?.length ?? 0, `narration step "${step.id}"`).toBeGreaterThan(0)
+          }
+        })
+      }
     })
   }
 })
@@ -144,6 +159,14 @@ describe('validateLevel', () => {
       const errors = brokenCrowd((level) => (level.events = []))
       expect(errors.some((error) => error.includes('has no crowd surge'))).toBe(true)
     })
+  })
+
+  it('rejects a pulse that names an unknown section or id', () => {
+    const errors = broken((level) => {
+      const steps = level.narration as { pulse?: string[] }[]
+      if (steps[0]) steps[0].pulse = ['listener:no-such-thing']
+    })
+    expect(errors[0]).toMatch('narration[0].pulse')
   })
 
   it('rejects a Cloudling with nothing to say', () => {

@@ -12,7 +12,7 @@ import {
   type ResourceKind,
   type Scene,
 } from '../engine'
-import { REGION_CODES, type Level } from './schema'
+import { PULSE_SECTIONS, REGION_CODES, type Level } from './schema'
 
 type JsonObject = Record<string, unknown>
 
@@ -268,6 +268,32 @@ export function validateLevel(value: unknown, knownFactCardIds: string[]): strin
   if (level.guidance === 'full' && level.narration.length === 0) {
     errors.push('narration: a fully guided level needs narrator steps')
   }
+
+  // Pulse keys name a card section and something the level actually contains.
+  const known = new Set<string>()
+  const scenes = [level.initialScene, level.referenceSolution]
+  for (const scene of scenes) {
+    for (const item of [...scene.resources, ...scene.securityGroups, ...scene.routeTables])
+      known.add(item.id)
+  }
+  for (const entry of level.palette) {
+    known.add(entry.resource.id)
+    for (const group of entry.securityGroups ?? []) known.add(group.id)
+  }
+  level.narration.forEach((step, index) => {
+    if (step.pulse === undefined) return
+    if (!Array.isArray(step.pulse) || step.pulse.length === 0) {
+      errors.push(`narration[${index}].pulse: expected a list of card sections`)
+      return
+    }
+    for (const key of step.pulse) {
+      const [section, id] = typeof key === 'string' ? key.split(':') : []
+      if (!(PULSE_SECTIONS as readonly string[]).includes(section ?? '') || !id || !known.has(id))
+        errors.push(
+          `narration[${index}].pulse: "${String(key)}" is not <section>:<id> with a known section and id`,
+        )
+    }
+  })
 
   return errors
 }

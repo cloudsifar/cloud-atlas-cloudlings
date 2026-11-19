@@ -22,6 +22,7 @@ import {
 import {
   addRoleStatement,
   addSecurityGroupRule,
+  prefersReducedMotion,
   removeRoleStatement,
   removeRoute,
   removeSecurityGroupRule,
@@ -48,6 +49,20 @@ export type CardActions = {
   pendingRemoval: string | null
   confirmRemove(resourceId: string): void
   cancelRemove(): void
+  /** Card sections the narrator is pointing at right now (`<section>:<id>`, ADR 0008). */
+  pulse: readonly string[]
+}
+
+/**
+ * Makes a section heading pulse when the narrator is asking for a change in that
+ * section, until the step is done. With reduced motion it glows without moving.
+ */
+function attention<T extends Element | null>(element: T, actions: CardActions, key: string): T {
+  if (element && actions.pulse.includes(key)) {
+    element.classList.add('pulse')
+    if (prefersReducedMotion()) element.classList.add('still')
+  }
+  return element
 }
 
 const NAMED_RANGES: Option<string>[] = [
@@ -112,7 +127,11 @@ function securityGroupEditor(
   const section = h(
     'section',
     { class: 'card-section' },
-    h('h4', { textContent: `Security group "${group.name}"` }),
+    attention(
+      h('h4', { textContent: `Security group "${group.name}"` }),
+      actions,
+      `security-group:${group.id}`,
+    ),
   )
   if (locked) section.append(h('p', { class: 'locked-note', textContent: 'Locked in this level.' }))
 
@@ -244,7 +263,11 @@ function subnetCard(state: GameState, subnetId: string, actions: CardActions): H
   const routes = h(
     'section',
     { class: 'card-section' },
-    h('h4', { textContent: `Route table "${table.name}"` }),
+    attention(
+      h('h4', { textContent: `Route table "${table.name}"` }),
+      actions,
+      `route-table:${table.id}`,
+    ),
     h('p', { class: 'note', textContent: `Used by: ${sharedWith.join(', ')}.` }),
     locked ? h('p', { class: 'locked-note', textContent: 'Locked in this level.' }) : null,
     ruleList(
@@ -401,23 +424,29 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
         ...resourcesOfKind(scene, 'ec2-instance'),
         ...resourcesOfKind(scene, 'auto-scaling-group'),
       ]
+      const listener = dropdown(
+        'Listener',
+        [
+          { value: 'http', label: 'HTTP 80' },
+          { value: 'https', label: 'HTTPS 443' },
+        ],
+        resource.listener,
+        (value) => actions.edit((current) => setListener(current, resource.id, value)),
+        'listener',
+        locked,
+      )
+      attention(listener.firstElementChild, actions, `listener:${resource.id}`)
       body.append(
         h('p', {
           class: 'note',
           textContent: `Internet-facing · nodes in ${resource.subnetIds.map(subnetName).join(' and ') || 'no subnets'}`,
         }),
-        dropdown(
-          'Listener',
-          [
-            { value: 'http', label: 'HTTP 80' },
-            { value: 'https', label: 'HTTPS 443' },
-          ],
-          resource.listener,
-          (value) => actions.edit((current) => setListener(current, resource.id, value)),
-          'listener',
-          locked,
+        listener,
+        attention(
+          h('h5', { textContent: 'Targets (receive requests on HTTP 80)' }),
+          actions,
+          `targets:${resource.id}`,
         ),
-        h('h5', { textContent: 'Targets (receive requests on HTTP 80)' }),
         ...(instances.length === 0
           ? [h('p', { class: 'empty', textContent: 'There are no instances to target.' })]
           : []),
@@ -446,25 +475,27 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
     }
     case 'ec2-instance': {
       const roles = resourcesOfKind(scene, 'iam-role')
+      const roleField = dropdown(
+        'IAM role',
+        [
+          { value: '', label: 'None' },
+          ...roles.map((role) => ({ value: role.id, label: role.name })),
+        ],
+        resource.roleId ?? '',
+        (value) =>
+          actions.edit((current) =>
+            setInstanceRole(current, resource.id, value === '' ? null : value),
+          ),
+        'role',
+        locked,
+      )
+      attention(roleField.firstElementChild, actions, `instance-role:${resource.id}`)
       body.append(
         h('p', {
           class: 'note',
           textContent: `In ${subnetName(resource.subnetId)} · size ${resource.size} · private address only`,
         }),
-        dropdown(
-          'IAM role',
-          [
-            { value: '', label: 'None' },
-            ...roles.map((role) => ({ value: role.id, label: role.name })),
-          ],
-          resource.roleId ?? '',
-          (value) =>
-            actions.edit((current) =>
-              setInstanceRole(current, resource.id, value === '' ? null : value),
-            ),
-          'role',
-          locked,
-        ),
+        roleField,
       )
       break
     }
@@ -611,7 +642,11 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
         resource: pick(key('resource'), resourceOptions[0]?.value ?? '*'),
       })
       body.append(
-        h('h5', { textContent: 'Statements (everything else is denied)' }),
+        attention(
+          h('h5', { textContent: 'Statements (everything else is denied)' }),
+          actions,
+          `role-statements:${resource.id}`,
+        ),
         ruleList(
           resource.statements.map((item, index) => ({
             text: `${item.effect === 'allow' ? 'Allow' : 'Deny'} ${item.actions.join(', ')} on ${nameOf(item.resource)}`,
@@ -660,7 +695,9 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
           ),
         )
       }
-      body.append(h('h5', { textContent: 'Worn by' }))
+      body.append(
+        attention(h('h5', { textContent: 'Worn by' }), actions, `role-wearers:${resource.id}`),
+      )
       for (const instance of resourcesOfKind(scene, 'ec2-instance')) {
         const instanceLocked = level.lockedIds.includes(instance.id)
         const box = h('input', {

@@ -180,6 +180,13 @@ If a level needs a statement none of these can make, add a predicate to
 
 `highlight` is optional: `palette:<id>`, `resource:<id>`, `subnet:<id>` or `button:fly`.
 
+`pulse` is optional: card sections whose headings pulse while the step is current, to
+say "over here" (ADR 0008), e.g. `"pulse": ["security-group:sg-alb"]`. The sections are
+`security-group:<id>`, `route-table:<id>`, `listener:<load balancer id>`,
+`targets:<load balancer id>`, `role-statements:<role id>`, `role-wearers:<role id>` and
+`instance-role:<instance id>`. In Levels 1–3 every step that asks for a setting to
+change must have one; the level tests check it.
+
 **Scene steps can come back.** If the player undoes what a completed scene step asked
 for (removes the load balancer, takes away the route), the narrator returns to the
 earliest scene step that no longer holds, and the steps after it follow again as the

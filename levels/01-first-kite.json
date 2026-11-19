@@ -38,6 +38,7 @@
       "id": "add-route",
       "text": "A gate is no use without a signpost. Click a public subnet in the low band and add a route: Internet (0.0.0.0/0) to the Internet Gateway. That route is what makes a subnet public. (0.0.0.0/0 means every address. Click the VPC's own range, 10.0.0.0/16, above its border to see how these numbers work.)",
       "highlight": "subnet:public-a",
+      "pulse": ["route-table:rt-public"],
       "advanceWhen": {
         "kind": "scene",
         "predicate": {
@@ -64,6 +65,7 @@
       "id": "open-sg",
       "text": "The load balancer wears a security group, drawn as a pencilled outline, and it starts with no inbound rules, so everything is refused. Click the load balancer and add an inbound rule: HTTPS 443 from Anywhere.",
       "highlight": "resource:alb",
+      "pulse": ["security-group:sg-alb"],
       "advanceWhen": {
         "kind": "scene",
         "predicate": {
@@ -80,6 +82,7 @@
       "id": "listener",
       "text": "The green kites fly on HTTPS 443. On the same card, set the listener to HTTPS 443 so the load balancer is listening on that port.",
       "highlight": "resource:alb",
+      "pulse": ["listener:alb"],
       "advanceWhen": {
         "kind": "scene",
         "predicate": {
@@ -93,6 +96,7 @@
       "id": "targets",
       "text": "Last, tell the load balancer where to send requests. On its card, tick both EC2 instances as targets (or drag from its handle to each instance).",
       "highlight": "resource:alb",
+      "pulse": ["targets:alb"],
       "advanceWhen": {
         "kind": "scene",
         "predicate": {

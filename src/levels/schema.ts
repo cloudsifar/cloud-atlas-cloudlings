@@ -77,8 +77,30 @@ export type NarrationStep = {
   text: string
   /** A UI element to draw attention to: 'palette:<id>', 'resource:<id>', 'subnet:<id>' or 'button:fly'. */
   highlight?: string
+  /**
+   * Config card sections whose headings pulse while this step is current, to say "over
+   * here" (ADR 0008): `<section>:<id>` with a section from `PULSE_SECTIONS`. Used in the
+   * beginner levels for every step that asks the player to change a setting.
+   */
+  pulse?: string[]
   advanceWhen: NarrationTrigger
 }
+
+/**
+ * The config card sections that can pulse, and what the id after the colon names:
+ * a security group, a route table, a load balancer (its listener or its targets), a
+ * role (its statements or who wears it), or an instance (the role it wears).
+ */
+export const PULSE_SECTIONS = [
+  'security-group',
+  'route-table',
+  'listener',
+  'targets',
+  'role-statements',
+  'role-wearers',
+  'instance-role',
+] as const
+export type PulseSection = (typeof PULSE_SECTIONS)[number]
 
 /** Three tiers, revealed one at a time. Hints carry no penalty. */
 export type Hint = {

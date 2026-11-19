@@ -58,6 +58,7 @@
       "id": "allow-write",
       "text": "Click the role and add a statement: Allow s3:Write on photo-bucket. Just that: the application only uploads.",
       "highlight": "resource:app-role",
+      "pulse": ["role-statements:app-role"],
       "advanceWhen": {
         "kind": "scene",
         "predicate": {
@@ -72,6 +73,7 @@
       "id": "attach",
       "text": "Now give the role to both instances: click each instance and choose the role (or drag from the role's handle to each instance). A fine thread will join them.",
       "highlight": "resource:app-a",
+      "pulse": ["instance-role:app-a", "instance-role:app-b", "role-wearers:app-role"],
       "advanceWhen": {
         "kind": "scene",
         "predicate": {

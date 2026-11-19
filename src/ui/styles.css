@@ -17,6 +17,11 @@
   --caption-font:
     'Patrick Hand', 'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Sans MS', cursive;
   --body-font: 'Atkinson Hyperlegible', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  /* Headings in panels, cards, menus and tiles: upright and bold, not the handwritten
+     face, a little larger than the text under them (ADR 0008). */
+  --heading-font: var(--body-font);
+  /* The "over here" pulse: blue, never gold (gold means a change took effect). */
+  --attention: #2f6fb8;
 }
 
 * {
@@ -51,24 +56,25 @@ h2,
 h3,
 h4,
 h5 {
-  font-family: var(--caption-font);
+  font-family: var(--heading-font);
   margin: 0;
-  font-weight: normal;
+  font-weight: 700;
+  font-style: normal;
 }
 h2 {
-  font-size: 18px;
+  font-size: 16px;
   border-bottom: 1px dashed var(--rule);
   margin: 8px 0 6px;
 }
 h3 {
-  font-size: 16px;
+  font-size: 15px;
 }
 h4 {
-  font-size: 15px;
+  font-size: 14px;
   margin-top: 4px;
 }
 h5 {
-  font-size: 13px;
+  font-size: 14px;
   margin: 8px 0 2px;
   color: var(--ink-soft);
 }
@@ -97,9 +103,10 @@ button.primary {
   background: var(--accent);
   color: #fff;
   border-color: #1c3f61;
-  font-family: var(--caption-font);
-  font-size: 16px;
-  padding: 4px 16px;
+  font-family: var(--heading-font);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 5px 16px;
 }
 button.quiet {
   background: transparent;
@@ -132,7 +139,6 @@ button.link {
 }
 .locked-note {
   color: var(--ink-soft);
-  font-style: italic;
   font-size: 12px;
 }
 .button-row {
@@ -208,9 +214,9 @@ canvas.sky {
   align-items: baseline;
 }
 .level-title strong {
-  font-family: var(--caption-font);
+  font-family: var(--heading-font);
   font-size: 20px;
-  font-weight: normal;
+  font-weight: 700;
 }
 .level-title span {
   color: var(--ink-soft);
@@ -257,8 +263,9 @@ canvas.sky {
   cursor: grab;
 }
 .specimen-name {
-  font-family: var(--caption-font);
+  font-family: var(--heading-font);
   font-size: 14px;
+  font-weight: 700;
 }
 .family-icon {
   width: 72px;
@@ -520,10 +527,11 @@ button.remove {
   background: #fbecea;
 }
 .trace .leg-heading {
-  font-family: var(--caption-font);
+  font-family: var(--heading-font);
   font-size: 15px;
   margin: 10px 0 4px;
   border-bottom: 1px dashed var(--rule);
+  font-weight: 700;
 }
 .trace-step {
   display: grid;
@@ -538,9 +546,10 @@ button.remove {
 .trace-step .step-number {
   grid-column: 1;
   grid-row: 1 / span 3;
-  font-family: var(--caption-font);
+  font-family: var(--heading-font);
   font-size: 15px;
   color: var(--ink-soft);
+  font-weight: 700;
 }
 .step-mark {
   font-size: 11px;
@@ -558,7 +567,6 @@ button.remove {
 .rule-ref {
   font-size: 11px;
   color: var(--ink-soft);
-  font-style: italic;
 }
 
 .modal {
@@ -586,7 +594,6 @@ button.remove {
   padding-left: 18px;
 }
 .atlas-ref {
-  font-style: italic;
   color: var(--ink-soft);
   margin: 10px 0;
 }
@@ -610,8 +617,9 @@ button.remove {
 }
 .results summary {
   cursor: pointer;
-  font-family: var(--caption-font);
+  font-family: var(--heading-font);
   font-size: 15px;
+  font-weight: 700;
 }
 .results .button-row {
   justify-content: flex-end;
@@ -693,15 +701,16 @@ button.remove {
   min-height: 150px;
 }
 .level-card strong {
-  font-family: var(--caption-font);
+  font-family: var(--heading-font);
   font-size: 19px;
-  font-weight: normal;
+  font-weight: 700;
 }
 .level-number {
-  font-family: var(--caption-font);
+  font-family: var(--heading-font);
   font-size: 26px;
   color: var(--accent);
   line-height: 1;
+  font-weight: 700;
 }
 .level-region,
 .level-concept {
@@ -720,7 +729,8 @@ button.remove {
 .cost-total {
   margin: 2px 0;
   font-size: 18px;
-  font-family: var(--caption-font);
+  font-family: var(--heading-font);
+  font-weight: 700;
 }
 .cost-lines {
   margin: 0 0 4px;
@@ -810,4 +820,48 @@ button.remove {
 }
 .follow-buttons button {
   text-align: left;
+}
+
+/* ---- "over here" -------------------------------------------------------- */
+
+/* A card section the narrator is asking the player to change pulses until the step is
+   done: the heading swells a little and glows (ADR 0008). */
+@keyframes attention {
+  0%,
+  100% {
+    transform: scale(1);
+    text-shadow: 0 0 0 rgba(47, 111, 184, 0);
+  }
+  50% {
+    transform: scale(1.08);
+    text-shadow:
+      0 0 6px rgba(47, 111, 184, 0.75),
+      0 0 14px rgba(110, 170, 235, 0.6);
+  }
+}
+.pulse {
+  display: inline-block;
+  transform-origin: left center;
+  color: var(--attention);
+  font-weight: 700;
+  animation: attention 1.2s ease-in-out infinite;
+}
+.pulse::after {
+  content: ' ◀';
+  font-size: 0.85em;
+}
+/* A field label (the listener, an instance's role) pulses at heading size. */
+.field > span.pulse {
+  font-size: 14px;
+}
+/* With reduced motion it glows and stays still. */
+.pulse.still {
+  animation: none;
+  text-shadow: 0 0 6px rgba(47, 111, 184, 0.6);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse {
+    animation: none;
+    text-shadow: 0 0 6px rgba(47, 111, 184, 0.6);
+  }
 }

@@ -314,6 +314,8 @@ export function mountGameScreen(
           removeNow(resourceId)
         },
         pendingRemoval,
+        // The headings the current narrator step points at pulse until it is done.
+        pulse: level.narration[state.narrationIndex]?.pulse ?? [],
         confirmRemove: removeNow,
         cancelRemove: () => {
           pendingRemoval = null
