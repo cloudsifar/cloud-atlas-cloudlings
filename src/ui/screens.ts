@@ -84,7 +84,11 @@ export function mountStartScreen(root: HTMLElement, onStart: () => void): void {
   start.focus()
 }
 
-export type MenuActions = { play(level: Level, guidedRun: boolean): void }
+export type MenuActions = {
+  play(level: Level, guidedRun: boolean): void
+  /** Set when the menu was opened from a level: carries on exactly where the player was. */
+  resume: { label: string; run(): void } | null
+}
 
 export function mountMenu(root: HTMLElement, actions: MenuActions): void {
   const saved = loadSavedData()
@@ -150,6 +154,18 @@ export function mountMenu(root: HTMLElement, actions: MenuActions): void {
         'section',
         null,
         h('h2', { textContent: 'Play' }),
+        actions.resume
+          ? h(
+              'div',
+              { class: 'resume' },
+              button(actions.resume.label, actions.resume.run, 'resume', 'primary'),
+              h('p', {
+                class: 'note',
+                textContent:
+                  'Your sky is just as you left it. Choosing a level below starts it afresh.',
+              }),
+            )
+          : null,
         button(
           'Guided Run: start at Level 1',
           () => {
@@ -157,14 +173,14 @@ export function mountMenu(root: HTMLElement, actions: MenuActions): void {
             if (first) actions.play(first, true)
           },
           'guided',
-          'primary',
+          actions.resume ? 'quiet' : 'primary',
         ),
         h('h2', { textContent: 'Choose a level' }),
         h('p', { class: 'note', textContent: 'Every level is open from the start.' }),
         h('div', { class: 'level-grid' }, ...levelCards),
         h('p', {
           class: 'note',
-          textContent: 'Levels 4–12, Demo Mode and the Field Guide to the Sky are still to come.',
+          textContent: 'Levels 6–12, Demo Mode and the Field Guide to the Sky are still to come.',
         }),
       ),
       h(
@@ -220,4 +236,6 @@ export function mountMenu(root: HTMLElement, actions: MenuActions): void {
     ),
   )
   root.replaceChildren(page)
+  // Resuming is the likeliest wish when the menu was opened from a level.
+  page.querySelector<HTMLButtonElement>('[data-focus-key="resume"]')?.focus()
 }

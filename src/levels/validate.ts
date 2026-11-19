@@ -169,6 +169,14 @@ export function validateLevel(value: unknown, knownFactCardIds: string[]): strin
       errors.push(`palette[${index}]: "${entry.resource.id}" is already in the initial scene`)
     }
   })
+  for (const [id, text] of Object.entries(level.removalWarnings ?? {})) {
+    if (!paletteIds.has(id) && !(level.removableIds ?? []).includes(id)) {
+      errors.push(`removalWarnings.${id}: "${id}" is not a cloud the player can remove`)
+    }
+    if (typeof text !== 'string' || text.trim() === '') {
+      errors.push(`removalWarnings.${id}: expected the warning's text`)
+    }
+  }
 
   // The solution must be reachable: built only from the initial scene plus the palette.
   for (const resource of level.referenceSolution.resources) {
@@ -207,6 +215,8 @@ export function validateLevel(value: unknown, knownFactCardIds: string[]): strin
     kiteIds.add(kite.id)
     if (kite.kind !== 'friendly' && kite.kind !== 'hostile')
       errors.push(`${path}.kind: expected "friendly" or "hostile"`)
+    if (typeof kite.says !== 'string' || kite.says.trim() === '')
+      errors.push(`${path}.says: expected the words in the Cloudling's speech bubble`)
     if (
       !Number.isInteger(kite.groundPosition) ||
       kite.groundPosition < 0 ||

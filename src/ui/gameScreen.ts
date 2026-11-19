@@ -13,7 +13,6 @@ import {
   recordLevelResult,
   removeResource,
   type GameState,
-  type Snap,
 } from '../game'
 import {
   kiteToFlow,
@@ -37,17 +36,24 @@ import {
 } from './panels'
 
 export type GameNavigation = {
+  /** Opens the menu over the level, which stays as it is and can be resumed. */
   toMenu(): void
   /** Null on the last level. */
   toNextLevel: (() => void) | null
 }
 
-/** Mounts the game for one level into `root`. Returns a function that tears it down. */
+export type GameScreen = {
+  /** Hides or shows the level without losing it: the menu is opened over a paused level. */
+  setActive(active: boolean): void
+  destroy(): void
+}
+
+/** Mounts the game for one level into `root`. */
 export function mountGameScreen(
   root: HTMLElement,
   level: Level,
   navigation: GameNavigation,
-): () => void {
+): GameScreen {
   const store = createStore(level)
 
   // What this screen itself remembers (the game state lives in the store).
@@ -60,6 +66,11 @@ export function mountGameScreen(
   let message: string | null = null
   let messageTimer = 0
   let resultsOpen = false
+  /** A cloud whose removal waits on the player confirming the level's warning. */
+  let pendingRemoval: string | null = null
+  /** A control to focus once the cards are redrawn (a redrawn card scrolls back to its top). */
+  let focusAfterDraw: string | null = null
+  let active = true
   let previousPhase: GameState['phase'] = 'editing'
 
   const canvas = h('canvas', {
@@ -91,12 +102,14 @@ export function mountGameScreen(
     draw()
   }
 
-  function place(entry: PaletteEntry, snap: Snap): void {
-    store.applyEdit((scene) => placeFromPalette(scene, entry, snap.subnetId))
-    playSound(snap.drifted ? 'drift-back' : 'placed')
+  function place(entry: PaletteEntry, subnetId: string | undefined): void {
+    store.applyEdit((scene) => placeFromPalette(scene, entry, subnetId))
+    playSound('placed')
     // Every placement explains why the cloud belongs in its band.
     explainPlacement(entry.resource)
   }
+
+  const nameOf = (kind: Resource['kind']) => EXPLANATIONS[kind]?.label ?? kind
 
   const sky = createSkyView(canvas, store, {
     onSelectResource(id) {
@@ -116,12 +129,17 @@ export function mountGameScreen(
       draw()
     },
     onSelectKite(id) {
+      // The Cloudling says what it wants (the sky view draws the bubble). Once the kites
+      // have flown, its kite's journey opens in the trace inspector as well.
       openCard = null
-      selectedKiteId = id
       selectedCrowdKite = null
-      if (!store.getState().lastRun)
-        showMessage("Fly the kites first, then click a Cloudling to see its kite's journey.")
-      else playSound('card-open')
+      selectedKiteId = store.getState().lastRun ? id : null
+      if (selectedKiteId) playSound('card-open')
+      draw()
+    },
+    onSelectVpcCidr() {
+      factCardId = 'concept-cidr'
+      playSound('card-open')
       draw()
     },
     onSelectNothing() {
@@ -131,6 +149,12 @@ export function mountGameScreen(
       draw()
     },
     onPlaced: place,
+    onDropRejected(kind) {
+      playSound('drift-back')
+      showMessage(
+        `That isn't where the ${nameOf(kind)} goes, so it went back to the tray. ${EXPLANATIONS[kind]?.placement ?? ''}`,
+      )
+    },
     onDriftedBack: explainPlacement,
     onMessage: showMessage,
   })
@@ -144,8 +168,18 @@ export function mountGameScreen(
     sky.play()
   }
 
+  function removeNow(resourceId: string): void {
+    openCard = null
+    explanation = null
+    pendingRemoval = null
+    store.applyEdit((scene) => removeResource(scene, resourceId))
+  }
+
   function draw(): void {
     const state = store.getState()
+    // A pending removal belongs to the card it was asked on.
+    if (pendingRemoval && !(openCard?.kind === 'resource' && openCard.id === pendingRemoval))
+      pendingRemoval = null
     const step = state.level.narration[state.narrationIndex]
     const highlight = step?.highlight ?? null
     const flying = state.phase === 'flying'
@@ -199,10 +233,15 @@ export function mountGameScreen(
         state,
         highlight,
         (entry, event) => sky.beginPaletteDrag(entry, event),
-        (entry) => {
-          // Click or Enter: place in the default spot (first valid subnet for subnet-bound clouds).
+        (entry, fromKeyboard) => {
           if (state.scene.resources.some((resource) => resource.id === entry.resource.id)) return
-          place(entry, { drifted: false })
+          // Enter or Space: the keyboard route places it in its default spot (the first valid
+          // subnet for subnet-bound clouds). A mouse click is told to drag instead.
+          if (fromKeyboard) place(entry, undefined)
+          else
+            showMessage(
+              `Drag the ${nameOf(entry.resource.kind)} into the sky, and let go when the place it belongs lights up.`,
+            )
         },
       ),
     )
@@ -263,9 +302,23 @@ export function mountGameScreen(
           draw()
         },
         remove: (resourceId) => {
-          openCard = null
-          explanation = null
-          store.applyEdit((scene) => removeResource(scene, resourceId))
+          // Some clouds carry a warning first (Level 1's load balancer and gateway).
+          if (level.removalWarnings?.[resourceId]) {
+            pendingRemoval = resourceId
+            // Focus the safe choice: it also scrolls the warning into view.
+            focusAfterDraw = 'card-remove-keep'
+            playSound('hint')
+            draw()
+            return
+          }
+          removeNow(resourceId)
+        },
+        pendingRemoval,
+        confirmRemove: removeNow,
+        cancelRemove: () => {
+          pendingRemoval = null
+          focusAfterDraw = 'card-remove'
+          draw()
         },
       })
       const rect =
@@ -327,6 +380,10 @@ export function mountGameScreen(
         }),
       )
     redraw(cardLayer, ...floating)
+    if (focusAfterDraw) {
+      cardLayer.querySelector<HTMLElement>(`[data-focus-key="${focusAfterDraw}"]`)?.focus()
+      focusAfterDraw = null
+    }
   }
 
   const unsubscribe = store.subscribe(() => {
@@ -347,7 +404,7 @@ export function mountGameScreen(
   })
 
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.key !== 'Escape') return
+    if (event.key !== 'Escape' || !active) return
     if (factCardId) factCardId = null
     else if (resultsOpen) resultsOpen = false
     else if (openCard || selectedKiteId) {
@@ -360,11 +417,17 @@ export function mountGameScreen(
   window.addEventListener('keydown', onKeyDown)
 
   draw()
-  return () => {
-    unsubscribe()
-    window.removeEventListener('keydown', onKeyDown)
-    window.clearTimeout(messageTimer)
-    sky.destroy()
+  return {
+    setActive(next) {
+      active = next
+      sky.setActive(next)
+    },
+    destroy() {
+      unsubscribe()
+      window.removeEventListener('keydown', onKeyDown)
+      window.clearTimeout(messageTimer)
+      sky.destroy()
+    },
   }
 }
 
@@ -390,6 +453,7 @@ function crowdKiteRun(
     port: HTTPS_PORT,
     payload: 'clean',
     label: `one of ${tick.demand} kites in the crowd, tick ${tick.tick + 1}`,
+    says: 'I want to visit the website!',
   }
   return { kite, flow: kiteToFlow(kite, tick.tick), result }
 }

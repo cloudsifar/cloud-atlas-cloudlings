@@ -9,7 +9,7 @@
   "narration": [
     {
       "id": "welcome",
-      "text": "Welcome to the sky above N. Virginia. The dashed border is your VPC: your own region of the AWS network. The Cloudlings on the ground are the internet, and their kites are requests. Right now there is no way in.",
+      "text": "Welcome to the sky above N. Virginia. The dashed border is your VPC: your own region of the AWS network. The Cloudlings on the ground are the internet, and their kites are requests. Right now there is no way in. Click any Cloudling to hear what it wants.",
       "advanceWhen": {
         "kind": "acknowledged"
       }
@@ -24,7 +24,7 @@
     },
     {
       "id": "place-igw",
-      "text": "First, a gate. Drag the Internet Gateway from the tray into the sky.",
+      "text": "First, a gate. Drag the Internet Gateway from the tray down to the bottom edge of the VPC, in the band marked Low – public. When that part of the sky lights up, let go. Let go anywhere else and it comes back to the tray.",
       "highlight": "palette:igw",
       "advanceWhen": {
         "kind": "scene",
@@ -36,7 +36,7 @@
     },
     {
       "id": "add-route",
-      "text": "A gate is no use without a signpost. Click a public subnet in the low band and add a route: Internet (0.0.0.0/0) to the Internet Gateway. That route is what makes a subnet public.",
+      "text": "A gate is no use without a signpost. Click a public subnet in the low band and add a route: Internet (0.0.0.0/0) to the Internet Gateway. That route is what makes a subnet public. (0.0.0.0/0 means every address. Click the VPC's own range, 10.0.0.0/16, above its border to see how these numbers work.)",
       "highlight": "subnet:public-a",
       "advanceWhen": {
         "kind": "scene",
@@ -50,7 +50,7 @@
     },
     {
       "id": "place-alb",
-      "text": "Now the front door. Drag the Application Load Balancer into the sky. It will settle across both public subnets, one node in each Availability Zone.",
+      "text": "Now the front door. Drag the Application Load Balancer into the low band, over the public subnets. When they light up, let go: it settles across both, one node in each Availability Zone.",
       "highlight": "palette:alb",
       "advanceWhen": {
         "kind": "scene",
@@ -244,6 +244,10 @@
     ]
   },
   "lockedIds": ["app-a", "app-b", "sg-app", "rt-private", "nacl-default"],
+  "removalWarnings": {
+    "alb": "If you remove the load balancer, the Cloudlings will not be able to reach your website! You would have to place it and set it up again.",
+    "igw": "If you remove the Internet Gateway, no kite can get into the VPC, and the route to it goes too. You would have to put both back."
+  },
   "palette": [
     {
       "resource": {
@@ -289,7 +293,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website"
+      "label": "visits the website",
+      "says": "I want to visit the website!"
     },
     {
       "id": "green-2",
@@ -299,7 +304,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website"
+      "label": "visits the website",
+      "says": "I want to visit the website!"
     },
     {
       "id": "green-3",
@@ -309,7 +315,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website"
+      "label": "visits the website",
+      "says": "I want to visit the website!"
     },
     {
       "id": "red-1",
@@ -319,7 +326,8 @@
       "destinationId": "alb",
       "port": 22,
       "payload": "clean",
-      "label": "probes SSH 22"
+      "label": "probes SSH 22",
+      "says": "I want to probe SSH on port 22 and see what bad stuff I can do!"
     }
   ],
   "events": [],

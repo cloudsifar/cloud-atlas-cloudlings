@@ -21,7 +21,7 @@
   },
   "iam-role": {
     "label": "IAM role",
-    "placement": "IAM lives in the high band with the other AWS-managed services. Its threads reach down to whatever wears the role."
+    "placement": "IAM lives in the high band, with the things that belong to your AWS account rather than to any one network. Its threads reach down to whatever wears the role."
   },
   "auto-scaling-group": {
     "label": "Auto Scaling group",

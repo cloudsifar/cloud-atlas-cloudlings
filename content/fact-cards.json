@@ -143,5 +143,21 @@
     "body": "Matching capacity to demand as demand changes: more when it is busy, less when it is quiet, without anyone doing it by hand. It is one of the main reasons to build in the cloud. The alternative is to buy for the busiest day and pay for that capacity on every other day.",
     "simplifications": [],
     "atlasPage": "TODO(Simon)"
+  },
+  "concept-cidr": {
+    "title": "What does /16 mean?",
+    "body": "An address range is written as a starting address and a number after the slash, called CIDR notation. An IPv4 address has 32 bits; the number says how many of them are fixed. The rest are free to vary, so a smaller number means a bigger range, and each step down doubles it.",
+    "points": [
+      "/16: 65,536 addresses. 10.0.0.0/16 runs from 10.0.0.0 to 10.0.255.255. This is the largest range AWS allows for a VPC, and the size of this one.",
+      "/24: 256 addresses, e.g. 10.0.1.0 to 10.0.1.255. Each subnet here is a /24 carved out of the VPC's range. AWS keeps the first four and the last address of every subnet, so 251 are yours.",
+      "/28: 16 addresses. The smallest range AWS allows for a VPC or a subnet.",
+      "/32: exactly one address. Too small for a subnet; used in rules to name a single machine, e.g. 203.0.113.10/32.",
+      "/0: every address. 0.0.0.0/0 is the \"Internet\" or \"Anywhere\" in routes and rules.",
+      "A subnet's range must sit inside its VPC's range, and subnets in one VPC must not overlap."
+    ],
+    "simplifications": [
+      "The game never asks you to work out ranges: the VPC and subnets come ready-made, and IPv6 is left out."
+    ],
+    "atlasPage": "TODO(Simon)"
   }
 }

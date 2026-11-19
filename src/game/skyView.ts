@@ -3,24 +3,25 @@
 // through the store and the callbacks it is given, so it knows nothing about
 // the DOM panels around it.
 
-import { resourcesOfKind, type Resource, type Scene } from '../engine'
+import { resourcesOfKind, type Resource, type ResourceKind, type Scene } from '../engine'
 import type { PaletteEntry } from '../levels'
 import { canStartConnection, connect, moveToSubnet, validSubnetsFor } from './edits'
 import {
+  cidrLabelRect,
   cloudlingPosition,
+  contains,
+  dropZones,
   handlePosition,
   layoutScene,
   resourceAt,
-  snapDrop,
   STAGE,
   subnetAt,
-  validDropZones,
+  zoneAt,
   type Point,
-  type Snap,
 } from './layout'
 import { crowdCuesBetween, crowdRunDuration } from './crowdPlayback'
 import { buildScripts, runDuration, soundsBetween, type KiteScript } from './playback'
-import { drawSky, type DragView } from './render'
+import { drawSky, SPEECH_DURATION, type DragView } from './render'
 import { playSound } from './sound'
 import { prefersReducedMotion } from './storage'
 import type { Store } from './store'
@@ -29,9 +30,13 @@ export type SkyCallbacks = {
   onSelectResource(id: string): void
   onSelectSubnet(id: string): void
   onSelectKite(id: string): void
+  /** The VPC's CIDR caption was clicked. */
+  onSelectVpcCidr(): void
   onSelectNothing(): void
-  /** A cloud was dropped from the palette. */
-  onPlaced(entry: PaletteEntry, snap: Snap): void
+  /** A cloud from the palette was let go over a zone where it belongs. */
+  onPlaced(entry: PaletteEntry, subnetId: string | undefined): void
+  /** A cloud from the palette was let go over the sky, but not where it belongs: it goes back to the tray. */
+  onDropRejected(kind: ResourceKind): void
   /** A placed cloud was dragged outside its band and drifted back. */
   onDriftedBack(resource: Resource): void
   /** A one-line explanation to show the player (e.g. why a connection was refused). */
@@ -43,6 +48,8 @@ export type SkyView = {
   beginPaletteDrag(entry: PaletteEntry, event: PointerEvent): void
   setHighlight(highlight: string | null): void
   setSelectedKite(kiteId: string | null): void
+  /** While inactive (the menu is open over a paused level) nothing is drawn and a flight is paused. */
+  setActive(active: boolean): void
   /** Starts animating the run the store has just begun (call straight after `store.startRun()`). The view calls `store.finishRun()` when the last kite lands. */
   play(): void
   destroy(): void
@@ -55,6 +62,7 @@ type Press =
   | { kind: 'resource'; id: string; at: Point }
   | { kind: 'subnet'; id: string; at: Point }
   | { kind: 'kite'; id: string; at: Point }
+  | { kind: 'cidr'; at: Point }
   | { kind: 'nothing'; at: Point }
 
 export function createSkyView(
@@ -77,6 +85,10 @@ export function createSkyView(
     | { kind: 'connect'; fromId: string }
     | null = null
   let press: Press | null = null
+  /** The Cloudling saying what it wants, and when it started. */
+  let speech: { kiteId: string; startedAt: number } | null = null
+  let active = true
+  let suspendedAt = 0
 
   let scripts: KiteScript[] = []
   let scriptsScene: Scene | null = null
@@ -188,6 +200,10 @@ export function createSkyView(
       highlight,
       selectedKiteId,
       drag,
+      speech:
+        speech && timestamp - speech.startedAt < SPEECH_DURATION
+          ? { kiteId: speech.kiteId, age: timestamp - speech.startedAt }
+          : null,
       reducedMotion,
     })
     frameRequest = requestAnimationFrame(frame)
@@ -212,6 +228,10 @@ export function createSkyView(
     const kiteId = kiteAt(point)
     if (kiteId) {
       press = { kind: 'kite', id: kiteId, at: point }
+      return
+    }
+    if (contains(cidrLabelRect(), point)) {
+      press = { kind: 'cidr', at: point }
       return
     }
     if (editable) {
@@ -239,8 +259,21 @@ export function createSkyView(
     canvas.setPointerCapture(event.pointerId)
   }
 
+  /** A pointing hand over anything that does something when clicked. */
+  function updateCursor(point: Point): void {
+    const state = store.getState()
+    const layout = layoutScene(state.scene)
+    const clickable =
+      kiteAt(point) !== undefined ||
+      contains(cidrLabelRect(), point) ||
+      resourceAt(state.scene, layout, point) !== undefined ||
+      subnetAt(state.scene, layout, point) !== undefined
+    canvas.style.cursor = drag ? 'grabbing' : clickable ? 'pointer' : 'default'
+  }
+
   function onPointerMove(event: PointerEvent): void {
     const point = toStage(event)
+    if (!drag && !press) updateCursor(point)
     if (drag?.kind === 'connect') {
       drag = { ...drag, to: point }
       return
@@ -269,7 +302,7 @@ export function createSkyView(
           kind: 'place',
           resourceKind: resource.kind,
           point,
-          zones: validDropZones(layout, resource.kind, validSubnetsFor(state.scene, resource.kind)),
+          zones: dropZones(layout, resource.kind, validSubnetsFor(state.scene, resource.kind)),
         }
         press = null
       }
@@ -295,21 +328,24 @@ export function createSkyView(
     if (action.kind === 'palette') {
       if (!overSky) return // let go over the tray: nothing placed
       const kind = action.entry.resource.kind
-      callbacks.onPlaced(
-        action.entry,
-        snapDrop(layout, kind, point, validSubnetsFor(state.scene, kind)),
-      )
+      // Only a drop over a lit zone places the cloud (ADR 0007). Anywhere else, it goes back.
+      const zone = zoneAt(dropZones(layout, kind, validSubnetsFor(state.scene, kind)), point)
+      if (zone) callbacks.onPlaced(action.entry, zone.subnetId)
+      else callbacks.onDropRejected(kind)
       return
     }
     const resource = state.scene.resources.find((candidate) => candidate.id === action.resourceId)
     if (!resource) return
-    const snap = snapDrop(layout, resource.kind, point, validSubnetsFor(state.scene, resource.kind))
-    if (snap.drifted) {
+    const zone = zoneAt(
+      dropZones(layout, resource.kind, validSubnetsFor(state.scene, resource.kind)),
+      point,
+    )
+    if (!zone) {
       // Dropped outside its band: the cloud stays where it belongs, and says why.
       playSound('drift-back')
       callbacks.onDriftedBack(resource)
-    } else if (snap.subnetId) {
-      const subnetId = snap.subnetId
+    } else if (zone.subnetId) {
+      const subnetId = zone.subnetId
       store.applyEdit((scene) => moveToSubnet(scene, resource.id, subnetId))
     }
   }
@@ -331,7 +367,13 @@ export function createSkyView(
         callbacks.onSelectSubnet(pressed.id)
         break
       case 'kite':
+        // The Cloudling says what it wants; after a flight its kite's journey opens too.
+        speech = { kiteId: pressed.id, startedAt: now }
+        playSound('click')
         callbacks.onSelectKite(pressed.id)
+        break
+      case 'cidr':
+        callbacks.onSelectVpcCidr()
         break
       case 'nothing':
         callbacks.onSelectNothing()
@@ -374,7 +416,7 @@ export function createSkyView(
         kind: 'place',
         resourceKind: kind,
         point: toStage(event),
-        zones: validDropZones(layoutScene(state.scene), kind, validSubnetsFor(state.scene, kind)),
+        zones: dropZones(layoutScene(state.scene), kind, validSubnetsFor(state.scene, kind)),
       }
     },
     setHighlight(next) {
@@ -382,6 +424,23 @@ export function createSkyView(
     },
     setSelectedKite(kiteId) {
       selectedKiteId = kiteId
+    },
+    setActive(next) {
+      if (next === active) return
+      active = next
+      if (!active) {
+        cancelAnimationFrame(frameRequest)
+        suspendedAt = performance.now()
+        drag = null
+        dragAction = null
+        press = null
+        return
+      }
+      // Carry on where the player left off: a flight resumes rather than jumping ahead.
+      const paused = performance.now() - suspendedAt
+      runStartedAt += paused
+      if (speech) speech = { ...speech, startedAt: speech.startedAt + paused }
+      frameRequest = requestAnimationFrame(frame)
     },
     play() {
       runStartedAt = now

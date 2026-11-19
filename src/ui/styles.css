@@ -164,6 +164,23 @@ button.link {
 
 /* ---- in-game layout ------------------------------------------------------ */
 
+/* The game and the menu each fill the stage; the menu can sit over a paused level. */
+.game-layer,
+.menu-layer {
+  position: absolute;
+  inset: 0;
+}
+.game-layer[hidden],
+.menu-layer[hidden] {
+  display: none;
+}
+.menu .resume {
+  margin-bottom: 14px;
+}
+.menu .resume .note {
+  margin: 4px 0 0;
+}
+
 canvas.sky {
   position: absolute;
   inset: 0;
@@ -379,6 +396,39 @@ button.remove {
 .card-footer {
   border-top: 1px dashed var(--rule);
   padding-top: 8px;
+}
+/* A warning the player confirms before removing a cloud the level depends on. */
+.card-footer.removal-warning {
+  background: #fdf1e2;
+  border: 1.5px solid var(--point);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-top: 6px;
+}
+.card-footer.removal-warning p {
+  margin: 0 0 8px;
+}
+
+/* Subnet cards carry the tint of their subnet in the sky (render.ts, SUBNET_TINT). */
+.card-header.subnet-public,
+.card-header.subnet-private {
+  margin: -10px -12px 6px;
+  padding: 10px 12px 6px;
+  border-radius: 8px 8px 0 0;
+}
+.card-header.subnet-public {
+  background: rgba(206, 238, 212, 0.9);
+}
+.card-header.subnet-private {
+  background: rgba(204, 199, 232, 0.85);
+}
+
+.fact-points {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+.fact-points li {
+  margin-bottom: 4px;
 }
 
 .rules li {

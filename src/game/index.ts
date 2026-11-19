@@ -10,7 +10,7 @@ export {
   STAGE,
   BAND_OF,
   GENUS_OF,
-  type Snap,
+  type DropZone,
   type Rect,
   type Point,
 } from './layout'

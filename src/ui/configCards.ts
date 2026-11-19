@@ -4,6 +4,7 @@
 // with one of the pure edits from the game layer.
 
 import {
+  isPublicSubnet,
   PORT_OPTIONS,
   resourcesOfKind,
   type PolicyStatement,
@@ -41,8 +42,12 @@ export type CardActions = {
   edit(change: (scene: Scene) => Scene): void
   close(): void
   openFactCard(id: string): void
-  /** Sends a cloud back to the palette tray. */
+  /** Asks to send a cloud back to the palette tray (the screen may ask the player to confirm first). */
   remove(resourceId: string): void
+  /** The cloud whose removal is waiting for the player to confirm a warning, if any. */
+  pendingRemoval: string | null
+  confirmRemove(resourceId: string): void
+  cancelRemove(): void
 }
 
 const NAMED_RANGES: Option<string>[] = [
@@ -312,16 +317,15 @@ function subnetCard(state: GameState, subnetId: string, actions: CardActions): H
     ),
   )
 
-  return [
-    cardHeader(
-      subnet.name,
-      `Availability Zone ${subnet.availabilityZone} · ${subnet.cidr}`,
-      'route-table',
-      actions,
-    ),
-    routes,
-    nacl,
-  ]
+  // The header carries the same tint as the subnet in the sky: public or private, by its routes.
+  const header = cardHeader(
+    subnet.name,
+    `${isPublicSubnet(scene, subnet) ? 'Public' : 'Private'} subnet · Availability Zone ${subnet.availabilityZone} · ${subnet.cidr}`,
+    'route-table',
+    actions,
+  )
+  header.classList.add(isPublicSubnet(scene, subnet) ? 'subnet-public' : 'subnet-private')
+  return [header, routes, nacl]
 }
 
 function cardHeader(
@@ -689,12 +693,35 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
   const fromPalette = level.palette.some((entry) => entry.resource.id === resource.id)
   const removable = fromPalette || (level.removableIds ?? []).includes(resource.id)
   if (removable && !locked) {
+    const warning = level.removalWarnings?.[resource.id]
     parts.push(
-      h(
-        'footer',
-        { class: 'card-footer' },
-        button('Remove from the sky', () => actions.remove(resource.id), 'card-remove', 'quiet'),
-      ),
+      warning && actions.pendingRemoval === resource.id
+        ? h(
+            'footer',
+            { class: 'card-footer removal-warning', attrs: { role: 'alert' } },
+            h('p', { textContent: warning }),
+            h(
+              'div',
+              { class: 'button-row' },
+              button('Keep it', actions.cancelRemove, 'card-remove-keep', 'primary'),
+              button(
+                'Remove anyway',
+                () => actions.confirmRemove(resource.id),
+                'card-remove-confirm',
+                'quiet',
+              ),
+            ),
+          )
+        : h(
+            'footer',
+            { class: 'card-footer' },
+            button(
+              'Remove from the sky',
+              () => actions.remove(resource.id),
+              'card-remove',
+              'quiet',
+            ),
+          ),
     )
   }
   return parts

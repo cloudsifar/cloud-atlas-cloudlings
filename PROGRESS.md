@@ -17,6 +17,20 @@ Running log. Newest state first; updated at the end of every milestone.
 
 ## What was verified, and how
 
+- **The first playtest changes** (ADR 0007, 19 November 2026), in the cloud sandbox:
+  202 tests pass with `npm run offline:test` (15 new: drop zones, narration rewind,
+  `says` and `removalWarnings` validation), and the type-check is clean. ESLint,
+  Prettier and the project `tsc` were run against the installed packages (see below).
+  In headless Chromium on the esbuild bundle: Level 1 played with every new behaviour
+  (speech bubbles; a mouse click on a tray card does not place it; a drop over the mid
+  band sends the gateway back to the tray with its explanation; the low band lights up
+  and takes it; subnet tint and card header turn public when the route is added; the
+  removal warning appears, "Keep it" keeps the load balancer, "Remove anyway" removes it
+  and the narrator returns to "place the load balancer"; the CIDR card; Menu then Resume
+  keeps the scene and the narrator step). Levels 2–5 replayed to three stars. A flight
+  paused for five seconds in the menu carried on from where it was. Enter on a tray card
+  still places the cloud. No console errors. **Not yet run on these changes:** Vitest
+  and the Vite build on Windows (`npm test`, `npm run build`).
 - **The real toolchain** (Windows, Node 26.13.1, npm 11.20.0, from the committed
   lockfile, 18 November 2026). Each step's output was read, not just its exit code, and
   a deliberately failing command confirmed that failures are reported:
@@ -49,14 +63,15 @@ Running log. Newest state first; updated at the end of every milestone.
 
 ## Not verified — do these first
 
-1. **A person playing it.** Everything so far was played by a script in headless
-   Chromium. Not yet seen: `npm run dev`, and `npm run preview` of the Vite build, in
-   a real browser window.
+1. **A person playing it again.** Simon played Levels 1–5 in a real browser on
+   18–19 November; his changes are in ADR 0007. They need his eye: how dragging feels
+   now, the sound levels, the subnet tints, the speech bubbles, Resume.
 2. Firefox, Safari and Edge. Only Chromium was tried.
 3. Window sizes other than 1280×720, tablets, and the phone path.
 4. Sound. The synthesised placeholders exist but headless testing cannot hear them.
-   Level 5 added four (`crowd-cheer`, `crowd-groan`, `connected`, `alarm-bell`) and a
-   volume per cue; the blending has only been checked in code.
+   Simon heard them in the first playtest: the click and card sounds were too quiet and
+   the level-complete jingle too loud, now adjusted (ADR 0007). Level 5's four crowd
+   cues and their blending have only been checked in code.
 5. Frame rate with a crowd of 40 on a modest laptop or tablet. Chromium on the build
    machine was smooth; nothing was measured.
 6. The AWS documentation links cited in the test files. Five behaviours were re-checked
@@ -229,3 +244,11 @@ None found so far. Two places where the brief's wording was made more exact:
   now reports nothing: GitHub withdrew the picomatch advisory on 18 November 2026, so
   nothing had to be accepted after all (ADR 0006). The Vite build was played through
   Levels 1–5 in headless Chromium.
+- **Session 3: the first playtest.** Simon played Levels 1–5 and asked for changes,
+  recorded in ADR 0007: a cloud is placed only if let go over the zone where it
+  belongs, which lights up under the pointer (anywhere else it returns to the tray); the
+  narrator goes back when a completed step is undone; Level 1 warns before the load
+  balancer or gateway is removed; Cloudlings speak in bubbles instead of captions; the
+  high band is "High – account"; public and private subnets are tinted; the VPC's range
+  opens a CIDR card; the menu can be resumed; three sound levels changed. Level 3's
+  narration now says where the bucket and role go.

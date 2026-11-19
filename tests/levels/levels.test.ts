@@ -146,6 +146,19 @@ describe('validateLevel', () => {
     })
   })
 
+  it('rejects a Cloudling with nothing to say', () => {
+    const errors = broken((level) => {
+      const kites = level.population as { says: string }[]
+      if (kites[0]) kites[0].says = ''
+    })
+    expect(errors[0]).toMatch('population[0].says')
+  })
+
+  it('rejects a removal warning for a cloud the player cannot remove', () => {
+    const errors = broken((level) => (level.removalWarnings = { 'app-a': 'Careful!' }))
+    expect(errors[0]).toMatch('removalWarnings.app-a')
+  })
+
   it('rejects an objective with no hint and an unknown fact card', () => {
     expect(broken((level) => (level.hints = [])).some((error) => error.startsWith('hints:'))).toBe(
       true,

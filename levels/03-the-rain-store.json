@@ -17,7 +17,7 @@
     },
     {
       "id": "place-bucket",
-      "text": "Drag the S3 bucket into the sky. S3 stands outside your VPC and spans every altitude.",
+      "text": "Drag the S3 bucket to the tall column on the right of the sky, outside the VPC. S3 stands outside your VPC and spans every altitude. When the column lights up, let go.",
       "highlight": "palette:photos",
       "advanceWhen": {
         "kind": "scene",
@@ -44,7 +44,7 @@
     },
     {
       "id": "place-role",
-      "text": "Drag the IAM role into the sky. It lives in the high band, with the services AWS manages for you.",
+      "text": "Drag the IAM role up into the band marked High – account, above the VPC. Roles belong to your AWS account, not to any one network. When the band lights up, let go.",
       "highlight": "palette:app-role",
       "advanceWhen": {
         "kind": "scene",
@@ -312,6 +312,7 @@
       "port": 443,
       "payload": "clean",
       "label": "uploads a photo",
+      "says": "I want to upload a photo!",
       "backendCall": {
         "destinationId": "photos",
         "action": "s3:Write"
@@ -326,6 +327,7 @@
       "port": 443,
       "payload": "clean",
       "label": "uploads a photo",
+      "says": "I want to upload a photo!",
       "backendCall": {
         "destinationId": "photos",
         "action": "s3:Write"
@@ -340,6 +342,7 @@
       "port": 443,
       "payload": "clean",
       "label": "uploads a photo",
+      "says": "I want to upload a photo!",
       "backendCall": {
         "destinationId": "photos",
         "action": "s3:Write"
@@ -354,7 +357,8 @@
       "port": 443,
       "payload": "clean",
       "action": "s3:Read",
-      "label": "tries to read the bucket"
+      "label": "tries to read the bucket",
+      "says": "I want to read the photos in your bucket!"
     }
   ],
   "events": [],

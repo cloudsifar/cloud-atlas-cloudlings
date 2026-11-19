@@ -13,7 +13,14 @@ import factCards from '../../content/fact-cards.json'
 import type { Level } from './schema'
 import { validateLevel } from './validate'
 
-export type FactCard = { title: string; body: string; simplifications: string[]; atlasPage: string }
+export type FactCard = {
+  title: string
+  body: string
+  /** Optional short points shown as a list under the body, e.g. the CIDR sizes. */
+  points?: string[]
+  simplifications: string[]
+  atlasPage: string
+}
 
 export const FACT_CARDS: Record<string, FactCard> = factCards
 

@@ -253,7 +253,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website"
+      "label": "visits the website",
+      "says": "I want to visit the website!"
     },
     {
       "id": "green-2",
@@ -263,7 +264,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website"
+      "label": "visits the website",
+      "says": "I want to visit the website!"
     },
     {
       "id": "green-3",
@@ -273,7 +275,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website"
+      "label": "visits the website",
+      "says": "I want to visit the website!"
     },
     {
       "id": "red-1",
@@ -283,7 +286,8 @@
       "destinationId": "app-a",
       "port": 80,
       "payload": "clean",
-      "label": "aims straight at an instance"
+      "label": "aims straight at an instance",
+      "says": "I want to skip the load balancer and get straight at an instance!"
     }
   ],
   "events": [],

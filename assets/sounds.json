@@ -300,8 +300,8 @@
           "from": 3000,
           "to": 5000,
           "start": 0,
-          "duration": 0.08,
-          "gain": 0.1
+          "duration": 0.1,
+          "gain": 0.24
         }
       ]
     },
@@ -340,7 +340,7 @@
           "to": 523,
           "start": 0,
           "duration": 0.14,
-          "gain": 0.35
+          "gain": 0.2
         },
         {
           "wave": "triangle",
@@ -348,7 +348,7 @@
           "to": 659,
           "start": 0.15,
           "duration": 0.14,
-          "gain": 0.35
+          "gain": 0.2
         },
         {
           "wave": "triangle",
@@ -356,7 +356,7 @@
           "to": 784,
           "start": 0.3,
           "duration": 0.3,
-          "gain": 0.35
+          "gain": 0.2
         }
       ]
     },
@@ -364,12 +364,12 @@
       "file": null,
       "placeholder": [
         {
-          "wave": "square",
-          "from": 900,
-          "to": 900,
+          "wave": "triangle",
+          "from": 1100,
+          "to": 880,
           "start": 0,
-          "duration": 0.02,
-          "gain": 0.08
+          "duration": 0.05,
+          "gain": 0.22
         }
       ]
     },

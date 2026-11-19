@@ -23,11 +23,15 @@ import { CHECK_LABELS } from './labels'
 import {
   BAND_OF,
   centreOf,
+  cidrLabelRect,
+  cloudlingPosition,
   GENUS_OF,
   handlePosition,
   SKY,
   spriteSize,
   STAGE,
+  zoneAt,
+  type DropZone,
   type Point,
   type Rect,
   type SceneLayout,
@@ -59,6 +63,19 @@ const PAPER = '#f6efdc'
 /** Cloud blues by altitude: palest low, deepest high. The shade carries no other meaning. */
 const BAND_TINT = { low: '#d6e8f6', mid: '#aecfeb', high: '#86b4dc' }
 const GREY_TINT = '#c4c4c8'
+
+/** Subnet cells: an open meadow green for public, a shaded lavender for private. Never gold. */
+export const SUBNET_TINT = {
+  public: 'rgba(206, 238, 212, 0.55)',
+  private: 'rgba(204, 199, 232, 0.5)',
+}
+
+/** The band names lettered up the left margin of the sky. */
+export const BAND_LABELS = {
+  high: 'High – account',
+  mid: 'Mid – private',
+  low: 'Low – public',
+}
 const RED_TINT = '#eba5a0'
 
 type RegionTheme = {
@@ -160,8 +177,11 @@ const REGION_THEMES: Record<RegionCode, RegionTheme> = {
 }
 
 export type DragView =
-  | { kind: 'place'; resourceKind: ResourceKind; point: Point; zones: Rect[] }
+  | { kind: 'place'; resourceKind: ResourceKind; point: Point; zones: DropZone[] }
   | { kind: 'connect'; from: Point; to: Point }
+
+/** How long a Cloudling's speech bubble stays up after it is clicked, in milliseconds. */
+export const SPEECH_DURATION = 4200
 
 export type SkyViewModel = {
   level: Level
@@ -184,6 +204,8 @@ export type SkyViewModel = {
   highlight: string | null
   selectedKiteId: string | null
   drag: DragView | null
+  /** The Cloudling saying what it wants, and for how long it has been saying it. */
+  speech: { kiteId: string; age: number } | null
   reducedMotion: boolean
 }
 
@@ -276,16 +298,20 @@ function drawContainers(context: CanvasRenderingContext2D, model: SkyViewModel):
   const vpc = layout.vpc
 
   // Band labels at the edge of the sky, in plain words, lettered up the margin.
+  // Each one is shrunk if need be so it never runs past its own band.
   const bandLabel = (text: string, top: number, bottom: number) => {
     context.save()
+    context.font = `12px ${CAPTION_FONT}`
+    const room = bottom - top - 8
+    const size = Math.max(9, Math.min(12, (12 * room) / context.measureText(text).width))
     context.translate(SKY.left + 14, (top + bottom) / 2)
     context.rotate(-Math.PI / 2)
-    caption(context, text, 0, 0, 12, 'center', '#4c5878')
+    caption(context, text, 0, 0, size, 'center', '#4c5878')
     context.restore()
   }
-  bandLabel('High – managed services', SKY.high.top, SKY.high.bottom + 6)
-  bandLabel('Mid – private', SKY.mid.top, SKY.mid.bottom)
-  bandLabel('Low – public', SKY.low.top, SKY.low.bottom)
+  bandLabel(BAND_LABELS.high, SKY.high.top, SKY.high.bottom)
+  bandLabel(BAND_LABELS.mid, SKY.mid.top, SKY.mid.bottom)
+  bandLabel(BAND_LABELS.low, SKY.low.top, SKY.low.bottom)
   caption(
     context,
     'Ground – the internet',
@@ -306,11 +332,33 @@ function drawContainers(context: CanvasRenderingContext2D, model: SkyViewModel):
   context.setLineDash([])
   context.lineWidth = 1
   context.beginPath()
-  context.moveTo(vpc.x + vpc.width - 96, vpc.y - 12)
-  context.lineTo(vpc.x + vpc.width - 60, vpc.y)
+  context.moveTo(vpc.x + vpc.width - 74, vpc.y - 11)
+  context.lineTo(vpc.x + vpc.width - 48, vpc.y)
   context.stroke()
   context.restore()
-  caption(context, `VPC ${scene.vpc.cidr}`, vpc.x + vpc.width - 100, vpc.y - 14, 13, 'right')
+  // The address range can be clicked to learn what the /16 means: dotted underline and an "i".
+  const cidrText = `VPC ${scene.vpc.cidr}`
+  const cidrRect = cidrLabelRect()
+  const cidrRight = cidrRect.x + cidrRect.width - 18
+  caption(context, cidrText, cidrRight, vpc.y - 14, 13, 'right')
+  context.save()
+  context.font = `13px ${CAPTION_FONT}`
+  const cidrWidth = context.measureText(cidrText).width
+  context.strokeStyle = 'rgba(61, 58, 72, 0.6)'
+  context.lineWidth = 1
+  context.setLineDash([2, 2])
+  context.beginPath()
+  context.moveTo(cidrRight - cidrWidth, vpc.y - 5)
+  context.lineTo(cidrRight, vpc.y - 5)
+  context.stroke()
+  context.setLineDash([])
+  context.beginPath()
+  context.arc(cidrRight + 10, vpc.y - 14, 6.5, 0, Math.PI * 2)
+  context.fillStyle = 'rgba(246, 239, 220, 0.95)'
+  context.fill()
+  context.stroke()
+  context.restore()
+  caption(context, 'i', cidrRight + 10, vpc.y - 14, 11, 'center')
 
   // Availability Zones: two columns separated by a faint dotted line.
   context.save()
@@ -327,8 +375,11 @@ function drawContainers(context: CanvasRenderingContext2D, model: SkyViewModel):
   for (const subnet of scene.subnets) {
     const rect = layout.subnets[subnet.id]
     if (!rect) continue
+    // Public and private subnets are tinted differently. "Public" follows the route
+    // table, so a low-band subnet takes the public tint the moment its route is added.
+    const isPublic = isPublicSubnet(scene, subnet)
     context.save()
-    context.fillStyle = 'rgba(255, 255, 255, 0.2)'
+    context.fillStyle = isPublic ? SUBNET_TINT.public : SUBNET_TINT.private
     roundedRectPath(context, rect, 9)
     context.fill()
     // The NACL: a ribbon on the boundary of the subnet cell it guards.
@@ -341,7 +392,6 @@ function drawContainers(context: CanvasRenderingContext2D, model: SkyViewModel):
     caption(context, subnet.name, rect.x + 8, rect.y + 10, 11, 'left', '#57536a')
     if (subnet.band === 'low') {
       // "Public" is a fact about routing, so the label follows the route table.
-      const isPublic = isPublicSubnet(scene, subnet)
       caption(
         context,
         isPublic ? '✓ public: routes to the Internet Gateway' : 'not public yet: no internet route',
@@ -760,8 +810,6 @@ function drawKiteAndCloudling(
     costume,
     model.time,
   )
-  caption(context, kite.label, feet.x, feet.y + 14, 11, 'center', hostile ? '#7c1d1d' : '#2f4a2b')
-
   const rest = script?.rest ?? { x: feet.x + 22, y: feet.y - 92 }
   if (!frame || !script || frame.phase === 'waiting') {
     drawString(context, hand, rest, 0, model.time)
@@ -971,10 +1019,6 @@ function drawCrowd(
           : 'cheer'
         : 'droop'
     const hand = drawCloudling(context, feet.x, feet.y, false, mood, costume, model.time)
-    if (settled && member < model.level.population.length) {
-      const kite = model.level.population[member]
-      if (kite) caption(context, kite.label, feet.x, feet.y + 14, 11, 'center', '#2f4a2b')
-    }
 
     const path = paths[fate]
     const end = path[path.length - 1] ?? rest
@@ -1119,19 +1163,96 @@ function drawWeatherStation(
   if (ringing) caption(context, 'ding!', x + 26, y - 74, 11, 'left', '#7a5a12')
 }
 
+/** Splits text into lines no wider than `maxWidth` at the current font. */
+function wrapText(context: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const lines: string[] = []
+  let line = ''
+  for (const word of text.split(' ')) {
+    const attempt = line ? `${line} ${word}` : word
+    if (line && context.measureText(attempt).width > maxWidth) {
+      lines.push(line)
+      line = word
+    } else line = attempt
+  }
+  if (line) lines.push(line)
+  return lines
+}
+
+/**
+ * A clicked Cloudling says what it wants in a speech bubble above its head. It
+ * replaces the caption that used to sit under every Cloudling.
+ */
+function drawSpeech(
+  context: CanvasRenderingContext2D,
+  model: SkyViewModel,
+  crowdFrame: CrowdFrame | null,
+): void {
+  const speech = model.speech
+  if (!speech) return
+  const index = model.level.population.findIndex((kite) => kite.id === speech.kiteId)
+  const kite = model.level.population[index]
+  if (!kite) return
+  // In a crowd level the regulars stand in the crowd once it has gathered.
+  const feet =
+    crowdFrame && model.level.crowd
+      ? (crowdSpots(model.level.population)[index] ?? cloudlingPosition(kite.groundPosition))
+      : cloudlingPosition(kite.groundPosition)
+  const hostile = kite.kind === 'hostile'
+
+  context.save()
+  context.font = `13px ${CAPTION_FONT}`
+  const lines = wrapText(context, kite.says, 190)
+  const width = Math.max(...lines.map((line) => context.measureText(line).width)) + 22
+  const height = lines.length * 17 + 14
+  const tipY = feet.y - 72
+  // Up and to the left of the head, so the kite (held to the right) stays in view.
+  const x = Math.min(Math.max(feet.x + 8 - width, SKY.left + 6), SKY.right - width - 6)
+  const y = tipY - 12 - height
+  const fadeIn = model.reducedMotion ? 1 : Math.min(1, speech.age / 140)
+  const fadeOut = Math.min(1, (SPEECH_DURATION - speech.age) / 400)
+  context.globalAlpha = Math.max(0, Math.min(fadeIn, fadeOut))
+
+  context.fillStyle = 'rgba(253, 250, 240, 0.97)'
+  context.strokeStyle = hostile ? '#7c1d1d' : PENCIL
+  context.lineWidth = 1.6
+  roundedRectPath(context, { x, y, width, height }, 10)
+  context.fill()
+  context.stroke()
+  // The tail points down at the speaker's head.
+  const tailX = Math.min(Math.max(feet.x, x + 16), x + width - 16)
+  context.beginPath()
+  context.moveTo(tailX - 7, y + height - 1)
+  context.lineTo(feet.x, tipY)
+  context.lineTo(tailX + 7, y + height - 1)
+  context.closePath()
+  context.fill()
+  context.beginPath()
+  context.moveTo(tailX - 7, y + height)
+  context.lineTo(feet.x, tipY)
+  context.lineTo(tailX + 7, y + height)
+  context.stroke()
+
+  context.fillStyle = hostile ? '#7c1d1d' : '#2f3b2b'
+  context.textAlign = 'left'
+  context.textBaseline = 'middle'
+  lines.forEach((line, row) => context.fillText(line, x + 11, y + 15 + row * 17))
+  context.restore()
+}
+
 function drawDrag(context: CanvasRenderingContext2D, model: SkyViewModel): void {
   const drag = model.drag
   if (!drag) return
   context.save()
   if (drag.kind === 'place') {
-    // Softly highlight where this cloud may go.
-    const pulse = model.reducedMotion ? 0.5 : 0.5 + Math.sin(model.time / 220) * 0.15
-    for (const zone of drag.zones) {
-      context.fillStyle = `rgba(255, 244, 190, ${0.35 + pulse * 0.25})`
-      context.strokeStyle = '#b98a1e'
-      context.lineWidth = 2
+    // Only the zone under the pointer lights up: the player has to find where the cloud belongs.
+    const hovered = zoneAt(drag.zones, drag.point)
+    if (hovered) {
+      const pulse = model.reducedMotion ? 0.5 : 0.5 + Math.sin(model.time / 220) * 0.15
+      context.fillStyle = `rgba(255, 255, 255, ${0.35 + pulse * 0.25})`
+      context.strokeStyle = '#3f6fa8'
+      context.lineWidth = 2.5
       context.setLineDash([7, 5])
-      roundedRectPath(context, zone, 12)
+      roundedRectPath(context, hovered.rect, 12)
       context.fill()
       context.stroke()
     }
@@ -1206,6 +1327,7 @@ export function drawSky(context: CanvasRenderingContext2D, model: SkyViewModel):
       )
     }
   }
+  drawSpeech(context, model, crowdFrame)
   drawDrag(context, model)
 
   // Lightning belongs to failure: a brief flash when a breach happens.

@@ -178,6 +178,14 @@ export const contains = (rect: Rect, point: Point): boolean =>
   point.y >= rect.y &&
   point.y <= rect.y + rect.height
 
+/**
+ * The VPC's address-range caption above its top border ("VPC 10.0.0.0/16" and its
+ * "i"). Clicking it opens the CIDR card.
+ */
+export function cidrLabelRect(): Rect {
+  return { x: SKY.vpc.x + SKY.vpc.width - 250, y: SKY.vpc.y - 26, width: 168, height: 22 }
+}
+
 /** Where a Cloudling stands, for ground positions 0 (left) to 6 (right). */
 export function cloudlingPosition(groundPosition: number): Point {
   return { x: 290 + groundPosition * 112, y: SKY.groundY }
@@ -272,87 +280,71 @@ export function subnetAt(scene: Scene, layout: SceneLayout, point: Point): Subne
   })
 }
 
-export type Snap = {
-  /** The subnet the cloud lands in, for subnet-bound kinds. */
-  subnetId?: string
-  /** True if the player dropped it outside its band and it drifted to a valid place. */
-  drifted: boolean
-}
-
-/** The vertical extent of each band, for deciding whether a drop was "in the right band". */
-function bandExtent(band: SkyBand): { top: number; bottom: number } {
-  switch (band) {
-    case 'low':
-      return { top: SKY.low.top - 10, bottom: SKY.vpc.y + SKY.vpc.height + 40 }
-    case 'mid':
-      return SKY.mid
-    case 'high':
-      return SKY.high
-    case 'vertical':
-      return { top: SKY.high.top, bottom: SKY.low.bottom }
-  }
-}
-
 /**
- * Every cloud snaps to its band. Given where the player let go, work out where
- * the cloud belongs: the nearest valid subnet for subnet-bound kinds, and whether
- * the drop was outside the cloud's own band.
+ * A place a cloud may be dropped: a valid subnet cell for subnet-bound kinds, or the
+ * cloud's band of sky for the rest. While a cloud is dragged, the zone under the
+ * pointer lights up; letting go anywhere else is not a placement.
  */
-export function snapDrop(
-  layout: SceneLayout,
-  kind: ResourceKind,
-  point: Point,
-  validSubnets: Subnet[],
-): Snap {
-  const extent = bandExtent(BAND_OF[kind])
-  const insideSky = point.x >= SKY.left && point.x <= SKY.right
-  const inBand = insideSky && point.y >= extent.top && point.y <= extent.bottom
-  if (validSubnets.length === 0) return { drifted: !inBand }
-
-  const nearest = [...validSubnets].sort((first, second) => {
-    const distance = (subnet: Subnet) => {
-      const rect = layout.subnets[subnet.id]
-      return rect ? Math.abs(centreOf(rect).x - point.x) : Infinity
-    }
-    return distance(first) - distance(second)
-  })[0]
-  const rect = nearest ? layout.subnets[nearest.id] : undefined
-  return { subnetId: nearest?.id, drifted: !(rect && contains(rect, point)) && !inBand }
+export type DropZone = {
+  rect: Rect
+  /** The subnet a cloud dropped here lands in, for subnet-bound kinds. */
+  subnetId?: string
 }
 
-/** The rectangles to highlight as valid places while a cloud of this kind is being dragged. */
-export function validDropZones(
+/** Every zone a cloud of this kind may be dropped in. */
+export function dropZones(
   layout: SceneLayout,
   kind: ResourceKind,
   validSubnets: Subnet[],
-): Rect[] {
+): DropZone[] {
   if (validSubnets.length > 0) {
-    return validSubnets
-      .map((subnet) => layout.subnets[subnet.id])
-      .filter((rect): rect is Rect => rect !== undefined)
+    return validSubnets.flatMap((subnet) => {
+      const rect = layout.subnets[subnet.id]
+      return rect ? [{ rect, subnetId: subnet.id }] : []
+    })
   }
   switch (BAND_OF[kind]) {
     case 'low':
+      // The low band inside the VPC, down to and including its bottom border.
       return [
         {
-          x: SKY.vpc.x + 12,
-          y: SKY.low.top,
-          width: SKY.vpc.width - 24,
-          height: SKY.low.bottom - SKY.low.top + 34,
+          rect: {
+            x: SKY.vpc.x + 12,
+            y: SKY.low.top,
+            width: SKY.vpc.width - 24,
+            height: SKY.low.bottom - SKY.low.top + 34,
+          },
         },
       ]
     case 'high':
       return [
         {
-          x: SKY.vpc.x,
-          y: SKY.high.top,
-          width: SKY.vpc.width,
-          height: SKY.high.bottom - SKY.high.top,
+          rect: {
+            x: SKY.vpc.x,
+            y: SKY.high.top,
+            width: SKY.vpc.width,
+            height: SKY.high.bottom - SKY.high.top,
+          },
+        },
+      ]
+    case 'mid':
+      // The mid band inside the VPC: an Auto Scaling group spans both private subnets.
+      return [
+        {
+          rect: {
+            x: SKY.vpc.x + 12,
+            y: SKY.mid.top,
+            width: SKY.vpc.width - 24,
+            height: SKY.mid.bottom - SKY.mid.top,
+          },
         },
       ]
     case 'vertical':
-      return [SKY.s3Column]
-    case 'mid':
-      return []
+      return [{ rect: SKY.s3Column }]
   }
+}
+
+/** The zone under the pointer, if any. Only a drop inside a zone places a cloud. */
+export function zoneAt(zones: DropZone[], point: Point): DropZone | undefined {
+  return zones.find((zone) => contains(zone.rect, point))
 }

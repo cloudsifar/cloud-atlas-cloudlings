@@ -3,7 +3,7 @@
 import './ui/styles.css'
 import { STAGE, unlockAudio } from './game'
 import { LEVELS, type Level } from './levels'
-import { mountGameScreen } from './ui/gameScreen'
+import { mountGameScreen, type GameScreen } from './ui/gameScreen'
 import { h } from './ui/dom'
 import { mountMenu, mountStartScreen } from './ui/screens'
 
@@ -21,27 +21,62 @@ function fitStage(): void {
 window.addEventListener('resize', fitStage)
 fitStage()
 
-let tearDownGame: (() => void) | null = null
+// The game and the menu each have a layer. Opening the menu from a level hides the
+// level and pauses it rather than throwing it away, so the player can change a setting
+// and carry on where they were.
+const gameLayer = h('div', { class: 'game-layer' })
+const menuLayer = h('div', { class: 'menu-layer' })
+let game: { level: Level; screen: GameScreen } | null = null
 
-function leaveGame(): void {
-  tearDownGame?.()
-  tearDownGame = null
+function useLayers(): void {
+  if (gameLayer.parentElement !== stage) stage.replaceChildren(gameLayer, menuLayer)
+}
+
+function endGame(): void {
+  game?.screen.destroy()
+  game = null
+  gameLayer.replaceChildren()
 }
 
 function showMenu(): void {
-  leaveGame()
+  useLayers()
+  game?.screen.setActive(false)
+  gameLayer.hidden = true
+  menuLayer.hidden = false
   stage.className = 'stage on-menu'
-  mountMenu(stage, { play: showLevel })
+  const paused = game
+  mountMenu(menuLayer, {
+    play: showLevel,
+    resume: paused
+      ? { label: `Resume Level ${paused.level.id} · ${paused.level.title}`, run: resumeGame }
+      : null,
+  })
+}
+
+function resumeGame(): void {
+  if (!game) return
+  menuLayer.hidden = true
+  menuLayer.replaceChildren()
+  gameLayer.hidden = false
+  stage.className = 'stage in-game'
+  game.screen.setActive(true)
 }
 
 function showLevel(level: Level, guidedRun: boolean): void {
-  leaveGame()
+  useLayers()
+  endGame()
+  menuLayer.hidden = true
+  menuLayer.replaceChildren()
+  gameLayer.hidden = false
   stage.className = 'stage in-game'
   const next = LEVELS.find((candidate) => candidate.id === level.id + 1)
-  tearDownGame = mountGameScreen(stage, level, {
-    toMenu: showMenu,
-    toNextLevel: next ? () => showLevel(next, guidedRun) : null,
-  })
+  game = {
+    level,
+    screen: mountGameScreen(gameLayer, level, {
+      toMenu: showMenu,
+      toNextLevel: next ? () => showLevel(next, guidedRun) : null,
+    }),
+  }
 }
 
 function showStart(): void {

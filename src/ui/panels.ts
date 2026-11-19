@@ -28,7 +28,7 @@ export const EXPLANATIONS: Record<string, { label: string; placement: string }> 
 const BAND_HEADINGS = {
   low: 'Low – public',
   mid: 'Mid – private',
-  high: 'High – managed',
+  high: 'High – account',
   vertical: 'Every altitude',
 }
 
@@ -57,7 +57,8 @@ export function renderPalette(
   state: GameState,
   highlight: string | null,
   onDragStart: (entry: PaletteEntry, event: PointerEvent) => void,
-  onActivate: (entry: PaletteEntry) => void,
+  /** `fromKeyboard` is true for Enter or Space, false for a mouse or touch click. */
+  onActivate: (entry: PaletteEntry, fromKeyboard: boolean) => void,
 ): HTMLElement[] {
   const available = state.level.palette.filter(
     (entry) => !state.scene.resources.some((resource) => resource.id === entry.resource.id),
@@ -88,7 +89,7 @@ export function renderPalette(
           attrs: {
             'data-focus-key': `palette-${id}`,
             'data-palette-id': id,
-            title: 'Drag into the sky, or press Enter to place',
+            title: 'Drag into the sky and let go where it lights up, or press Enter to place',
           },
         },
         familyIcon(entry.resource.kind),
@@ -98,8 +99,10 @@ export function renderPalette(
         }),
       )
       card.onpointerdown = (event) => onDragStart(entry, event)
-      // A plain click (or Enter) places the cloud in its default spot: the keyboard route.
-      card.onclick = () => onActivate(entry)
+      // Enter or Space places the cloud in its default spot: the keyboard route. A mouse
+      // click does not, since the player is meant to find where the cloud goes (ADR 0007).
+      // A click from the keyboard has no pointer behind it, so its `detail` is 0.
+      card.onclick = (event) => onActivate(entry, event.detail === 0)
       parts.push(card)
     }
   }
@@ -561,6 +564,13 @@ export function renderFactCard(id: string, onClose: () => void): HTMLElement | n
       { class: 'fact-card' },
       h('h3', { textContent: card.title }),
       h('p', { textContent: card.body }),
+      card.points && card.points.length > 0
+        ? h(
+            'ul',
+            { class: 'fact-points' },
+            ...card.points.map((text) => h('li', { textContent: text })),
+          )
+        : null,
       card.simplifications.length > 0 ? h('h4', { textContent: 'Simplified in this game' }) : null,
       card.simplifications.length > 0
         ? h('ul', null, ...card.simplifications.map((text) => h('li', { textContent: text })))

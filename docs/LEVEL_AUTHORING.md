@@ -15,26 +15,27 @@ reference, and this guide is the tour.
 
 ## Fields
 
-| Field                            | What goes in it                                                                                                                                                                                       |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`, `slug`, `title`, `concept` | Number, file-name slug, display title, one line on what the level teaches                                                                                                                             |
-| `guidance`                       | `"full"`, `"hints"` or `"minimal"`                                                                                                                                                                    |
-| `region`                         | `"us-east-1"`, `"eu-central-1"`, `"sa-east-1"` or `"ap-northeast-1"`: scenery only                                                                                                                    |
-| `azs`                            | `1` or `2`                                                                                                                                                                                            |
-| `narration`                      | Narrator steps, in order. May be `[]`                                                                                                                                                                 |
-| `initialScene`                   | The scene the player starts from: a complete engine `Scene`                                                                                                                                           |
-| `lockedIds`                      | Ids of anything the player may not change (resources, security groups, route tables, network ACLs)                                                                                                    |
-| `palette`                        | Clouds the player may add, each written out in full with a fixed id                                                                                                                                   |
-| `removableIds`                   | Optional. Ids of resources in the initial scene the player may remove (e.g. `["nat"]`). Palette clouds are always removable                                                                           |
-| `gatewayEndpoints`               | Optional. `["s3"]` and/or `["dynamodb"]`: offers that gateway endpoint as a route on route cards. It is a route, not a palette cloud                                                                  |
-| `population`                     | The Cloudlings and their kites                                                                                                                                                                        |
-| `crowd`                          | Optional. The usual crowd: `{ loadBalancerId, ip, kitesPerTick, ticks }`. Simulated tick by tick, flown in the sky and shown on the weather station. The named kites in `population` are its regulars |
-| `events`                         | Scripted events on the crowd's timeline. So far only crowd surges (see below); a surge needs a `crowd`. `[]` for levels without                                                                       |
-| `objectives`                     | Goals, each a machine-checkable predicate with player-facing text                                                                                                                                     |
-| `stars.wellArchitected`          | The third star: its text and the predicates that must all hold                                                                                                                                        |
-| `hints`                          | One entry per objective, three tiers each                                                                                                                                                             |
-| `factCards`                      | Ids from `content/fact-cards.json`, shown on the results card                                                                                                                                         |
-| `referenceSolution`              | The intended finished scene. Never shown to players; the tests use it                                                                                                                                 |
+| Field                            | What goes in it                                                                                                                                                                                           |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`, `slug`, `title`, `concept` | Number, file-name slug, display title, one line on what the level teaches                                                                                                                                 |
+| `guidance`                       | `"full"`, `"hints"` or `"minimal"`                                                                                                                                                                        |
+| `region`                         | `"us-east-1"`, `"eu-central-1"`, `"sa-east-1"` or `"ap-northeast-1"`: scenery only                                                                                                                        |
+| `azs`                            | `1` or `2`                                                                                                                                                                                                |
+| `narration`                      | Narrator steps, in order. May be `[]`                                                                                                                                                                     |
+| `initialScene`                   | The scene the player starts from: a complete engine `Scene`                                                                                                                                               |
+| `lockedIds`                      | Ids of anything the player may not change (resources, security groups, route tables, network ACLs)                                                                                                        |
+| `palette`                        | Clouds the player may add, each written out in full with a fixed id                                                                                                                                       |
+| `removableIds`                   | Optional. Ids of resources in the initial scene the player may remove (e.g. `["nat"]`). Palette clouds are always removable                                                                               |
+| `removalWarnings`                | Optional. A warning shown before the player removes a cloud, by resource id, e.g. `{ "alb": "If you remove the load balancer…" }`. The player chooses Keep it or Remove anyway. Only for removable clouds |
+| `gatewayEndpoints`               | Optional. `["s3"]` and/or `["dynamodb"]`: offers that gateway endpoint as a route on route cards. It is a route, not a palette cloud                                                                      |
+| `population`                     | The Cloudlings and their kites                                                                                                                                                                            |
+| `crowd`                          | Optional. The usual crowd: `{ loadBalancerId, ip, kitesPerTick, ticks }`. Simulated tick by tick, flown in the sky and shown on the weather station. The named kites in `population` are its regulars     |
+| `events`                         | Scripted events on the crowd's timeline. So far only crowd surges (see below); a surge needs a `crowd`. `[]` for levels without                                                                           |
+| `objectives`                     | Goals, each a machine-checkable predicate with player-facing text                                                                                                                                         |
+| `stars.wellArchitected`          | The third star: its text and the predicates that must all hold                                                                                                                                            |
+| `hints`                          | One entry per objective, three tiers each                                                                                                                                                                 |
+| `factCards`                      | Ids from `content/fact-cards.json`, shown on the results card                                                                                                                                             |
+| `referenceSolution`              | The intended finished scene. Never shown to players; the tests use it                                                                                                                                     |
 
 Every level is self-contained: it starts from its own `initialScene` and never depends
 on another level. To build on an earlier level, copy that level's `referenceSolution`
@@ -65,6 +66,7 @@ carries a complete resource with a fixed id (for example the bucket `photos`).
   "port": 443,
   "payload": "clean",
   "label": "uploads a photo",
+  "says": "I want to upload a photo!",
   "backendCall": { "destinationId": "photos", "action": "s3:Write" }
 }
 ```
@@ -77,6 +79,9 @@ carries a complete resource with a fixed id (for example the bucket `photos`).
   counts as delivered if that call succeeds too.
 - A kite that calls a service directly (a hostile kite reading a bucket) uses `action`
   instead, e.g. `"action": "s3:Read"`.
+- `label` names what the kite does, for the trace inspector. `says` is what the
+  Cloudling says in its speech bubble when clicked, in its own voice: "I want to visit
+  the website!", or for a hostile one, what it is after.
 
 ## Crowds and events
 
@@ -154,7 +159,7 @@ If a level needs a statement none of these can make, add a predicate to
 ```json
 {
   "id": "place-igw",
-  "text": "First, a gate. Drag the Internet Gateway from the tray into the sky.",
+  "text": "First, a gate. Drag the Internet Gateway down to the bottom edge of the VPC, in the band marked Low – public. When that part of the sky lights up, let go.",
   "highlight": "palette:igw",
   "advanceWhen": {
     "kind": "scene",
@@ -174,6 +179,17 @@ If a level needs a statement none of these can make, add a predicate to
 | `{ "kind": "level-complete" }`              | The kites have flown and every objective was met. Use this before a step that congratulates                                |
 
 `highlight` is optional: `palette:<id>`, `resource:<id>`, `subnet:<id>` or `button:fly`.
+
+**Scene steps can come back.** If the player undoes what a completed scene step asked
+for (removes the load balancer, takes away the route), the narrator returns to the
+earliest scene step that no longer holds, and the steps after it follow again as the
+player rebuilds. Steps that were acknowledged or saw a run stay done. So write scene
+steps cumulatively: each one should still hold in the reference solution. The level
+tests check exactly that, so a step that would bounce back fails them.
+
+**Say where to drop a cloud.** A cloud is placed only if it is let go over a zone where
+it belongs, which lights up under the pointer; anywhere else it goes back to the tray
+(ADR 0007). In guided levels, the narration names the band or the spot.
 
 ## Hints
 

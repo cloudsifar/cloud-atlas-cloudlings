@@ -42,8 +42,10 @@ export type Kite = {
   action?: ServiceAction
   /** Work the application does when the request arrives, e.g. storing an upload. */
   backendCall?: BackendCall
-  /** A few words shown beside the Cloudling, e.g. "uploads a photo". */
+  /** A few words naming what the kite does, e.g. "uploads a photo"; used in the trace inspector. */
   label: string
+  /** What the Cloudling says in its speech bubble when clicked, in its own voice. */
+  says: string
 }
 
 /** A cloud the player may add. Its id is fixed so kites and objectives can refer to it. */
@@ -114,6 +116,12 @@ export type Level = {
    * it is listed here.
    */
   removableIds?: string[]
+  /**
+   * A warning shown before the player removes a cloud, by resource id, for clouds whose
+   * removal would undo the level's work (Level 1's load balancer and gateway). The player
+   * confirms or keeps the cloud. Leave out for no warnings.
+   */
+  removalWarnings?: Record<string, string>
   /**
    * Gateway endpoint services the player may add routes to. A gateway endpoint is a
    * route-table target, not a cloud, so it is offered on route cards rather than in

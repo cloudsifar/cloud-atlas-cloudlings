@@ -98,9 +98,37 @@ export function createStore(level: Level): Store {
     }
   }
 
-  /** Every change goes through here: move the narrator on if its trigger is met, then notify. */
+  /**
+   * A step the player completed by building something un-completes if that thing is
+   * undone: remove Level 1's load balancer and the narrator goes back to placing it, so
+   * the guidance for setting it up comes back with it. Only scene steps go back; steps
+   * the player acknowledged or saw happen stay done. Levels keep their scene steps
+   * cumulative (each still holds in the reference solution), which the level tests check.
+   */
+  function rewindNarration(next: GameState): GameState {
+    for (let index = 0; index < next.narrationIndex; index++) {
+      const trigger = level.narration[index]?.advanceWhen
+      if (trigger?.kind !== 'scene') continue
+      const stillHolds = evaluatePredicate(
+        next.scene,
+        next.lastRun?.kiteRuns ?? [],
+        trigger.predicate,
+        next.lastRun?.crowd ?? null,
+      )
+      if (!stillHolds)
+        return {
+          ...next,
+          narrationIndex: index,
+          narrationRunBaseline: next.runCount,
+          openedCards: [],
+        }
+    }
+    return next
+  }
+
+  /** Every change goes through here: move the narrator back or on as the scene says, then notify. */
   function commit(next: GameState): void {
-    state = next
+    state = rewindNarration(next)
     let step = level.narration[state.narrationIndex]
     while (step && triggerMet(step.advanceWhen)) {
       nextNarrationStep()
