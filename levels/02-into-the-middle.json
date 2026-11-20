@@ -9,14 +9,14 @@
   "narration": [
     {
       "id": "welcome",
-      "text": "Altitude means distance from the internet. The instances sit in the mid band, in private subnets: no kite string from the ground can reach that high. Let us prove it.",
+      "text": "Altitude means distance from the internet. The EC2 instances sit in the mid band, in private subnets. They have only private addresses, so nothing on the internet can reach them directly: the only way in is through the load balancer. Let us prove it.",
       "advanceWhen": {
         "kind": "acknowledged"
       }
     },
     {
       "id": "first-run",
-      "text": "Press \"Fly kites\". The red kite is aiming straight at an instance this time. Watch where it goes.",
+      "text": "Press \"Fly kites\". Click the red Cloudling first if you want to hear what it is after, then watch how far its kite gets.",
       "highlight": "button:fly",
       "advanceWhen": {
         "kind": "run-finished"
@@ -24,14 +24,14 @@
     },
     {
       "id": "explain",
-      "text": "The red kite drifted along the VPC border and found no gate: an instance has only a private address, and nothing on the internet can route to one. But the green kites failed too. The load balancer has no targets yet.",
+      "text": "The red kite could not aim at an EC2 instance at all: an instance in a private subnet has only a private address, and nothing on the internet can route to one. Getting in some other way would need something like a bastion host and its credentials, and he has neither. So he tried the one public door, the load balancer, on SSH port 22. Its security group, alb-sg, allows only HTTPS 443, so it turned him away. But the green kites failed too: the load balancer has no targets yet.",
       "advanceWhen": {
         "kind": "acknowledged"
       }
     },
     {
       "id": "register",
-      "text": "Click the load balancer and tick both instances as targets, one in each Availability Zone.",
+      "text": "Click the load balancer and tick both EC2 instances as targets, one in each Availability Zone.",
       "highlight": "resource:alb",
       "pulse": ["targets:alb"],
       "advanceWhen": {
@@ -45,8 +45,8 @@
     },
     {
       "id": "chain",
-      "text": "Now look at an instance. Its security group allows HTTP 80 from Anywhere: far wider than it needs. Click an instance, remove that rule, and add HTTP 80 from the security group \"alb-sg\". Now only the load balancer may call.",
-      "highlight": "resource:app-a",
+      "text": "Now open either EC2 instance. Both wear the same security group, ec2-app-sg, so a rule you change there applies to both of them at once. It allows HTTP 80 from Anywhere: far wider than it needs. Remove that rule, then add HTTP 80 with the source set to the load balancer's security group, alb-sg. That means only something wearing alb-sg, the load balancer, may call the EC2 instances.",
+      "highlight": ["resource:app-a", "resource:app-b"],
       "pulse": ["security-group:sg-app"],
       "advanceWhen": {
         "kind": "scene",
@@ -71,7 +71,7 @@
     },
     {
       "id": "wrap",
-      "text": "Each tier now trusts only the tier in front of it. Naming a security group instead of an address range is called chaining, and it stays correct however the load balancer's addresses change.",
+      "text": "Each tier now trusts only the tier in front of it. The load balancer and the EC2 instances each have their own security group, and the instances' group names the load balancer's group as its source: that is called chaining, and it stays correct however the load balancer's addresses change. One group shared by different kinds of component would open each to traffic only the other needs, which breaks least privilege.",
       "advanceWhen": {
         "kind": "acknowledged"
       }
@@ -187,7 +187,7 @@
       },
       {
         "id": "sg-app",
-        "name": "app-sg",
+        "name": "ec2-app-sg",
         "inbound": [
           {
             "ports": "http",
@@ -285,11 +285,11 @@
       "kind": "hostile",
       "groundPosition": 4,
       "ip": "192.0.2.66",
-      "destinationId": "app-a",
-      "port": 80,
+      "destinationId": "alb",
+      "port": 22,
       "payload": "clean",
-      "label": "aims straight at an instance",
-      "says": "I want to skip the load balancer and get straight at an instance!"
+      "label": "probes SSH 22",
+      "says": "I want to try SSH on port 22. Maybe the servers behind the load balancer will let me in!"
     }
   ],
   "events": [],
@@ -306,18 +306,18 @@
     },
     {
       "id": "red-blocked",
-      "text": "The red kite finds no route to the instances",
+      "text": "The red kite is turned away at the load balancer",
       "predicate": {
         "kind": "flows-stopped",
         "flows": {
           "intent": "hostile"
         },
-        "by": "route"
+        "by": "security-group"
       }
     },
     {
       "id": "only-alb",
-      "text": "The instances accept traffic only from the load balancer's security group",
+      "text": "The EC2 instances accept traffic only from the load balancer's security group",
       "predicate": {
         "kind": "targets-accept-only-load-balancer",
         "loadBalancerId": "alb"
@@ -349,19 +349,19 @@
       "objectiveId": "red-blocked",
       "nudge": "This one takes care of itself. Fly the kites and read the red kite's journey.",
       "pointer": {
-        "text": "Instances have private addresses only. There is nothing for you to change here.",
-        "highlight": "resource:app-a"
+        "text": "The load balancer's security group, alb-sg, allows only HTTPS 443, so SSH on port 22 is refused. There is nothing for you to change here.",
+        "highlight": "resource:alb"
       },
-      "nearAnswer": "Nothing to do: nothing in the mid band is ever directly reachable from the ground."
+      "nearAnswer": "Nothing to do: the EC2 instances have no public address, and the load balancer's security group already refuses port 22."
     },
     {
       "objectiveId": "only-alb",
-      "nudge": "Who really needs to talk to the instances?",
+      "nudge": "Who really needs to talk to the EC2 instances?",
       "pointer": {
-        "text": "Open an instance and look at the source of its inbound rule.",
+        "text": "Open an EC2 instance and look at the source of its inbound rule.",
         "highlight": "resource:app-a"
       },
-      "nearAnswer": "In \"app-sg\", remove HTTP 80 from Anywhere and add HTTP 80 from security group \"alb-sg\"."
+      "nearAnswer": "In \"ec2-app-sg\", remove HTTP 80 from Anywhere and add HTTP 80 from security group \"alb-sg\"."
     }
   ],
   "factCards": ["concept-security-group-chaining", "ec2-instance", "security-group"],
@@ -475,7 +475,7 @@
       },
       {
         "id": "sg-app",
-        "name": "app-sg",
+        "name": "ec2-app-sg",
         "inbound": [
           {
             "ports": "http",

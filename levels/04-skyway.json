@@ -141,7 +141,7 @@
       },
       {
         "id": "sg-app",
-        "name": "app-sg",
+        "name": "ec2-app-sg",
         "inbound": [
           {
             "ports": "http",
@@ -471,7 +471,7 @@
       },
       {
         "id": "sg-app",
-        "name": "app-sg",
+        "name": "ec2-app-sg",
         "inbound": [
           {
             "ports": "http",

@@ -47,6 +47,20 @@ describe('shipped levels', () => {
         expect(run.kiteRuns.length).toBe(level.population.length)
       })
 
+      it('aims every red kite at something the internet can actually reach', () => {
+        // An attacker on the internet can only address a public endpoint: an
+        // internet-facing load balancer, or S3. An EC2 instance in a private subnet has
+        // no route from an internet gateway and only a private address, so a red kite
+        // never aims at one (docs/THREATS.md).
+        // https://docs.aws.amazon.com/vpc/latest/userguide/configure-subnets.html
+        for (const kite of level.population.filter((candidate) => candidate.kind === 'hostile')) {
+          const target = level.referenceSolution.resources.find(
+            (resource) => resource.id === kite.destinationId,
+          )
+          expect(['load-balancer', 's3-bucket'], `red kite "${kite.id}"`).toContain(target?.kind)
+        }
+      })
+
       if (level.id <= BEGINNER_LEVELS) {
         it('points at the card section for every step that asks for a setting to change', () => {
           // Beginner levels pulse the section heading the player has to change (ADR 0008).

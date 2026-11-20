@@ -16,7 +16,7 @@
     },
     {
       "id": "instances",
-      "text": "Two EC2 instances are already running in the mid band, in private subnets. They are locked for now; we will look inside them in the next level. Our job is to let the green kites reach them safely.",
+      "text": "Two EC2 instances are already running in the mid band, in private subnets. They are locked for now; we will look inside them in the next level. They wear their own security group, ec2-app-sg; the load balancer you are about to add brings its own, alb-sg. Each kind of component gets its own group, so each opens only what it needs. Our job is to let the green kites reach them safely.",
       "highlight": "resource:app-a",
       "advanceWhen": {
         "kind": "acknowledged"
@@ -94,7 +94,7 @@
     },
     {
       "id": "targets",
-      "text": "Last, tell the load balancer where to send requests. On its card, tick both EC2 instances as targets (or drag from its handle to each instance).",
+      "text": "Last, tell the load balancer where to send requests. On its card, tick both EC2 instances as targets (or drag from its handle to each EC2 instance).",
       "highlight": "resource:alb",
       "pulse": ["targets:alb"],
       "advanceWhen": {
@@ -205,7 +205,7 @@
     "securityGroups": [
       {
         "id": "sg-app",
-        "name": "app-sg",
+        "name": "ec2-app-sg",
         "inbound": [
           {
             "ports": "http",
@@ -338,7 +338,7 @@
   "objectives": [
     {
       "id": "green-delivered",
-      "text": "Every green kite reaches an instance and gets an answer",
+      "text": "Every green kite reaches an EC2 instance and gets an answer",
       "predicate": {
         "kind": "flows-delivered",
         "flows": {
@@ -378,7 +378,7 @@
         "text": "A kite needs four things in a row: a gate, a route to it, a load balancer that allows and listens on its port, and targets behind it.",
         "highlight": "resource:alb"
       },
-      "nearAnswer": "Attach the Internet Gateway. Public route table: Internet to Internet Gateway. Load balancer: inbound rule HTTPS 443 from Anywhere, listener HTTPS 443, both instances ticked as targets."
+      "nearAnswer": "Attach the Internet Gateway. Public route table: Internet to Internet Gateway. Load balancer: inbound rule HTTPS 443 from Anywhere, listener HTTPS 443, both EC2 instances ticked as targets."
     },
     {
       "objectiveId": "red-blocked",
@@ -501,7 +501,7 @@
       },
       {
         "id": "sg-app",
-        "name": "app-sg",
+        "name": "ec2-app-sg",
         "inbound": [
           {
             "ports": "http",

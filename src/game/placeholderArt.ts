@@ -9,8 +9,13 @@
 import type { CloudGenus } from './layout'
 
 export const PENCIL = '#55525f'
+/**
+ * Captions drawn in the sky: band names, subnet and cloud labels. Upright, in the same
+ * readable face as the interface (ADR 0009). A handwritten face fell back to Segoe
+ * Print on Windows, which read as italic.
+ */
 export const CAPTION_FONT =
-  '"Patrick Hand", "Segoe Print", "Bradley Hand", "Chalkboard SE", "Comic Sans MS", cursive'
+  '"Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif'
 
 /** An ellipse as [centre x, centre y, radius x, radius y], in fractions of the sprite's width and height. */
 type Ellipse = [number, number, number, number]

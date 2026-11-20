@@ -35,6 +35,9 @@ import {
   type CrowdKiteChoice,
 } from './panels'
 
+/** How long the sky plays on after the kites land before the results card appears. */
+export const RESULTS_DELAY_MS = 3000
+
 export type GameNavigation = {
   /** Opens the menu over the level, which stays as it is and can be resumed. */
   toMenu(): void
@@ -66,6 +69,7 @@ export function mountGameScreen(
   let message: string | null = null
   let messageTimer = 0
   let resultsOpen = false
+  let resultsTimer = 0
   /** A cloud whose removal waits on the player confirming the level's warning. */
   let pendingRemoval: string | null = null
   /** A control to focus once the cards are redrawn (a redrawn card scrolls back to its top). */
@@ -181,11 +185,13 @@ export function mountGameScreen(
     if (pendingRemoval && !(openCard?.kind === 'resource' && openCard.id === pendingRemoval))
       pendingRemoval = null
     const step = state.level.narration[state.narrationIndex]
-    const highlight = step?.highlight ?? null
+    const highlights = step?.highlight === undefined ? [] : [step.highlight].flat()
+    const highlight =
+      highlights.find((item) => item.startsWith('palette:') || item === 'button:fly') ?? null
     const flying = state.phase === 'flying'
 
-    sky.setHighlight(
-      highlight?.startsWith('resource:') || highlight?.startsWith('subnet:') ? highlight : null,
+    sky.setHighlights(
+      highlights.filter((item) => item.startsWith('resource:') || item.startsWith('subnet:')),
     )
     sky.setSelectedKite(selectedKiteId)
 
@@ -396,11 +402,19 @@ export function mountGameScreen(
       if (metCount > 0) playSound('objective-ticked')
       if (state.lastRun.stars.works) {
         recordLevelResult(level.id, state.lastRun.starCount)
-        playSound('level-complete')
-        // Let a guided level's closing narration finish before the results card covers it.
-        resultsOpen = true
+        // Give the endings time to play (rain and data reaching the Cloudlings) before
+        // the results card covers the sky (ADR 0009).
+        const run = state.lastRun
+        window.clearTimeout(resultsTimer)
+        resultsTimer = window.setTimeout(() => {
+          if (store.getState().lastRun !== run || store.getState().phase !== 'landed') return
+          if (active) playSound('level-complete')
+          resultsOpen = true
+          draw()
+        }, RESULTS_DELAY_MS)
       }
     }
+    if (state.phase !== 'landed') window.clearTimeout(resultsTimer)
     previousPhase = state.phase
     draw()
   })
@@ -428,6 +442,7 @@ export function mountGameScreen(
       unsubscribe()
       window.removeEventListener('keydown', onKeyDown)
       window.clearTimeout(messageTimer)
+      window.clearTimeout(resultsTimer)
       sky.destroy()
     },
   }

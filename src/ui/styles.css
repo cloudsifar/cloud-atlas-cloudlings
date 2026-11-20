@@ -3,6 +3,15 @@
    Everything sits inside a 1280×720 stage that is scaled to fit the window,
    so all sizes here are in stage pixels. */
 
+/* Press Start 2P by CodeMan38, under the SIL Open Font License 1.1 (assets/fonts/OFL.txt).
+   A 1990s pixel face for titles only, never body text, for legibility. It is drawn for
+   8, 16 and 24 px, so titles use multiples of 8 (ADR 0008, 0009). */
+@font-face {
+  font-family: 'Press Start 2P';
+  src: url('../../assets/fonts/PressStart2P-Regular.ttf') format('truetype');
+  font-display: swap;
+}
+
 :root {
   --paper: #f6efdc;
   --paper-dark: #ebe1c6;
@@ -13,13 +22,14 @@
   --good: #23602e;
   --bad: #8f1f1f;
   --point: #b85f14;
-  /* TODO(Simon): bundle open-licensed fonts (see docs/adr/0005). Until then these fall back to system fonts. */
-  --caption-font:
-    'Patrick Hand', 'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Sans MS', cursive;
+  /* Notes and the tagline: upright, the body face (ADR 0009). No handwritten or italic faces. */
+  --caption-font: var(--body-font);
   --body-font: 'Atkinson Hyperlegible', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   /* Headings in panels, cards, menus and tiles: upright and bold, not the handwritten
      face, a little larger than the text under them (ADR 0008). */
   --heading-font: var(--body-font);
+  /* Titles: panel headings, card and level titles, the logo. */
+  --title-font: 'Press Start 2P', var(--body-font);
   /* The "over here" pulse: blue, never gold (gold means a change took effect). */
   --attention: #2f6fb8;
 }
@@ -61,13 +71,21 @@ h5 {
   font-weight: 700;
   font-style: normal;
 }
+h1,
+h2,
+h3 {
+  /* A pixel face has no bold: a bold weight would smear it. */
+  font-family: var(--title-font);
+  font-weight: normal;
+  line-height: 1.4;
+}
 h2 {
   font-size: 16px;
   border-bottom: 1px dashed var(--rule);
   margin: 8px 0 6px;
 }
 h3 {
-  font-size: 15px;
+  font-size: 16px;
 }
 h4 {
   font-size: 14px;
@@ -214,9 +232,9 @@ canvas.sky {
   align-items: baseline;
 }
 .level-title strong {
-  font-family: var(--heading-font);
-  font-size: 20px;
-  font-weight: 700;
+  font-family: var(--title-font);
+  font-size: 16px;
+  font-weight: normal;
 }
 .level-title span {
   color: var(--ink-soft);
@@ -241,6 +259,9 @@ canvas.sky {
   border-left: 1.5px solid var(--rule);
 }
 .palette h3 {
+  /* The tray's band headings are small labels: the readable face, not the pixel one. */
+  font-family: var(--heading-font);
+  font-weight: 700;
   font-size: 13px;
   color: var(--ink-soft);
   margin: 8px 0 4px;
@@ -382,7 +403,7 @@ canvas.sky {
   margin-bottom: 6px;
 }
 .card-header h3 {
-  font-size: 19px;
+  font-size: 16px;
 }
 .card-header .link {
   grid-column: 1 / -1;
@@ -428,6 +449,16 @@ button.remove {
 }
 .card-header.subnet-private {
   background: rgba(204, 199, 232, 0.85);
+}
+
+/* Long option labels ("worn by …") must not push a dropdown past the card's edge:
+   a field in an add-row may shrink, and its dropdown fills it. */
+.add-row .field {
+  min-width: 0;
+  max-width: 100%;
+}
+.add-row .field select {
+  width: 100%;
 }
 
 .fact-points {
@@ -561,6 +592,9 @@ button.remove {
 .trace-step.fail .step-mark {
   color: var(--bad);
 }
+.trace-step.blocked .step-mark {
+  color: var(--good);
+}
 .trace-step.fail {
   background: #fbecea;
 }
@@ -587,7 +621,7 @@ button.remove {
   box-shadow: 6px 6px 0 rgba(40, 30, 20, 0.3);
 }
 .fact-card h3 {
-  font-size: 24px;
+  font-size: 16px;
   margin-bottom: 6px;
 }
 .fact-card ul {
@@ -646,18 +680,18 @@ button.remove {
   text-align: center;
 }
 .title-logo {
-  font-size: 84px;
-  line-height: 0.95;
+  font-size: 64px;
+  line-height: 1.25;
   color: #2b3f6b;
   text-shadow: 3px 3px 0 #fffdf5;
 }
 .title-logo span {
   display: block;
-  font-size: 0.62em;
+  font-size: 0.5em;
   color: #a8501c;
 }
 .title-logo.small {
-  font-size: 44px;
+  font-size: 32px;
 }
 .tagline {
   font-family: var(--caption-font);
@@ -701,16 +735,17 @@ button.remove {
   min-height: 150px;
 }
 .level-card strong {
-  font-family: var(--heading-font);
-  font-size: 19px;
-  font-weight: 700;
+  font-family: var(--title-font);
+  font-size: 16px;
+  font-weight: normal;
+  line-height: 1.5;
 }
 .level-number {
-  font-family: var(--heading-font);
-  font-size: 26px;
+  font-family: var(--title-font);
+  font-size: 24px;
   color: var(--accent);
   line-height: 1;
-  font-weight: 700;
+  font-weight: normal;
 }
 .level-region,
 .level-concept {

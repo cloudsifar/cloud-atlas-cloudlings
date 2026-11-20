@@ -230,7 +230,7 @@ export function mountMenu(root: HTMLElement, actions: MenuActions): void {
         h('p', {
           class: 'note',
           textContent:
-            'AWS services are deliberately simplified for Cloud Practitioner level. Each cloud\'s "What is this?" card lists what was left out. Art and sound are placeholders.',
+            'AWS services are deliberately simplified for Cloud Practitioner level. Each cloud\'s "What is this?" card lists what was left out. Art and sound are placeholders. Titles are set in Press Start 2P by CodeMan38, under the SIL Open Font License.',
         }),
       ),
     ),

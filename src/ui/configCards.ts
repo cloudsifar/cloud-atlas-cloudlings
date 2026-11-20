@@ -72,10 +72,32 @@ const NAMED_RANGES: Option<string>[] = [
   { value: '203.0.113.0/24', label: '203.0.113.0/24' },
 ]
 
+/** The clouds wearing a security group, by name. */
+function wearersOf(scene: Scene, groupId: string): string[] {
+  return scene.resources
+    .filter(
+      (resource) => 'securityGroupIds' in resource && resource.securityGroupIds.includes(groupId),
+    )
+    .map((resource) => resource.name)
+}
+
+const listNames = (names: string[]): string =>
+  names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+
+/**
+ * A security group named as a source or destination says who wears it, so "alb-sg"
+ * reads as "the load balancer's group" (ADR 0009).
+ */
+function describeGroup(scene: Scene, groupId: string): string {
+  const name = scene.securityGroups.find((group) => group.id === groupId)?.name ?? '?'
+  const wearers = wearersOf(scene, groupId)
+  return `security group "${name}" (${wearers.length > 0 ? `worn by ${listNames(wearers)}` : 'worn by nothing yet'})`
+}
+
 function describePeer(scene: Scene, peer: SecurityGroupPeer): string {
   if (peer.kind === 'anywhere') return 'Anywhere (0.0.0.0/0)'
   if (peer.kind === 'cidr') return peer.cidr
-  return `security group "${scene.securityGroups.find((group) => group.id === peer.securityGroupId)?.name ?? '?'}"`
+  return describeGroup(scene, peer.securityGroupId)
 }
 
 /** Decodes a dropdown value ('anywhere', 'cidr:<range>' or 'sg:<id>') into a rule peer. */
@@ -133,6 +155,19 @@ function securityGroupEditor(
       `security-group:${group.id}`,
     ),
   )
+  // Who wears this group, and that a rule here applies to every one of them.
+  const wearers = wearersOf(state.scene, group.id)
+  section.append(
+    h('p', {
+      class: 'note worn-by',
+      textContent:
+        wearers.length === 0
+          ? 'Worn by nothing yet.'
+          : wearers.length === 1
+            ? `Worn by ${wearers[0]}.`
+            : `Worn by ${listNames(wearers)}. A rule you change here applies to every one of them.`,
+    }),
+  )
   if (locked) section.append(h('p', { class: 'locked-note', textContent: 'Locked in this level.' }))
 
   for (const direction of ['inbound', 'outbound'] as const) {
@@ -169,7 +204,10 @@ function securityGroupEditor(
       ...NAMED_RANGES.map((range) => ({ value: `cidr:${range.value}`, label: range.label })),
       ...state.scene.securityGroups
         .filter((other) => other.id !== group.id)
-        .map((other) => ({ value: `sg:${other.id}`, label: `Security group "${other.name}"` })),
+        .map((other) => ({
+          value: `sg:${other.id}`,
+          label: describeGroup(state.scene, other.id).replace(/^s/, 'S'),
+        })),
     ]
     section.append(
       h(
@@ -436,12 +474,20 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
         locked,
       )
       attention(listener.firstElementChild, actions, `listener:${resource.id}`)
+      // A link of its own, beside the field rather than inside its label.
+      const listenerFact = button(
+        'What is a listener?',
+        () => actions.openFactCard('concept-listener'),
+        'listener-fact',
+        'link',
+      )
       body.append(
         h('p', {
           class: 'note',
           textContent: `Internet-facing · nodes in ${resource.subnetIds.map(subnetName).join(' and ') || 'no subnets'}`,
         }),
         listener,
+        listenerFact,
         attention(
           h('h5', { textContent: 'Targets (receive requests on HTTP 80)' }),
           actions,

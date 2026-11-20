@@ -17,6 +17,8 @@ await esbuild.build({
   format: 'esm',
   target: 'es2022',
   outfile: 'dist/assets/main.js',
+  // The title font is copied beside the bundle, as Vite does.
+  loader: { '.ttf': 'file' },
   logLevel: 'info',
 })
 

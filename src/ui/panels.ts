@@ -493,12 +493,17 @@ export function renderTraceInspector(
       previousLeg = step.leg
     }
     const passed = step.result === 'pass'
+    // A red kite stopped by a check is the defence working, not a fault to fix (ADR 0009).
+    const blocked = !passed && kite.kind === 'hostile'
     body.append(
       h(
         'li',
-        { class: `trace-step ${passed ? 'pass' : 'fail'}` },
+        { class: `trace-step ${passed ? 'pass' : blocked ? 'blocked' : 'fail'}` },
         h('span', { class: 'step-number', textContent: String(index + 1) }),
-        h('span', { class: 'step-mark', textContent: passed ? '✓ pass' : '✗ stopped here' }),
+        h('span', {
+          class: 'step-mark',
+          textContent: passed ? '✓ pass' : blocked ? '⛨ blocked here' : '✗ stopped here',
+        }),
         h('strong', {
           textContent: `${CHECK_LABELS[step.check]} · ${describeRef(scene, step.at)}`,
         }),

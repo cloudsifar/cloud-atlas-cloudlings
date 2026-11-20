@@ -75,8 +75,12 @@ export type NarrationTrigger =
 export type NarrationStep = {
   id: string
   text: string
-  /** A UI element to draw attention to: 'palette:<id>', 'resource:<id>', 'subnet:<id>' or 'button:fly'. */
-  highlight?: string
+  /**
+   * UI elements to draw attention to: 'palette:<id>', 'resource:<id>', 'subnet:<id>' or
+   * 'button:fly'. A list points at several at once, e.g. both EC2 instances that wear the
+   * security group a step asks about.
+   */
+  highlight?: string | string[]
   /**
    * Config card sections whose headings pulse while this step is current, to say "over
    * here" (ADR 0008): `<section>:<id>` with a section from `PULSE_SECTIONS`. Used in the

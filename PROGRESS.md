@@ -258,3 +258,12 @@ None found so far. Two places where the brief's wording was made more exact:
   by a level test. Headings are bold and upright, not the handwritten face, and no
   italics remain. Press Start 2P (OFL) is proposed for headings, waiting on the font
   file. ADR 0008. 206 tests pass offline.
+- **Session 3, continued: honest attackers.** Level 2's red kite now tries SSH 22 at the
+  load balancer and is turned away by `alb-sg` (it used to aim at a private instance
+  address, which no attacker could). `docs/THREATS.md` audits every level's attacker; a
+  test checks red kites only aim at public endpoints. A stopped red kite gets a green
+  shield, not a red cross. Security groups say who wears them; the instances' group is
+  `ec2-app-sg`. Narration says "EC2 instances". A "What is a listener?" card covers
+  certificates. Results wait three seconds. The sky's captions are upright. Titles are
+  set in Press Start 2P (OFL, bundled in `assets/fonts/`). ADR 0009.
+  211 tests pass offline.

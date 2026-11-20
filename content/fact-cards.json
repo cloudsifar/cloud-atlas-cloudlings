@@ -159,5 +159,19 @@
       "The game never asks you to work out ranges: the VPC and subnets come ready-made, and IPv6 is left out."
     ],
     "atlasPage": "TODO(Simon)"
+  },
+  "concept-listener": {
+    "title": "Listener",
+    "body": "A listener is the load balancer's ear. It waits for connections on one protocol and port, such as HTTPS 443, and passes the requests it hears on to the targets. The security group must allow the same port, or a request never reaches the listener.",
+    "points": [
+      "HTTPS 443 encrypts the conversation between the Cloudling and the load balancer. HTTP 80 sends it in the clear, where anyone on the way could read it.",
+      "In real life, an HTTPS listener needs an SSL/TLS certificate deployed on the load balancer. The certificate proves the website is really yours. AWS Certificate Manager (ACM) can issue one and renew it for you.",
+      "The load balancer decrypts each request and sends it on to its targets. Here the targets always receive HTTP 80, inside the VPC."
+    ],
+    "simplifications": [
+      "Certificates are assumed: the game never asks you to request or attach one.",
+      "One listener per load balancer, with no listener rules."
+    ],
+    "atlasPage": "TODO(Simon)"
   }
 }

@@ -24,12 +24,12 @@ italic, and three notes were set in true italics.
   main buttons. They use `--heading-font`, the body face for now. No italics anywhere in
   the interface. The handwritten face stays only for the explanation note, the
   start-screen tagline and the captions drawn in the sky.
-- **A 1990s pixel font for headings is proposed, not yet added.** Simon pointed at
-  codeman38's fonts. Press Start 2P is the candidate: it is under the SIL Open Font
-  Licence, so it can be shipped in this public repository, and it is drawn for 8, 16
-  and 24 px. It would only be used for headings, never body text, for legibility. It
-  needs the font file from Simon (the sandbox cannot download it); `--heading-font` is
-  the one place to switch.
+- **A 1990s pixel font for titles.** Simon pointed at codeman38's fonts and chose
+  Press Start 2P: it is under the SIL Open Font Licence, so it can be shipped in this
+  public repository, and it is drawn for 8, 16 and 24 px. Added on 20 November 2026
+  (ADR 0009) as `--title-font`, for titles only (panel headings, card and level titles,
+  the logo), never body text, for legibility. Section headings, labels and buttons stay
+  in the bold readable face.
 
 **Consequences.**
 

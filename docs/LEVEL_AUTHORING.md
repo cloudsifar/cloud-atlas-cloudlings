@@ -79,6 +79,9 @@ carries a complete resource with a fixed id (for example the bucket `photos`).
   counts as delivered if that call succeeds too.
 - A kite that calls a service directly (a hostile kite reading a bucket) uses `action`
   instead, e.g. `"action": "s3:Read"`.
+- A hostile kite must aim at something the internet can reach: the load balancer or
+  S3, never an EC2 instance in a private subnet. Add a row to `docs/THREATS.md` saying
+  what it tries and what stops it; a level test checks the target.
 - `label` names what the kite does, for the trace inspector. `says` is what the
   Cloudling says in its speech bubble when clicked, in its own voice: "I want to visit
   the website!", or for a hostile one, what it is after.
@@ -178,7 +181,9 @@ If a level needs a statement none of these can make, add a predicate to
 | `{ "kind": "run-finished" }`                | The kites have flown, whatever happened                                                                                    |
 | `{ "kind": "level-complete" }`              | The kites have flown and every objective was met. Use this before a step that congratulates                                |
 
-`highlight` is optional: `palette:<id>`, `resource:<id>`, `subnet:<id>` or `button:fly`.
+`highlight` is optional: `palette:<id>`, `resource:<id>`, `subnet:<id>` or `button:fly`,
+or a list of them to point at several things at once (both EC2 instances that share a
+security group).
 
 `pulse` is optional: card sections whose headings pulse while the step is current, to
 say "over here" (ADR 0008), e.g. `"pulse": ["security-group:sg-alb"]`. The sections are

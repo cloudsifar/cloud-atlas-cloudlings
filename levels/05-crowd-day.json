@@ -9,14 +9,14 @@
   "narration": [
     {
       "id": "brief",
-      "text": "Word has spread. Today the usual four Cloudlings become a crowd of forty, then drift away again. Two small instances serve five kites each per tick. Fly the kites, then watch the crowd and the CloudWatch weather station.",
+      "text": "Word has spread. Today the usual four Cloudlings become a crowd of forty, then drift away again. Two small EC2 instances serve five kites each per tick. Fly the kites, then watch the crowd and the CloudWatch weather station.",
       "advanceWhen": {
         "kind": "run-finished"
       }
     },
     {
       "id": "task",
-      "text": "Most of the crowd timed out: there was never enough capacity. You could run eight instances all day, but you would pay for all eight all day. Build a fleet that grows with the crowd and shrinks again afterwards.",
+      "text": "Most of the crowd timed out: there was never enough capacity. You could run eight EC2 instances all day, but you would pay for all eight all day. Build a fleet that grows with the crowd and shrinks again afterwards.",
       "highlight": "palette:asg",
       "advanceWhen": {
         "kind": "acknowledged"
@@ -133,7 +133,7 @@
       },
       {
         "id": "sg-app",
-        "name": "app-sg",
+        "name": "ec2-app-sg",
         "inbound": [
           {
             "ports": "http",
@@ -297,10 +297,10 @@
       "objectiveId": "crowd-served",
       "nudge": "Open \"Tick by tick\" on the weather station. When do kites start timing out, and how many targets are in service then?",
       "pointer": {
-        "text": "An Auto Scaling group can run more instances when it is busy. Drag one in, make the load balancer send requests to it, and the fixed instances are no longer needed.",
+        "text": "An Auto Scaling group can run more EC2 instances when it is busy. Drag one in, make the load balancer send requests to it, and the fixed EC2 instances are no longer needed.",
         "highlight": "palette:asg"
       },
-      "nearAnswer": "Place the Auto Scaling group. On its card set the maximum to 8 and choose \"Keep average CPU near 50%\". On the load balancer's card, tick the group as a target. New instances take two ticks to start, so a lower CPU target leaves headroom while they launch."
+      "nearAnswer": "Place the Auto Scaling group. On its card set the maximum to 8 and choose \"Keep average CPU near 50%\". On the load balancer's card, tick the group as a target. New EC2 instances take two ticks to start, so a lower CPU target leaves headroom while they launch."
     }
   ],
   "factCards": ["auto-scaling-group", "cloudwatch", "concept-elasticity"],
@@ -414,7 +414,7 @@
       },
       {
         "id": "sg-app",
-        "name": "app-sg",
+        "name": "ec2-app-sg",
         "inbound": [
           {
             "ports": "http",

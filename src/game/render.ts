@@ -201,7 +201,8 @@ export type SkyViewModel = {
   /** When each recently changed resource began to glow gold (animation-clock time). */
   sunlightStartedAt: Record<string, number>
   /** 'resource:<id>' or 'subnet:<id>': what the narrator or a hint is pointing at. */
-  highlight: string | null
+  /** The clouds or subnets the narrator is pointing at: 'resource:<id>' or 'subnet:<id>'. */
+  highlights: readonly string[]
   selectedKiteId: string | null
   drag: DragView | null
   /** The Cloudling saying what it wants, and for how long it has been saying it. */
@@ -694,59 +695,88 @@ function drawClouds(
 }
 
 function drawHighlight(context: CanvasRenderingContext2D, model: SkyViewModel): void {
-  if (!model.highlight) return
-  const [kind, id] = model.highlight.split(':')
-  const rect =
-    kind === 'resource'
-      ? model.layout.clouds[id ?? '']
-      : kind === 'subnet'
-        ? model.layout.subnets[id ?? '']
-        : undefined
-  if (!rect) return
-  const pulse = model.reducedMotion ? 0 : Math.sin(model.time / 260) * 3
-  context.save()
-  context.strokeStyle = '#c86a1c'
-  context.lineWidth = 3
-  context.setLineDash([10, 6])
-  roundedRectPath(context, rect, 20, 12 + pulse)
-  context.stroke()
-  context.restore()
+  for (const highlight of model.highlights) {
+    const [kind, id] = highlight.split(':')
+    const rect =
+      kind === 'resource'
+        ? model.layout.clouds[id ?? '']
+        : kind === 'subnet'
+          ? model.layout.subnets[id ?? '']
+          : undefined
+    if (!rect) continue
+    const pulse = model.reducedMotion ? 0 : Math.sin(model.time / 260) * 3
+    context.save()
+    context.strokeStyle = '#c86a1c'
+    context.lineWidth = 3
+    context.setLineDash([10, 6])
+    roundedRectPath(context, rect, 20, 12 + pulse)
+    context.stroke()
+    context.restore()
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Cloudlings, kites and what happens to them
 // ---------------------------------------------------------------------------
 
+/**
+ * What a check mark says: a pass, a fault the player should fix, or a red kite blocked
+ * by a defence that is doing its job.
+ */
+type MarkKind = 'pass' | 'fail' | 'blocked'
+
 function marker(
   context: CanvasRenderingContext2D,
   at: Point,
-  passed: boolean,
+  kind: MarkKind,
   label?: string,
 ): void {
-  // Shape as well as colour: a round tick for a pass, a square cross for a fail.
+  // Shape as well as colour: a round tick for a pass, a square cross for a fault, a
+  // shield for a red kite turned away. Only faults are red (ADR 0009).
   context.save()
   context.lineWidth = 1.6
   context.strokeStyle = '#ffffff'
-  context.fillStyle = passed ? '#3c8a4a' : '#b3342c'
+  context.fillStyle = kind === 'fail' ? '#b3342c' : '#3c8a4a'
   context.beginPath()
-  if (passed) context.arc(at.x, at.y, 6, 0, Math.PI * 2)
-  else context.rect(at.x - 7, at.y - 7, 14, 14)
+  if (kind === 'pass') context.arc(at.x, at.y, 6, 0, Math.PI * 2)
+  else if (kind === 'fail') context.rect(at.x - 7, at.y - 7, 14, 14)
+  else {
+    context.moveTo(at.x - 7, at.y - 7)
+    context.lineTo(at.x + 7, at.y - 7)
+    context.lineTo(at.x + 7, at.y)
+    context.quadraticCurveTo(at.x + 6, at.y + 6, at.x, at.y + 9)
+    context.quadraticCurveTo(at.x - 6, at.y + 6, at.x - 7, at.y)
+    context.closePath()
+  }
   context.fill()
+  if (kind === 'blocked') context.stroke()
   context.beginPath()
-  if (passed) {
-    context.moveTo(at.x - 3, at.y)
-    context.lineTo(at.x - 1, at.y + 2.5)
-    context.lineTo(at.x + 3.5, at.y - 2.5)
-  } else {
+  if (kind === 'fail') {
     context.moveTo(at.x - 3.5, at.y - 3.5)
     context.lineTo(at.x + 3.5, at.y + 3.5)
     context.moveTo(at.x + 3.5, at.y - 3.5)
     context.lineTo(at.x - 3.5, at.y + 3.5)
+  } else {
+    context.moveTo(at.x - 3, at.y)
+    context.lineTo(at.x - 1, at.y + 2.5)
+    context.lineTo(at.x + 3.5, at.y - 2.5)
   }
   context.stroke()
   context.restore()
-  if (label)
-    caption(context, label, at.x + 12, at.y - 12, 12, 'left', passed ? '#255c31' : '#8c1f1f')
+  if (!label) return
+  // A blocked red kite's label goes to the left, so it never sits on top of a green
+  // kite's label at the same cloud.
+  if (kind === 'blocked') caption(context, label, at.x - 12, at.y - 12, 12, 'right', '#255c31')
+  else
+    caption(
+      context,
+      label,
+      at.x + 12,
+      at.y - 12,
+      12,
+      'left',
+      kind === 'fail' ? '#8c1f1f' : '#255c31',
+    )
 }
 
 function drawRain(context: CanvasRenderingContext2D, at: Point, time: number, fade = 1): void {
@@ -836,9 +866,16 @@ function drawKiteAndCloudling(
       x: beat.position.x + ((index % 3) - 1) * 9,
       y: beat.position.y + (((index * 2) % 3) - 1) * 9,
     }
+    // A red kite stopped by a check is a defence working: no red cross on a cloud that
+    // is configured correctly.
+    const kind: MarkKind = !failed ? 'pass' : hostile ? 'blocked' : 'fail'
     const label =
-      newest || failed ? CHECK_LABELS[beat.step.check] : selected ? String(index + 1) : undefined
-    marker(context, jitter, !failed, label)
+      newest || failed
+        ? `${CHECK_LABELS[beat.step.check]}${kind === 'blocked' ? ': blocked' : ''}`
+        : selected
+          ? String(index + 1)
+          : undefined
+    marker(context, jitter, kind, label)
   })
 
   if (frame.phase === 'flying') {

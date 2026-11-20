@@ -46,7 +46,7 @@ export type SkyCallbacks = {
 export type SkyView = {
   /** Called by the palette when the player starts dragging a specimen card. */
   beginPaletteDrag(entry: PaletteEntry, event: PointerEvent): void
-  setHighlight(highlight: string | null): void
+  setHighlights(highlights: readonly string[]): void
   setSelectedKite(kiteId: string | null): void
   /** While inactive (the menu is open over a paused level) nothing is drawn and a flight is paused. */
   setActive(active: boolean): void
@@ -75,7 +75,7 @@ export function createSkyView(
   canvas.width = STAGE.width
   canvas.height = STAGE.height
 
-  let highlight: string | null = null
+  let highlights: readonly string[] = []
   let selectedKiteId: string | null = null
   let drag: DragView | null = null
   /** What a drag in progress will do when the pointer is released. */
@@ -197,7 +197,7 @@ export function createSkyView(
       crowd,
       compromisedIds,
       sunlightStartedAt,
-      highlight,
+      highlights,
       selectedKiteId,
       drag,
       speech:
@@ -419,8 +419,8 @@ export function createSkyView(
         zones: dropZones(layoutScene(state.scene), kind, validSubnetsFor(state.scene, kind)),
       }
     },
-    setHighlight(next) {
-      highlight = next
+    setHighlights(next) {
+      highlights = next
     },
     setSelectedKite(kiteId) {
       selectedKiteId = kiteId

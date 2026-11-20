@@ -9,7 +9,7 @@
   "narration": [
     {
       "id": "welcome",
-      "text": "The Cloudlings want to upload photos. The application needs somewhere to keep them. A NAT Gateway is already in place so the instances can reach out of the VPC; it is locked for now, and we will question that path in Level 4.",
+      "text": "The Cloudlings want to upload photos. The application needs somewhere to keep them. A NAT Gateway is already in place so the EC2 instances can reach out of the VPC; it is locked for now, and we will question that path in Level 4.",
       "highlight": "resource:nat",
       "advanceWhen": {
         "kind": "acknowledged"
@@ -29,7 +29,7 @@
     },
     {
       "id": "first-run",
-      "text": "Fly the kites and watch the uploads. After a kite is delivered, the instance sends the photo on to the bucket as rain.",
+      "text": "Fly the kites and watch the uploads. After a kite is delivered, the EC2 instance sends the photo on to the bucket as rain.",
       "highlight": "button:fly",
       "advanceWhen": {
         "kind": "run-finished"
@@ -37,7 +37,7 @@
     },
     {
       "id": "explain",
-      "text": "The rain evaporated at the bucket. The instances have no IAM role, so they have no credentials, and IAM denies everything that is not explicitly allowed. Notice the red kite too: Block Public Access shut it out.",
+      "text": "The rain evaporated at the bucket. The EC2 instances have no IAM role, so they have no credentials, and IAM denies everything that is not explicitly allowed. Notice the red kite too: Block Public Access shut it out.",
       "advanceWhen": {
         "kind": "acknowledged"
       }
@@ -71,7 +71,7 @@
     },
     {
       "id": "attach",
-      "text": "Now give the role to both instances: click each instance and choose the role (or drag from the role's handle to each instance). A fine thread will join them.",
+      "text": "Now give the role to both EC2 instances: click each EC2 instance and choose the role (or drag from the role's handle to each EC2 instance). A fine thread will join them.",
       "highlight": "resource:app-a",
       "pulse": ["instance-role:app-a", "instance-role:app-b", "role-wearers:app-role"],
       "advanceWhen": {
@@ -92,7 +92,7 @@
     },
     {
       "id": "wrap",
-      "text": "The uploads land. No passwords or keys were stored anywhere: the instances borrow their permissions from the role. And the bucket stayed private the whole time.",
+      "text": "The uploads land. No passwords or keys were stored anywhere: the EC2 instances borrow their permissions from the role. And the bucket stayed private the whole time.",
       "advanceWhen": {
         "kind": "acknowledged"
       }
@@ -216,7 +216,7 @@
       },
       {
         "id": "sg-app",
-        "name": "app-sg",
+        "name": "ec2-app-sg",
         "inbound": [
           {
             "ports": "http",
@@ -401,12 +401,12 @@
   "hints": [
     {
       "objectiveId": "uploads-land",
-      "nudge": "Follow the rain from an instance to the bucket. Which check stops it?",
+      "nudge": "Follow the rain from an EC2 instance to the bucket. Which check stops it?",
       "pointer": {
-        "text": "The instances need permission. Permissions come from an IAM role.",
+        "text": "The EC2 instances need permission. Permissions come from an IAM role.",
         "highlight": "palette:app-role"
       },
-      "nearAnswer": "Place the bucket and the IAM role. On the role, allow s3:Write on photo-bucket. Give the role to both instances."
+      "nearAnswer": "Place the bucket and the IAM role. On the role, allow s3:Write on photo-bucket. Give the role to both EC2 instances."
     },
     {
       "objectiveId": "red-blocked",
@@ -537,7 +537,7 @@
       },
       {
         "id": "sg-app",
-        "name": "app-sg",
+        "name": "ec2-app-sg",
         "inbound": [
           {
             "ports": "http",
