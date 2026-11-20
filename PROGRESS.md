@@ -267,3 +267,8 @@ None found so far. Two places where the brief's wording was made more exact:
   certificates. Results wait three seconds. The sky's captions are upright. Titles are
   set in Press Start 2P (OFL, bundled in `assets/fonts/`). ADR 0009.
   211 tests pass offline.
+- **Session 3, continued: between levels.** "Next level" now dissolves the old sky into
+  blurred pixels for two seconds, shows the new level's number and name at 48 px in
+  Press Start 2P, then sharpens into the new sky. From the menu a level starts at the
+  title. Reduced motion shows the title only. ADR 0010. Checked headlessly: frames
+  through the dissolve, title and reveal; the filter is gone afterwards.

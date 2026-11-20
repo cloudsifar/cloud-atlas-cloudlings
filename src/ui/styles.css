@@ -900,3 +900,53 @@ button.remove {
     text-shadow: 0 0 6px rgba(47, 111, 184, 0.6);
   }
 }
+
+/* ---- between levels (ADR 0010) ------------------------------------------- */
+
+/* The new level's number and name, in the middle of the screen, over the dissolved sky. */
+.level-intro {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  background: rgba(246, 239, 220, 0);
+  transition: background 300ms ease;
+}
+.level-intro.visible {
+  background: rgba(246, 239, 220, 0.35);
+}
+.level-intro.leaving {
+  background: rgba(246, 239, 220, 0);
+  transition-duration: 800ms;
+}
+.level-intro p {
+  margin: 0;
+  font-family: var(--title-font);
+  font-size: 48px;
+  line-height: 1.2;
+  text-align: center;
+  text-shadow: 4px 4px 0 #fffdf5;
+  opacity: 0;
+  transform: scale(0.94);
+  transition:
+    opacity 300ms ease,
+    transform 300ms ease;
+}
+.level-intro .intro-number {
+  color: #a8501c;
+}
+.level-intro .intro-title {
+  color: #2b3f6b;
+}
+.level-intro.visible p {
+  opacity: 1;
+  transform: scale(1);
+}
+.level-intro.leaving p {
+  opacity: 0;
+  transition-duration: 800ms;
+}

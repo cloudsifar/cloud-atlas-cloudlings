@@ -6,6 +6,7 @@ import { LEVELS, type Level } from './levels'
 import { mountGameScreen, type GameScreen } from './ui/gameScreen'
 import { h } from './ui/dom'
 import { mountMenu, mountStartScreen } from './ui/screens'
+import { playLevelChange } from './ui/transition'
 
 const app = document.getElementById('app')
 if (!app) throw new Error('index.html is missing #app')
@@ -46,7 +47,7 @@ function showMenu(): void {
   stage.className = 'stage on-menu'
   const paused = game
   mountMenu(menuLayer, {
-    play: showLevel,
+    play: (level, guidedRun) => changeLevel(level, guidedRun, false),
     resume: paused
       ? { label: `Resume Level ${paused.level.id} · ${paused.level.title}`, run: resumeGame }
       : null,
@@ -74,9 +75,18 @@ function showLevel(level: Level, guidedRun: boolean): void {
     level,
     screen: mountGameScreen(gameLayer, level, {
       toMenu: showMenu,
-      toNextLevel: next ? () => showLevel(next, guidedRun) : null,
+      toNextLevel: next ? () => changeLevel(next, guidedRun, true) : null,
     }),
   }
+}
+
+/**
+ * Starts a level with its title card (ADR 0010). From "Next level" the old sky dissolves
+ * into pixels first; from the menu the new level starts at the title.
+ */
+function changeLevel(level: Level, guidedRun: boolean, dissolve: boolean): void {
+  useLayers()
+  void playLevelChange(stage, gameLayer, level, () => showLevel(level, guidedRun), dissolve)
 }
 
 function showStart(): void {
