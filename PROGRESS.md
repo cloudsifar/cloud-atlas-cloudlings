@@ -63,18 +63,30 @@ Running log. Newest state first; updated at the end of every milestone.
 
 ## Not verified — do these first
 
-1. **A person playing it again.** Simon played Levels 1–5 in a real browser on
+1. **Vitest, the Vite build and lint on Windows, on everything since 18 November**
+   (ADRs 0007–0011). In that time the suite has run only on the offline runner
+   (225 tests), and ESLint, Prettier and the project `tsc` were run against the
+   installed packages from the cloud sandbox. On Windows, after `git pull`:
+   `npm ci --ignore-scripts`, then `npm test` (expect 18 test files and **225 passed**),
+   `npm run build` (writes `dist/`, including `dist/sounds/README.md`) and
+   `npm run lint`. Read each output, not only the exit code.
+2. **A person playing it again.** Simon played Levels 1–5 in a real browser on
    18–19 November; his changes are in ADR 0007. They need his eye: how dragging feels
    now, the sound levels, the subnet tints, the speech bubbles, Resume.
-2. Firefox, Safari and Edge. Only Chromium was tried.
-3. Window sizes other than 1280×720, tablets, and the phone path.
-4. Sound. The synthesised placeholders exist but headless testing cannot hear them.
+3. Firefox, Safari and Edge. Only Chromium was tried.
+4. Window sizes other than 1280×720, tablets, and the phone path.
+5. Sound. The synthesised placeholders exist but headless testing cannot hear them.
+   The new `level-dissolve` placeholder (ADR 0011) and the per-objective tick sounds
+   have not been heard by anyone. Playing a recording from `public/sounds/` is written
+   but untested with a real file: when Simon's dissolve recording arrives, set its
+   `file`, run `npm run dev`, press "Next level" and listen; the console warns if it
+   fails to load.
    Simon heard them in the first playtest: the click and card sounds were too quiet and
    the level-complete jingle too loud, now adjusted (ADR 0007). Level 5's four crowd
    cues and their blending have only been checked in code.
-5. Frame rate with a crowd of 40 on a modest laptop or tablet. Chromium on the build
+6. Frame rate with a crowd of 40 on a modest laptop or tablet. Chromium on the build
    machine was smooth; nothing was measured.
-6. The AWS documentation links cited in the test files. Five behaviours were re-checked
+7. The AWS documentation links cited in the test files. Five behaviours were re-checked
    against the current AWS docs during the build (ALB health checks and fail-open, S3
    Block Public Access, network ACLs and ephemeral ports, IAM policy evaluation, route
    priority and gateway endpoints), and for Level 5: target tracking scaling, Auto
@@ -86,13 +98,13 @@ Running log. Newest state first; updated at the end of every milestone.
 
 - **ESLint 9 is past end of life** (6 August 2026). Upgrading to ESLint 10 and
   `@eslint/js` 10 is a separate major change; not needed for any advisory.
-- **Asset swapping is half built.** `assets/manifest.json` sets each sprite's size and
-  anchor, but the renderer does not yet load image files: setting `file` has no effect.
-  Placeholders are always drawn in code.
+- **Asset swapping is half built.** Sounds are done: an effect in `assets/sounds.json`
+  with a `file` plays that recording from `public/sounds/` (ADR 0011). Sprites are not:
+  `assets/manifest.json` sets each sprite's size and anchor, but the renderer does not
+  yet load image files, so setting `file` there has no effect. Placeholders are always
+  drawn in code.
 - **Label overlaps** in the low band: the load balancer's caption runs into the
   "public: routes to the Internet Gateway" notes and sits close to the gateway cloud.
-- **The results card opens the moment the kites land**, covering the sky. "Keep
-  building" closes it. A short delay would let the player watch the ending.
 - New security group rules default to HTTPS 443 in the port dropdown; Level 2 needs
   HTTP 80, which is easy to miss. The narrator names the port, and the step does not
   advance until the right rule exists.
@@ -272,3 +284,14 @@ None found so far. Two places where the brief's wording was made more exact:
   Press Start 2P, then sharpens into the new sky. From the menu a level starts at the
   title. Reduced motion shows the title only. ADR 0010. Checked headlessly: frames
   through the dissolve, title and reveal; the filter is gone afterwards.
+- **Session 3, continued: one tick at a time.** When the kites land, the objectives
+  now tick one by one, a second apart, in the level's order, the summary objective
+  last; the stars wait for the last tick and the results card still opens at 3 s.
+  The dissolve has a 2 s placeholder sound, and recorded sounds can now replace any
+  placeholder. Narration can link a phrase to a fact card (`[phrase](card:id)`, checked
+  by the validator); Level 2's "bastion host" opens a new card on bastion hosts and
+  Session Manager. Level 3 says "the S3 cloud"; Level 4's summary line was reworded.
+  Long narrator steps scroll. ADR 0011. 225 tests pass offline. Checked headlessly:
+  Level 2's link opens the card, ticks land at 0, 1 and 2 s, results at 3 s, and the
+  Level 2 → 3 transition runs without console errors. Open question for Simon: how data
+  should move between clouds (ADR 0011 does not decide it).

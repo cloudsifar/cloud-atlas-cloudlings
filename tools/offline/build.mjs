@@ -1,7 +1,7 @@
 // Bundles the game into dist/ with esbuild, for machines without Vite.
 // Needs esbuild: either installed in the project or pointed at by ESBUILD_PATH.
 // The normal build is `npm run build` (Vite). See docs/adr/0002.
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
@@ -28,3 +28,6 @@ const html = readFileSync('index.html', 'utf8').replace(
   '<link rel="stylesheet" href="assets/main.css" />\n    <script type="module" src="assets/main.js"></script>',
 )
 writeFileSync('dist/index.html', html)
+
+// Vite copies public/ (final sound recordings) to the top of dist/ unchanged; so does this.
+if (existsSync('public')) cpSync('public', 'dist', { recursive: true })

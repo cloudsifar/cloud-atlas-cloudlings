@@ -17,7 +17,7 @@
     },
     {
       "id": "place-bucket",
-      "text": "Drag the S3 bucket to the tall column on the right of the sky, outside the VPC. S3 stands outside your VPC and spans every altitude. When the column lights up, let go.",
+      "text": "Drag the S3 bucket to the right of the sky, outside the VPC, where it becomes the S3 cloud: S3 stands outside your VPC and spans every altitude. When that tall strip of sky lights up, let go.",
       "highlight": "palette:photos",
       "advanceWhen": {
         "kind": "scene",

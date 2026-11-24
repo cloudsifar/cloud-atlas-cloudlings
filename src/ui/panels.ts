@@ -15,7 +15,7 @@ import {
   type TraceStep,
 } from '../engine'
 import { BAND_OF, CHECK_LABELS, drawCloud, GENUS_OF, OUTCOME_LABELS, type GameState } from '../game'
-import { FACT_CARDS, REGION_NAMES, type KiteRun, type PaletteEntry } from '../levels'
+import { FACT_CARDS, REGION_NAMES, textSegments, type KiteRun, type PaletteEntry } from '../levels'
 import explanations from '../../content/explanations.json'
 import { button, h } from './dom'
 
@@ -116,19 +116,28 @@ export function renderPalette(
 /** Which crowd kite's journey to open in the trace inspector: one from a given tick. */
 export type CrowdKiteChoice = { tick: number; fate: 'served' | 'timed-out' }
 
+/**
+ * The objectives, stars and running cost. `ticked` is how many objectives have ticked
+ * since the kites landed: they tick one at a time, in the level's order, and the stars
+ * wait until all of them have (ADR 0011).
+ */
 export function renderObjectives(
   state: GameState,
   onHint: (objectiveId: string) => void,
   onFollowCrowdKite: (choice: CrowdKiteChoice) => void = () => {},
+  ticked: number = Number.POSITIVE_INFINITY,
 ): HTMLElement[] {
   const { level, lastRun, lastRunIsCurrent } = state
   const judged = lastRun !== null && lastRunIsCurrent && state.phase !== 'flying'
+  const allTicked = ticked >= level.objectives.length
   const parts: HTMLElement[] = [h('h2', { textContent: 'Objectives' })]
 
   const list = h('ul', { class: 'objectives' })
-  for (const objective of level.objectives) {
+  for (const [index, objective] of level.objectives.entries()) {
     const met =
-      judged && (lastRun?.objectives.find((result) => result.id === objective.id)?.met ?? false)
+      judged &&
+      index < ticked &&
+      (lastRun?.objectives.find((result) => result.id === objective.id)?.met ?? false)
     const tier = state.hintTiers[objective.id] ?? 0
     const hint = level.hints.find((candidate) => candidate.objectiveId === objective.id)
     const item = h(
@@ -142,7 +151,10 @@ export function renderObjectives(
       const tiers = [hint.nudge, hint.pointer.text, hint.nearAnswer]
       for (let shown = 0; shown < tier; shown++)
         item.append(h('p', { class: 'hint', textContent: tiers[shown] ?? '' }))
-      if (tier < 3 && !met) {
+      // While the objectives are still ticking, one not yet reached offers no hint: it may
+      // be about to tick.
+      const waitingToTick = judged && index >= ticked
+      if (tier < 3 && !met && !waitingToTick) {
         item.append(
           button(
             tier === 0 ? 'Hint' : 'Another hint',
@@ -191,7 +203,7 @@ export function renderObjectives(
   if (level.crowd) parts.push(...renderWeatherStation(state, judged, onFollowCrowdKite))
 
   parts.push(h('h2', { textContent: 'Stars' }))
-  const stars = judged ? lastRun?.stars : undefined
+  const stars = judged && allTicked ? lastRun?.stars : undefined
   const starRow = (earned: boolean | undefined, text: string) =>
     h(
       'li',
@@ -420,7 +432,28 @@ function renderWeatherStation(
 // Narrator
 // ---------------------------------------------------------------------------
 
-export function renderNarrator(state: GameState, onNext: () => void): HTMLElement[] {
+/**
+ * Narration text, with any `[phrase](card:id)` links drawn as links that open the
+ * fact card: the longer explanation, one click away (ADR 0011).
+ */
+function narrationText(text: string, onOpenCard: (factCardId: string) => void): HTMLElement {
+  const paragraph = h('p', null)
+  for (const segment of textSegments(text)) {
+    const cardId = segment.factCardId
+    if (cardId === undefined) paragraph.append(segment.text)
+    else
+      paragraph.append(
+        button(segment.text, () => onOpenCard(cardId), `narration-card-${cardId}`, 'inline-link'),
+      )
+  }
+  return paragraph
+}
+
+export function renderNarrator(
+  state: GameState,
+  onNext: () => void,
+  onOpenCard: (factCardId: string) => void,
+): HTMLElement[] {
   const { level, narrationIndex } = state
   const step = level.narration[narrationIndex]
   const portrait = h('div', { class: 'narrator-portrait', attrs: { 'aria-hidden': 'true' } })
@@ -432,7 +465,7 @@ export function renderNarrator(state: GameState, onNext: () => void): HTMLElemen
     h(
       'div',
       { class: 'narrator-text', attrs: { 'aria-live': 'polite' } },
-      h('p', { textContent: step.text }),
+      narrationText(step.text, onOpenCard),
       h('p', {
         class: 'step-count',
         textContent: `Step ${narrationIndex + 1} of ${level.narration.length}`,

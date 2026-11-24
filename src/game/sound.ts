@@ -2,8 +2,9 @@
 //
 // Nothing plays until `unlockAudio` is called from the player's first click,
 // because browsers block audio before an interaction. Every effect is listed in
-// assets/sounds.json; until final recordings arrive each one is synthesised from
-// the tone recipe in that file. A sound always accompanies a visual cue and is
+// assets/sounds.json. An effect with a `file` plays that recording, from
+// public/sounds/; one without is synthesised from its tone recipe, and so is any
+// recording that fails to load. A sound always accompanies a visual cue and is
 // never the only signal, so the game works fully on mute.
 
 import manifest from '../../assets/sounds.json'
@@ -29,6 +30,33 @@ let context: AudioContext | null = null
 let effectsGain: GainNode | null = null
 let musicGain: GainNode | null = null
 const playing = new Map<SoundId, number[]>() // end times of copies still sounding
+/** Final recordings, decoded once the player has unlocked audio. */
+const recordings = new Map<SoundId, AudioBuffer>()
+
+/** The recording an effect names, if any: a file name in public/sounds/. */
+function recordingFile(id: SoundId): string | null {
+  const file = (manifest.effects[id] as { file: string | null }).file
+  return typeof file === 'string' && file !== '' ? file : null
+}
+
+/** Fetches and decodes every recording the manifest names. A failure keeps the placeholder. */
+function loadRecordings(audio: AudioContext): void {
+  for (const id of Object.keys(manifest.effects) as SoundId[]) {
+    const file = recordingFile(id)
+    if (!file) continue
+    // Relative to the page, like every asset (`base: './'`): dev, build and file:// alike.
+    fetch(`sounds/${file}`)
+      .then((response) => {
+        if (!response.ok) throw new Error(`${response.status} for sounds/${file}`)
+        return response.arrayBuffer()
+      })
+      .then((bytes) => audio.decodeAudioData(bytes))
+      .then((buffer) => recordings.set(id, buffer))
+      .catch((error: unknown) => {
+        console.warn(`Sound "${id}" could not load ${file}; using its placeholder.`, error)
+      })
+  }
+}
 
 /** Call from a click handler. Safe to call more than once. */
 export function unlockAudio(): void {
@@ -40,6 +68,7 @@ export function unlockAudio(): void {
     effectsGain.connect(context.destination)
     musicGain.connect(context.destination)
     applyVolumeSettings()
+    loadRecordings(context)
     // The music placeholder is silence. When a track is supplied (assets/sounds.json),
     // decode it to an AudioBuffer and loop it through `musicGain` for a gapless loop.
   } catch {
@@ -101,11 +130,24 @@ export function playSound(id: SoundId, volume = 1): void {
   const now = context.currentTime
   const active = (playing.get(id) ?? []).filter((endTime) => endTime > now)
   const lastStart = active.length > 0 ? Math.max(...active) : -Infinity
+  const recording = recordings.get(id)
   const tones: Tone[] = manifest.effects[id].placeholder
-  const length = Math.max(...tones.map((tone) => tone.start + tone.duration))
+  const length = recording
+    ? recording.duration
+    : Math.max(...tones.map((tone) => tone.start + tone.duration))
   // Throttle: skip if too many copies are sounding or the last one only just began.
   if (active.length >= MAX_SIMULTANEOUS || now - (lastStart - length) < MIN_REPEAT_SECONDS) return
-  for (const tone of tones)
-    playTone(context, effectsGain, { ...tone, gain: tone.gain * volume }, now)
+  if (recording) {
+    const source = context.createBufferSource()
+    source.buffer = recording
+    const gain = context.createGain()
+    gain.gain.value = volume
+    source.connect(gain)
+    gain.connect(effectsGain)
+    source.start(now)
+  } else {
+    for (const tone of tones)
+      playTone(context, effectsGain, { ...tone, gain: tone.gain * volume }, now)
+  }
   playing.set(id, [...active, now + length])
 }

@@ -147,6 +147,11 @@ Select kites with `{ "intent": "legitimate" }`, `{ "intent": "hostile" }` or
 `{ "flowIds": ["green-1"] }`. Values for `by`: `route`, `nacl`, `security-group`,
 `listener`, `target-selection`, `iam`, `block-public-access`, `bucket-policy`.
 
+**Order matters.** When the kites land, the objectives tick one at a time, a second
+apart, in the order they are listed here (ADR 0011). List them in the order the player
+sees them happen, and put the level's summary objective (the lesson in one line) last,
+so it ticks last.
+
 If a level needs a statement none of these can make, add a predicate to
 `predicates.ts` with a test; do not put logic in the level file.
 
@@ -191,6 +196,12 @@ say "over here" (ADR 0008), e.g. `"pulse": ["security-group:sg-alb"]`. The secti
 `targets:<load balancer id>`, `role-statements:<role id>`, `role-wearers:<role id>` and
 `instance-role:<instance id>`. In Levels 1–3 every step that asks for a setting to
 change must have one; the level tests check it.
+
+**Linking a phrase to a fact card.** A step's text may contain
+`[phrase](card:fact-card-id)`, e.g. `something like a [bastion host](card:concept-bastion-host)`.
+The narrator shows the phrase as an underlined link that opens the card (ADR 0011). The
+validator rejects a link to a card that is not in `content/fact-cards.json`. Nothing
+else in a step is markup.
 
 **Scene steps can come back.** If the player undoes what a completed scene step asked
 for (removes the load balancer, takes away the route), the narrator returns to the

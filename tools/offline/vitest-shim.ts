@@ -12,6 +12,7 @@ type Matchers = {
   toBe(expected: unknown): void
   toEqual(expected: unknown): void
   toContain(expected: unknown): void
+  toContainEqual(expected: unknown): void
   toHaveLength(expected: number): void
   toMatch(expected: RegExp | string): void
   toBeUndefined(): void
@@ -38,6 +39,12 @@ function buildMatchers(actual: unknown, negate: boolean, message?: string): Matc
           ? actual.includes(String(expected))
           : Array.isArray(actual) && actual.some((item) => deepEqual(item, expected)),
         `to contain ${format(expected)}`,
+      ),
+    // Vitest's toContainEqual: an array item deeply equal to the expected value.
+    toContainEqual: (expected) =>
+      check(
+        Array.isArray(actual) && actual.some((item) => deepEqual(item, expected)),
+        `to contain an item equal to ${format(expected)}`,
       ),
     toHaveLength: (expected) =>
       check((actual as { length: number }).length === expected, `to have length ${expected}`),

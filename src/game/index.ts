@@ -15,5 +15,12 @@ export {
   type Point,
 } from './layout'
 export { playSound, unlockAudio, applyVolumeSettings, type SoundId } from './sound'
+export {
+  OBJECTIVE_TICK_MS,
+  RESULTS_DELAY_MS,
+  objectiveTickTimes,
+  objectivesTickedBy,
+  resultsDelay,
+} from './reveal'
 export * from './storage'
 export { CAPTION_FONT, drawCloud, drawCloudling, drawKite, drawString } from './placeholderArt'

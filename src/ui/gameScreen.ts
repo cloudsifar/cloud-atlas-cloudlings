@@ -9,9 +9,11 @@ import {
   createStore,
   layoutScene,
   placeFromPalette,
+  objectiveTickTimes,
   playSound,
   recordLevelResult,
   removeResource,
+  resultsDelay,
   type GameState,
 } from '../game'
 import {
@@ -34,9 +36,6 @@ import {
   renderTraceInspector,
   type CrowdKiteChoice,
 } from './panels'
-
-/** How long the sky plays on after the kites land before the results card appears. */
-export const RESULTS_DELAY_MS = 3000
 
 export type GameNavigation = {
   /** Opens the menu over the level, which stays as it is and can be resumed. */
@@ -70,6 +69,12 @@ export function mountGameScreen(
   let messageTimer = 0
   let resultsOpen = false
   let resultsTimer = 0
+  /**
+   * How many of the last run's objectives have ticked so far: they tick one at a time
+   * after landing (ADR 0011). Everything counts as ticked until a run lands.
+   */
+  let objectivesTicked = Number.POSITIVE_INFINITY
+  let tickTimers: number[] = []
   /** A cloud whose removal waits on the player confirming the level's warning. */
   let pendingRemoval: string | null = null
   /** A control to focus once the cards are redrawn (a redrawn card scrolls back to its top). */
@@ -266,14 +271,23 @@ export function mountGameScreen(
           playSound('card-open')
           draw()
         },
+        objectivesTicked,
       ),
     )
     redraw(
       narrator,
-      ...renderNarrator(state, () => {
-        playSound('click')
-        store.acknowledgeNarration()
-      }),
+      ...renderNarrator(
+        state,
+        () => {
+          playSound('click')
+          store.acknowledgeNarration()
+        },
+        (cardId) => {
+          factCardId = cardId
+          playSound('card-open')
+          draw()
+        },
+      ),
     )
 
     // --- floating layer: one card at a time, plus small boxes -----------------
@@ -394,27 +408,56 @@ export function mountGameScreen(
     }
   }
 
+  const clearTickTimers = (): void => {
+    for (const timer of tickTimers) window.clearTimeout(timer)
+    tickTimers = []
+  }
+
   const unsubscribe = store.subscribe(() => {
     const state = store.getState()
-    // The moment the kites land: tick objectives, and celebrate if the level is complete.
+    // The moment the kites land: tick the objectives one at a time, a second apart and in
+    // the level's order, then celebrate if the level is complete (ADR 0011).
     if (previousPhase === 'flying' && state.phase === 'landed' && state.lastRun) {
-      const metCount = state.lastRun.objectives.filter((objective) => objective.met).length
-      if (metCount > 0) playSound('objective-ticked')
-      if (state.lastRun.stars.works) {
-        recordLevelResult(level.id, state.lastRun.starCount)
-        // Give the endings time to play (rain and data reaching the Cloudlings) before
-        // the results card covers the sky (ADR 0009).
-        const run = state.lastRun
+      const run = state.lastRun
+      const stillShowing = () =>
+        store.getState().lastRun === run && store.getState().phase === 'landed'
+      clearTickTimers()
+      objectivesTicked = 0
+      objectiveTickTimes(level.objectives.length).forEach((at, index) => {
+        const objective = level.objectives[index]
+        const tick = () => {
+          if (!stillShowing()) return
+          objectivesTicked = index + 1
+          const met = run.objectives.find((result) => result.id === objective?.id)?.met ?? false
+          if (met && active) playSound('objective-ticked')
+          draw()
+        }
+        // The first objective ticks as the last ending finishes, which is the landing itself;
+        // the redraw at the end of this handler shows it.
+        if (at === 0) {
+          objectivesTicked = 1
+          if (run.objectives.find((result) => result.id === objective?.id)?.met && active)
+            playSound('objective-ticked')
+        } else tickTimers.push(window.setTimeout(tick, at))
+      })
+      if (run.stars.works) {
+        recordLevelResult(level.id, run.starCount)
+        // The results card waits for the endings to play out (rain and data reaching the
+        // Cloudlings, ADR 0009) and for every objective to tick (ADR 0011).
         window.clearTimeout(resultsTimer)
         resultsTimer = window.setTimeout(() => {
-          if (store.getState().lastRun !== run || store.getState().phase !== 'landed') return
+          if (!stillShowing()) return
           if (active) playSound('level-complete')
           resultsOpen = true
           draw()
-        }, RESULTS_DELAY_MS)
+        }, resultsDelay(level.objectives.length))
       }
     }
-    if (state.phase !== 'landed') window.clearTimeout(resultsTimer)
+    if (state.phase !== 'landed') {
+      window.clearTimeout(resultsTimer)
+      clearTickTimers()
+      objectivesTicked = Number.POSITIVE_INFINITY
+    }
     previousPhase = state.phase
     draw()
   })
@@ -443,6 +486,7 @@ export function mountGameScreen(
       window.removeEventListener('keydown', onKeyDown)
       window.clearTimeout(messageTimer)
       window.clearTimeout(resultsTimer)
+      clearTickTimers()
       sky.destroy()
     },
   }

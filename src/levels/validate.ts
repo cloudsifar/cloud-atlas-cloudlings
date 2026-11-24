@@ -12,6 +12,7 @@ import {
   type ResourceKind,
   type Scene,
 } from '../engine'
+import { textSegments } from './markup'
 import { PULSE_SECTIONS, REGION_CODES, type Level } from './schema'
 
 type JsonObject = Record<string, unknown>
@@ -261,6 +262,17 @@ export function validateLevel(value: unknown, knownFactCardIds: string[]): strin
       errors.push(`hints: objective "${objective.id}" has no hint`)
     }
   }
+  // Card links in narration must name real cards.
+  level.narration.forEach((step, index) => {
+    if (typeof step.text !== 'string') return
+    for (const segment of textSegments(step.text)) {
+      if (segment.factCardId !== undefined && !knownFactCardIds.includes(segment.factCardId))
+        errors.push(
+          `narration[${index}].text: links to a fact card "${segment.factCardId}" that does not exist`,
+        )
+    }
+  })
+
   level.factCards.forEach((id, index) => {
     if (!knownFactCardIds.includes(id))
       errors.push(`factCards[${index}]: there is no fact card "${id}"`)

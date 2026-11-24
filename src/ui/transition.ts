@@ -7,7 +7,7 @@
 // the block), animated together with a CSS blur. It applies to the game layer only, so
 // the title above it stays crisp. With reduced motion the title simply appears and goes.
 
-import { prefersReducedMotion } from '../game'
+import { playSound, prefersReducedMotion } from '../game'
 import type { Level } from '../levels'
 import { h } from './dom'
 
@@ -127,7 +127,11 @@ export async function playLevelChange(
   stage.append(intro)
   try {
     const still = prefersReducedMotion()
-    if (dissolve && !still) await animate(DISSOLVE_MS, (t) => setDissolve(target, easeIn(t)))
+    if (dissolve && !still) {
+      // Its own sound, as long as the dissolve: `level-dissolve` in assets/sounds.json.
+      playSound('level-dissolve')
+      await animate(DISSOLVE_MS, (t) => setDissolve(target, easeIn(t)))
+    }
     if (!still) setDissolve(target, 1)
     swap()
     intro.classList.add('visible')

@@ -183,6 +183,23 @@ describe('validateLevel', () => {
     expect(errors[0]).toMatch('narration[0].pulse')
   })
 
+  it('rejects a narration link to a fact card that does not exist', () => {
+    const errors = broken((level) => {
+      const steps = level.narration as { text: string }[]
+      if (steps[0]) steps[0].text = 'Read about [bastion hosts](card:no-such-card) first.'
+    })
+    expect(errors[0]).toMatch('narration[0].text')
+    expect(errors[0]).toMatch('no-such-card')
+  })
+
+  it('accepts a narration link to a fact card that exists', () => {
+    const errors = broken((level) => {
+      const steps = level.narration as { text: string }[]
+      if (steps[0]) steps[0].text = 'Read about [bastion hosts](card:concept-bastion-host) first.'
+    })
+    expect(errors).toEqual([])
+  })
+
   it('rejects a Cloudling with nothing to say', () => {
     const errors = broken((level) => {
       const kites = level.population as { says: string }[]

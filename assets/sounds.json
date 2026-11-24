@@ -1,5 +1,5 @@
 {
-  "note": "Maps each sound id to its file. `file: null` means the game synthesises a placeholder from `placeholder` (a list of tones played together). To swap in a final sound: add the file under assets/final/sounds/, set `file`. Tone fields: wave (sine|triangle|square|sawtooth|noise), from/to (Hz, glides between them), start/duration (seconds), gain (0-1).",
+  "note": "Maps each sound id to its file. `file: null` means the game synthesises a placeholder from `placeholder` (a list of tones played together). To swap in a final sound: put the file in public/sounds/ and set `file` to its name, e.g. \"level-dissolve.ogg\" (Ogg, MP3 or WAV); if it fails to load, the placeholder plays instead. `level-dissolve` plays as the screen dissolves between levels and should last 2.0 seconds. Tone fields: wave (sine|triangle|square|sawtooth|noise), from/to (Hz, glides between them), start/duration (seconds), gain (0-1).",
   "music": {
     "file": null
   },
@@ -486,6 +486,75 @@
           "start": 0.2,
           "duration": 0.5,
           "gain": 0.18
+        }
+      ]
+    },
+    "level-dissolve": {
+      "file": null,
+      "placeholder": [
+        {
+          "wave": "square",
+          "from": 880,
+          "to": 827,
+          "start": 0.0,
+          "duration": 0.16,
+          "gain": 0.07
+        },
+        {
+          "wave": "square",
+          "from": 784,
+          "to": 737,
+          "start": 0.25,
+          "duration": 0.16,
+          "gain": 0.07
+        },
+        {
+          "wave": "square",
+          "from": 698,
+          "to": 656,
+          "start": 0.5,
+          "duration": 0.16,
+          "gain": 0.07
+        },
+        {
+          "wave": "square",
+          "from": 622,
+          "to": 585,
+          "start": 0.75,
+          "duration": 0.16,
+          "gain": 0.07
+        },
+        {
+          "wave": "square",
+          "from": 554,
+          "to": 521,
+          "start": 1.0,
+          "duration": 0.16,
+          "gain": 0.07
+        },
+        {
+          "wave": "square",
+          "from": 494,
+          "to": 464,
+          "start": 1.25,
+          "duration": 0.16,
+          "gain": 0.07
+        },
+        {
+          "wave": "square",
+          "from": 440,
+          "to": 414,
+          "start": 1.5,
+          "duration": 0.16,
+          "gain": 0.07
+        },
+        {
+          "wave": "square",
+          "from": 392,
+          "to": 368,
+          "start": 1.75,
+          "duration": 0.25,
+          "gain": 0.07
         }
       ]
     }

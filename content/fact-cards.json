@@ -173,5 +173,20 @@
       "One listener per load balancer, with no listener rules."
     ],
     "atlasPage": "TODO(Simon)"
+  },
+  "concept-bastion-host": {
+    "title": "Bastion host",
+    "body": "A bastion host, or jump box, is the traditional way for people to reach EC2 instances that have no public address. It is a small EC2 instance in a public subnet. An administrator connects to it first, usually with SSH on port 22, and from there connects on to the EC2 instance in the private subnet.",
+    "points": [
+      "The bastion's security group allows SSH only from known addresses, such as an office's range, never from Anywhere.",
+      "The private EC2 instances allow SSH only from the bastion's security group: the same chaining as the load balancer and the application servers.",
+      "Each hop needs credentials, usually an SSH key pair. An attacker would need the bastion's address and those keys; the red Cloudling has neither.",
+      "A bastion is a target in its own right, so it has to be patched, watched and kept small.",
+      "AWS also offers a way to do without one: Systems Manager Session Manager needs no open inbound ports, no bastion host and no SSH keys. Access is controlled with IAM, and sessions can be logged."
+    ],
+    "simplifications": [
+      "There is no bastion host in these levels: nothing here needs anyone to log in to an EC2 instance."
+    ],
+    "atlasPage": "TODO(Simon)"
   }
 }

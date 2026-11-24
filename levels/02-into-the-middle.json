@@ -24,7 +24,7 @@
     },
     {
       "id": "explain",
-      "text": "The red kite could not aim at an EC2 instance at all: an instance in a private subnet has only a private address, and nothing on the internet can route to one. Getting in some other way would need something like a bastion host and its credentials, and he has neither. So he tried the one public door, the load balancer, on SSH port 22. Its security group, alb-sg, allows only HTTPS 443, so it turned him away. But the green kites failed too: the load balancer has no targets yet.",
+      "text": "The red kite could not aim at an EC2 instance at all: an instance in a private subnet has only a private address, and nothing on the internet can route to one. Getting in some other way would need something like a [bastion host](card:concept-bastion-host) and its credentials, and he has neither. So he tried the one public door, the load balancer, on SSH port 22. Its security group, alb-sg, allows only HTTPS 443, so it turned him away. But the green kites failed too: the load balancer has no targets yet.",
       "advanceWhen": {
         "kind": "acknowledged"
       }

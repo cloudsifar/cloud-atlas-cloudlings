@@ -129,6 +129,22 @@ button.primary {
 button.quiet {
   background: transparent;
 }
+/* A phrase in the narration that opens a fact card: blue and underlined, in the line. */
+button.inline-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: #1f5fb0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+button.inline-link:hover {
+  color: #133f78;
+}
+
 button.link {
   border: none;
   background: none;
@@ -357,6 +373,9 @@ canvas.sky {
 .narrator-text {
   flex: 1;
   font-size: 13.5px;
+  /* A long step scrolls inside the box rather than running off the bottom of the window. */
+  max-height: 100%;
+  overflow-y: auto;
 }
 .narrator-text p {
   margin: 0;
