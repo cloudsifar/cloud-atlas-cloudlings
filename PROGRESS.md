@@ -68,10 +68,10 @@ Running log. Newest state first; updated at the end of every milestone.
 ## Not verified — do these first
 
 1. **Vitest, the Vite build and lint on Windows, on everything since 18 November**
-   (ADRs 0007–0012). In that time the suite has run only on the offline runner
-   (266 tests), and ESLint, Prettier and the project `tsc` were run against the
+   (ADRs 0007–0013). In that time the suite has run only on the offline runner
+   (267 tests), and ESLint, Prettier and the project `tsc` were run against the
    installed packages from the cloud sandbox. On Windows, after `git pull`:
-   `npm ci --ignore-scripts`, then `npm test` (expect 19 test files and **266 passed**),
+   `npm ci --ignore-scripts`, then `npm test` (expect 19 test files and **267 passed**),
    `npm run build` (writes `dist/`, including `dist/sounds/README.md`) and
    `npm run lint`. Read each output, not only the exit code.
 2. **Level 5 played by a person** (ADR 0012): whether the pace, the fleet, the dial and
@@ -172,6 +172,9 @@ goes in the engine as a predicate with a test.
 - A group that is not a load balancer target gets no kites and never scales; its card,
   its caption and the weather station all say so. This was why Simon always saw 226 of
   552 delivered.
+- Every kite flies on a long string up to the load balancer (ADR 0013): attached while
+  it has room, knocked loose and lying on the ground while it has none, attached again
+  when there is room.
 - The fleet is drawn instance by instance, half in each Availability Zone, launching ones
   dashed, removed ones fading. CloudWatch stands at the bottom right with a larger dial
   that moves smoothly and marks the target, a bell, and a readout. The side panel shows
@@ -310,3 +313,8 @@ None found so far. Two places where the brief's wording was made more exact:
   moves smoothly and the side panel shows its live log. The third star is "sized to
   demand", and narration is guided. ADR 0012. 266 tests pass offline; played headlessly
   unsolved, unattached and solved.
+- **Session 3, continued: kites reach the load balancer.** At Simon's request every crowd
+  kite now flies on a long string up to the load balancer: attached means answered;
+  knocked loose and fallen means no room, as kites behave in the other levels. Simon's
+  own Level 4 summary edit was pulled in first. ADR 0013. 267 tests pass offline; played
+  headlessly, unsolved and solved, with no console errors.

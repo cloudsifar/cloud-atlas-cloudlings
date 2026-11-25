@@ -9,7 +9,10 @@
 //
 // The pace is deliberately slow (ADR 0012): a minute lasts 1.25 s on screen, and the
 // level's groups arrive four minutes (5 s) apart. Each Cloudling keeps one kite up for
-// as long as it stays. New arrivals walk on over the two minutes before they count;
+// as long as it stays, on a long string all the way to the load balancer, as kites
+// reach their cloud in every other level (ADR 0013). A kite with room stays attached;
+// a kite with no room is knocked loose and falls to the ground, and rises again when
+// there is room. New arrivals walk on and send their kites up before they count;
 // leavers reel their kites in and walk off.
 
 import { failingStep, LAUNCH_TICKS, type CrowdRecord, type Scene, type TickRecord } from '../engine'
@@ -21,8 +24,12 @@ import type { SoundId } from './sound'
 export const TICK_DURATION = 1250
 /** A pause after the last minute, so the final state can be seen before the run ends. */
 const SETTLE_DURATION = 1500
-/** Minutes a newcomer spends walking on before it counts, and a leaver walking off. */
+/** Minutes a newcomer spends walking on and sending its kite up before it counts. */
 export const WALK_TICKS = 2
+/** Minutes a kite takes to float from its Cloudling's hand up to the load balancer, or to be reeled in. */
+export const RISE_TICKS = 0.6
+/** Share of a minute a kite takes to fall when it is knocked loose, or to rise again. */
+export const FALL = 0.5
 /** Within a minute: kites rise or sag, and the dial's needle moves, until this fraction. */
 export const SETTLE = 0.35
 /**
@@ -122,9 +129,9 @@ export type MemberView = {
   feet: Point
   /** Walking on or off: its kite is in its hand. */
   walking: boolean
-  /** 0 = kite in hand, 1 = kite flying at its height. */
+  /** 0 = kite in hand, 1 = kite up at the load balancer. */
   aloft: number
-  /** 0 = flying, 1 = slack on the ground: a kite with no room sags. */
+  /** 0 = attached at the load balancer, 1 = fallen to the ground: a kite with no room falls. */
   sag: number
   /** The fate of its kite this minute, or null while it walks. */
   fate: CrowdFate | null
@@ -151,10 +158,16 @@ export function memberVisits(
 }
 
 /**
- * What one crowd member is doing at `time`, or null if it is not on the field. Members
- * there from the first minute are already standing at their places; later ones walk in
- * from the nearer edge of the field over the WALK_TICKS minutes before they count, each
- * a little after the one before, and leavers reel in their kites and walk back out.
+ * What one crowd member is doing at `time`, or null if it is not on the field.
+ *
+ * - The regulars are at their places from the start; their kites float up to the load
+ *   balancer during the first minute.
+ * - A newcomer walks in from the nearer edge, each a little after the one before, then
+ *   sends its kite up, so the kite reaches the load balancer just as the minute it
+ *   counts begins.
+ * - On each minute a kite takes that minute's fate: with room it stays attached; with no
+ *   room it falls to the ground beside its Cloudling; when room comes back it rises again.
+ * - A leaver reels its kite in, then walks back out, fading.
  */
 export function memberViewAt(
   record: CrowdRecord,
@@ -165,19 +178,22 @@ export function memberViewAt(
   const minute = time / TICK_DURATION
   const index = Math.min(record.ticks.length - 1, Math.max(0, Math.floor(minute)))
   const progress = minute - index
+  const finished = time >= record.ticks.length * TICK_DURATION
   const edgeX = spot.x < (SKY.left + SKY.right) / 2 ? SKY.left - 24 : SKY.right + 24
-  const stagger = ((member * 7) % 5) * 0.12
+  const stagger = ((member * 7) % 5) * 0.08
   const walkTo = (from: number, to: number, amount: number): Point => ({
     x: from + (to - from) * ease(amount),
     y: spot.y,
   })
+  const sagOf = (fate: CrowdFate | null) => (fate === null || fate === 'delivered' ? 0 : 1)
 
   for (const visit of memberVisits(record, member)) {
-    // Walking on, before the minute it arrives.
     if (visit.arrive > 0) {
+      // Walking on, kite in hand…
       const start = Math.max(0, visit.arrive - WALK_TICKS + stagger)
-      if (minute >= start && minute < visit.arrive) {
-        const amount = (minute - start) / (visit.arrive - start)
+      const sendUp = visit.arrive - RISE_TICKS
+      if (minute >= start && minute < sendUp) {
+        const amount = (minute - start) / (sendUp - start)
         return {
           feet: walkTo(edgeX, spot.x, amount),
           walking: true,
@@ -187,41 +203,62 @@ export function memberViewAt(
           opacity: ease(amount / 0.5),
         }
       }
+      // …then, standing at its place, sending the kite up to the load balancer.
+      if (minute >= sendUp && minute < visit.arrive) {
+        return {
+          feet: spot,
+          walking: false,
+          aloft: ease((minute - sendUp) / RISE_TICKS),
+          sag: 0,
+          fate: null,
+          opacity: 1,
+        }
+      }
     }
-    // Walking off: kite reeled in during the first part of the minute it leaves.
+    // Leaving: the kite is reeled in from wherever it is, then the Cloudling walks off.
     if (visit.leave !== null && minute >= visit.leave) {
       const away = minute - visit.leave
-      if (away >= WALK_TICKS) continue
-      // Kites are reeled in first, then each leaver sets off a little after the last,
-      // fading as it goes so the leavers never pile up at the edge.
-      const reel = Math.min(1, away / SETTLE)
-      const setOff = SETTLE + stagger
-      const amount = Math.max(0, (away - setOff) / (WALK_TICKS - setOff))
+      const walkStart = RISE_TICKS + stagger
+      const walkEnd = WALK_TICKS + RISE_TICKS
+      if (away >= walkEnd) continue
+      const reel = ease(away / RISE_TICKS)
+      const last = record.ticks[visit.leave - 1]
+      const lastSag = last ? sagOf(fateOf(member, last)) : 0
+      const amount = Math.max(0, (away - walkStart) / (walkEnd - walkStart))
       return {
         feet: walkTo(spot.x, edgeX, amount),
         walking: amount > 0,
-        aloft: 1 - ease(reel),
-        sag: 0,
+        aloft: 1 - reel,
+        sag: lastSag * (1 - reel),
         fate: null,
         opacity: 1 - ease((amount - 0.3) / 0.6),
       }
     }
-    // Standing at its place, kite up.
+    // Standing at its place with its kite up.
     if (minute >= visit.arrive && (visit.leave === null || minute < visit.leave)) {
       const tick = record.ticks[index]!
-      const previous = index > 0 ? record.ticks[index - 1]! : null
       const fate = fateOf(member, tick) ?? 'delivered'
-      const sagNow = fate === 'delivered' ? 0 : 1
-      const finished = time >= record.ticks.length * TICK_DURATION
-      const justArrived = index === visit.arrive && visit.arrive > 0 && !finished
-      const before = previous ? fateOf(member, previous) : null
-      const sagBefore = justArrived || before === null ? 0 : before === 'delivered' ? 0 : 1
-      const settle = finished ? 1 : ease(progress / SETTLE)
+      // The regulars' kites go up during the first minute; their fate shows once they arrive.
+      if (visit.arrive === 0 && index === 0 && !finished && progress < RISE_TICKS) {
+        return {
+          feet: spot,
+          walking: false,
+          aloft: ease(progress / RISE_TICKS),
+          sag: 0,
+          fate,
+          opacity: 1,
+        }
+      }
+      const previous = index > visit.arrive ? record.ticks[index - 1]! : null
+      // A kite that has just reached the load balancer starts out attached.
+      const sagBefore = previous ? sagOf(fateOf(member, previous)) : 0
+      const settleFrom = visit.arrive === 0 && index === 0 ? RISE_TICKS : 0
+      const settle = finished ? 1 : ease((progress - settleFrom) / FALL)
       return {
         feet: spot,
         walking: false,
-        aloft: justArrived ? settle : 1,
-        sag: sagBefore + (sagNow - sagBefore) * settle,
+        aloft: 1,
+        sag: sagBefore + (sagOf(fate) - sagBefore) * settle,
         fate,
         opacity: 1,
       }

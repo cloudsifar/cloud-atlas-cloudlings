@@ -19,6 +19,7 @@ import {
   memberViewAt,
   memberVisits,
   membersTimedOut,
+  RISE_TICKS,
   TICK_DURATION,
   WALK_TICKS,
 } from '../../src/game/crowdPlayback'
@@ -57,24 +58,57 @@ describe('one Cloudling in the crowd', () => {
     expect(visits).toEqual([{ arrive: 2, leave: 22 }])
   })
 
-  it('walks on with its kite in hand before it counts, then flies its kite', () => {
+  it('walks on with its kite in hand, then sends it up to the load balancer before it counts', () => {
     const walking = memberViewAt(solved, 4, spot, at(2 - WALK_TICKS / 2))
     expect(walking?.walking).toBe(true)
     expect(walking?.aloft).toBe(0)
     expect(walking?.feet.x).not.toBe(spot.x)
+    // Standing at its place, its kite on the way up.
+    const sending = memberViewAt(solved, 4, spot, at(2 - RISE_TICKS / 2))
+    expect(sending?.feet).toEqual(spot)
+    expect(sending!.aloft > 0 && sending!.aloft < 1).toBe(true)
+    // Its kite reaches the load balancer as the minute it counts begins, and stays attached.
     const standing = memberViewAt(solved, 4, spot, at(3))
-    expect(standing?.feet).toEqual(spot)
     expect(standing?.aloft).toBe(1)
+    expect(standing?.sag).toBe(0)
     expect(standing?.fate).toBe('delivered')
   })
 
-  it('is not on the field before it sets off, nor after it has walked away', () => {
+  it('is not on the field before it sets off, nor after it has reeled in and walked away', () => {
     expect(memberViewAt(solved, 4, spot, at(0))).toBeNull()
-    expect(memberViewAt(solved, 4, spot, at(22 + WALK_TICKS + 0.1))).toBeNull()
+    const reeling = memberViewAt(solved, 4, spot, at(22 + RISE_TICKS / 2))
+    expect(reeling!.aloft > 0 && reeling!.aloft < 1).toBe(true)
+    expect(reeling?.feet).toEqual(spot)
+    expect(memberViewAt(solved, 4, spot, at(22 + WALK_TICKS + RISE_TICKS + 0.1))).toBeNull()
   })
 
-  it('a regular is there from the start, already flying', () => {
-    expect(memberViewAt(solved, 0, spot, 0)?.aloft).toBe(1)
+  it('a regular is there from the start, and its kite floats up during the first minute', () => {
+    expect(memberViewAt(solved, 0, spot, 0)?.aloft).toBe(0)
+    expect(memberViewAt(solved, 0, spot, at(0, RISE_TICKS / 2))?.aloft).toBeGreaterThan(0)
+    expect(memberViewAt(solved, 0, spot, at(1))?.aloft).toBe(1)
+  })
+
+  it('a kite knocked loose falls, lies on the ground while there is no room, and rises when there is', () => {
+    // A 60% target: at minute 6, 19 Cloudlings find room for 15, until more instances
+    // serve from minute 8. Find a kite that has no room at minute 6.
+    const scene = structuredClone(level.referenceSolution)
+    for (const resource of scene.resources)
+      if (resource.kind === 'auto-scaling-group') resource.scaling = { targetCpuPercent: 60 }
+    const record = runLevel(level, scene).crowd!
+    expect(record.ticks[6]?.dropped).toBeGreaterThan(0)
+    expect(record.ticks[8]?.dropped).toBe(0)
+    const member = Array.from({ length: 19 }, (_, index) => index).find(
+      (index) => memberViewAt(record, index, spot, at(6, 0.6))?.fate === 'timed-out',
+    )!
+    // It reached the load balancer, then fell…
+    expect(memberViewAt(record, member, spot, at(6, 0.01))!.sag).toBeLessThan(0.1)
+    expect(memberViewAt(record, member, spot, at(6, 0.6))?.sag).toBe(1)
+    // …lay on the ground while there was no room…
+    expect(memberViewAt(record, member, spot, at(7, 0.6))?.sag).toBe(1)
+    // …and rose to attach again once new instances were serving.
+    const rising = memberViewAt(record, member, spot, at(8, 0.2))!.sag
+    expect(rising > 0 && rising < 1).toBe(true)
+    expect(memberViewAt(record, member, spot, at(8, 0.6))?.sag).toBe(0)
   })
 
   it('a kite with no room sags; with room it flies', () => {

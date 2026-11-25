@@ -1054,21 +1054,46 @@ function drawKiteAndCloudling(
 // ---------------------------------------------------------------------------
 
 /**
- * A crowd run, one minute at a time (ADR 0012). Each Cloudling keeps one kite up while
- * it stays: kites with room fly steadily and rain data back on their Cloudlings now and
- * then; kites with no room sag to the ground and their Cloudlings droop. Newcomers walk
- * on with their kites in hand; leavers reel theirs in and walk off. Who gets which fate
- * comes from the engine's counts (crowdPlayback.ts); nothing is decided here.
+ * A crowd run, one minute at a time (ADRs 0012 and 0013). Each Cloudling keeps one kite
+ * up while it stays, on a long string all the way to the load balancer, as kites reach
+ * their cloud in every other level. A kite with room stays attached there, and data
+ * rains back on its Cloudling now and then. A kite with no room is knocked loose, falls
+ * to the ground beside its Cloudling and lies there until there is room, then rises and
+ * attaches again; its Cloudling droops meanwhile. Newcomers walk on and send their kites
+ * up; leavers reel theirs in and walk off. Who gets which fate comes from the engine's
+ * counts (crowdPlayback.ts); nothing is decided here.
  */
 function drawCrowd(context: CanvasRenderingContext2D, model: SkyViewModel, costume: string): void {
   const record = model.crowd
-  if (!record) return
+  const crowd = model.level.crowd
+  if (!record || !crowd) return
   const spots = crowdSpots(model.level.population)
   const biggest = Math.max(0, ...record.ticks.map((tick) => tick.demand))
   const lerp = (from: Point, to: Point, amount: number): Point => ({
     x: from.x + (to.x - from.x) * amount,
     y: from.y + (to.y - from.y) * amount,
   })
+  // Where the kites go up to: the underside of the load balancer, or, if the crowd is
+  // stopped before it, the place it is stopped.
+  const frame = crowdFrameAt(record, model.runTime)
+  const balancer = model.layout.clouds[crowd.loadBalancerId]
+  const stream = frame
+    ? crowdStream(frame.tick, model.scene, model.layout, { x: 558, y: SKY.groundY - 102 })
+    : null
+  const attachTo = (member: number): Point => {
+    // Spread the kites out so they overlap as little as they can: two staggered rows.
+    const across = (member * 0.618034) % 1
+    const row = member % 2
+    if (stream?.stoppedAt || !balancer) {
+      const at = stream?.stoppedAt ?? { x: 558, y: SKY.groundY - 160 }
+      return { x: at.x - 60 + across * 120, y: at.y + 14 + row * 12 }
+    }
+    // Tucked into the cloud's underside, clear of its name below.
+    return {
+      x: balancer.x + 14 + across * (balancer.width - 28),
+      y: balancer.y + balancer.height - 22 + row * 10,
+    }
+  }
   const members = Array.from({ length: Math.min(biggest, spots.length) }, (_, member) => member)
     .map((member) => ({
       member,
@@ -1078,40 +1103,51 @@ function drawCrowd(context: CanvasRenderingContext2D, model: SkyViewModel, costu
     // The back row first, so the front row stands in front of it.
     .sort((first, second) => first.view!.feet.y - second.view!.feet.y)
 
-  for (const { member, view } of members) {
-    if (!view) continue
-    const { feet } = view
+  // Each Cloudling and its string, back row first; then every kite on top, so no string
+  // or Cloudling hides a kite.
+  const placed = members.map(({ member, view }) => {
+    const feet = view!.feet
+    const inHand = { x: feet.x + 12, y: feet.y - 30 }
+    const sway = model.reducedMotion ? 0 : Math.sin(model.time / 900 + member) * 1.5
+    const attached = attachTo(member)
+    const up = { x: attached.x + sway, y: attached.y }
+    const fallen = { x: feet.x + 24, y: feet.y - 6 }
+    const at = lerp(lerp(inHand, up, view!.aloft), fallen, view!.sag)
+    return { member, view: view!, at }
+  })
+  for (const { member, view, at } of placed) {
     context.save()
     context.globalAlpha = view.opacity
     const mood: Mood = view.sag > 0.5 ? 'droop' : 'idle'
-    const hand = drawCloudling(context, feet.x, feet.y, false, mood, costume, model.time)
-    const bob = model.reducedMotion ? 0 : Math.sin(model.time / 700 + member) * 2
-    const inHand = { x: feet.x + 12, y: feet.y - 30 }
-    const flying = { x: feet.x + 16, y: feet.y - 78 + bob }
-    const slack = { x: feet.x + 24, y: feet.y - 8 }
-    const at = lerp(lerp(inHand, flying, view.aloft), slack, view.sag)
-    drawString(context, hand, at, 0.2 + view.sag * 0.6, model.time)
-    drawKite(context, at.x, at.y, false, 'flying', model.reducedMotion ? 0 : model.time, 0.6)
-    // Answered kites rain data back on their Cloudlings now and then, each in its turn.
+    const hand = drawCloudling(context, view.feet.x, view.feet.y, false, mood, costume, model.time)
+    // A long string, taut while the kite is attached, slack once it has fallen.
+    drawString(context, hand, at, view.sag * 0.6, model.reducedMotion ? 0 : model.time)
+    // Attached kites rain data back on their Cloudlings now and then, each in its turn.
     if (view.fate === 'delivered' && view.aloft >= 1 && view.sag < 0.05 && !model.reducedMotion) {
       const phase = (model.runTime + member * 431) % 3200
       if (phase < 900)
         drawRain(
           context,
-          { x: feet.x + 6, y: feet.y - 62 + (phase / 900) * 18 },
+          { x: view.feet.x + 6, y: view.feet.y - 62 + (phase / 900) * 18 },
           model.time,
           1 - phase / 900,
         )
     }
     context.restore()
   }
+  for (const { view, at } of placed) {
+    context.save()
+    context.globalAlpha = view.opacity
+    drawKite(context, at.x, at.y, false, 'flying', model.reducedMotion ? 0 : model.time, 0.6)
+    context.restore()
+  }
 }
 
 /**
- * The crowd's kites on their way in: dots climbing from the crowd through the gateway
- * to the load balancer, then on to each cloud serving kites, in proportion to its room.
- * The dots show where the kites go, so a fleet nobody sends kites to gets none. Where
- * there is no room, a note at the load balancer says how many timed out.
+ * Where the load balancer sends the crowd's kites on to: dots from it to each cloud
+ * serving kites, in proportion to its room, so a fleet nobody sends kites to gets none.
+ * (The kites' own strings show the way up to it.) Where there is no room, a note at
+ * the load balancer says how many timed out; where the crowd is stopped, a note says where.
  */
 function drawCrowdStream(
   context: CanvasRenderingContext2D,
@@ -1140,7 +1176,7 @@ function drawCrowdStream(
     context.restore()
   }
   const tick = frame.tick
-  dots(stream.trunk, Math.min(18, Math.max(2, Math.round(tick.demand / 2))), '#2f6fb3')
+  // The kites' strings show the way up to the load balancer; dots show where it sends them on.
   const hub = stream.trunk.at(-1)
   if (hub) {
     for (const branch of stream.branches) {
@@ -1155,7 +1191,7 @@ function drawCrowdStream(
         context,
         `no room for ${tick.dropped} kite${tick.dropped === 1 ? '' : 's'}`,
         hub.x + 96,
-        hub.y + 30,
+        hub.y - 6,
         12,
         'left',
         '#9b2c22',

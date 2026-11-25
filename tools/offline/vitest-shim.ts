@@ -20,6 +20,7 @@ type Matchers = {
   toBeDefined(): void
   toBeGreaterThan(expected: number): void
   toBeGreaterThanOrEqual(expected: number): void
+  toBeLessThan(expected: number): void
   toMatchObject(expected: Record<string, unknown>): void
   toThrow(expected?: RegExp | string): void
 }
@@ -63,6 +64,7 @@ function buildMatchers(actual: unknown, negate: boolean, message?: string): Matc
     toBeGreaterThan: (expected) => check((actual as number) > expected, `to be > ${expected}`),
     toBeGreaterThanOrEqual: (expected) =>
       check((actual as number) >= expected, `to be >= ${expected}`),
+    toBeLessThan: (expected) => check((actual as number) < expected, `to be < ${expected}`),
     // Vitest's toMatchObject: every property named in `expected` is deeply equal in `actual`.
     toMatchObject: (expected) =>
       check(matchesObject(actual, expected), `to match object ${format(expected)}`),
