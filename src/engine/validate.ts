@@ -198,6 +198,31 @@ export function validateScene(scene: Scene): SceneProblem[] {
           }
         }
         break
+      case 'rds-database': {
+        requireGroups(resource.securityGroupIds)
+        const subnets = scene.subnets.filter((subnet) => resource.subnetIds.includes(subnet.id))
+        if (subnets.length !== resource.subnetIds.length) {
+          broken(resource.id, `"${resource.name}" names a subnet that does not exist.`)
+        }
+        // AWS behaviour modelled: a DB subnet group must cover at least two Availability
+        // Zones, even for a single-AZ database, and RDS lives in private subnets.
+        if (new Set(subnets.map((subnet) => subnet.availabilityZone)).size < 2) {
+          misconfigured(
+            resource.id,
+            `The DB subnet group of "${resource.name}" needs subnets in at least two Availability Zones.`,
+          )
+        }
+        if (subnets.some((subnet) => subnet.band !== 'mid' || isPublicSubnet(scene, subnet))) {
+          misconfigured(resource.id, `"${resource.name}" must be in private subnets only.`)
+        }
+        if (!resource.subnetIds.includes(resource.primarySubnetId)) {
+          broken(
+            resource.id,
+            `The primary of "${resource.name}" must run in a subnet of its DB subnet group.`,
+          )
+        }
+        break
+      }
       case 'internet-gateway':
         break
     }

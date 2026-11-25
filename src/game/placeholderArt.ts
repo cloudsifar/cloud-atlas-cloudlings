@@ -61,6 +61,19 @@ const SILHOUETTES: Record<Exclude<CloudGenus, 'cirrus'>, Ellipse[][]> = {
     ],
     [[0.78, 0.72, 0.16, 0.19]],
   ],
+  // Flat, layered and steady: structured, persistent data. Two long, low sheets.
+  altostratus: [
+    [
+      [0.5, 0.34, 0.47, 0.2],
+      [0.24, 0.3, 0.2, 0.22],
+      [0.72, 0.28, 0.24, 0.2],
+    ],
+    [
+      [0.5, 0.72, 0.48, 0.2],
+      [0.3, 0.7, 0.24, 0.22],
+      [0.76, 0.74, 0.2, 0.2],
+    ],
+  ],
   // Enormous and vertical: a tower with an anvil top.
   cumulonimbus: [
     [

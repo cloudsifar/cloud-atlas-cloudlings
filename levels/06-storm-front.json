@@ -1,0 +1,599 @@
+{
+  "id": 6,
+  "slug": "storm-front",
+  "title": "Storm Front",
+  "concept": "Surviving the loss of an Availability Zone: a fleet across two zones, a Multi-AZ RDS database that fails over to its standby, and a database security group that names the application tier rather than one zone's addresses.",
+  "guidance": "hints",
+  "region": "eu-central-1",
+  "azs": 2,
+  "lockedIds": ["igw", "alb", "rt-public", "rt-private", "nacl-default", "sg-alb"],
+  "palette": [],
+  "removableIds": [],
+  "narration": [
+    {
+      "id": "brief",
+      "text": "Storm Front. Eight Cloudlings are looking up their orders: each kite goes through the load balancer to the web fleet, which reads from the orders database. The fleet and the database both live only in Availability Zone a, the left-hand column. Part-way through the day, AZ a will fail. Take your time: click the clouds and read their cards, then press \"Fly kites\" and watch what the storm does.",
+      "highlight": "button:fly",
+      "advanceWhen": {
+        "kind": "run-finished"
+      }
+    },
+    {
+      "id": "what-happened",
+      "text": "When AZ a failed, everything in it went down: the fleet's two instances, and the only copy of the database. The load balancer had nothing healthy to send kites to, and the fleet had nowhere else to launch. Three changes let the application ride out a storm like this, and the next steps take them one at a time.",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    },
+    {
+      "id": "spread",
+      "text": "First, the web fleet. Click it and tick Private subnet B as well, so it runs instances in both Availability Zones. Then, if AZ a fails, the load balancer still has instances in AZ b, and the group can launch replacements there.",
+      "highlight": "resource:asg",
+      "pulse": ["group-subnets:asg"],
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "group-spans-zones",
+          "groupId": "asg",
+          "zones": 2
+        }
+      }
+    },
+    {
+      "id": "multi-az",
+      "text": "Next, the database. Click it and switch on Multi-AZ. RDS then keeps a standby copy in AZ b, updated with every write, ready to take over if AZ a fails.",
+      "highlight": "resource:db",
+      "pulse": ["database-multi-az:db"],
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "database-multi-az",
+          "databaseId": "db"
+        }
+      }
+    },
+    {
+      "id": "chain",
+      "text": "One more trap, and it is easy to miss. The database's security group, rds-db-sg, allows MySQL 3306 only from 10.0.11.0/24, which is Private subnet A's address range. Instances in AZ b would be turned away. Chain it instead: allow MySQL 3306 from the app tier's security group, ec2-app-sg, and remove the address-range rule.",
+      "highlight": "resource:db",
+      "pulse": ["security-group:sg-db"],
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "security-group-allows-group",
+          "securityGroupId": "sg-db",
+          "ports": "mysql",
+          "fromSecurityGroupId": "sg-app"
+        }
+      }
+    },
+    {
+      "id": "second-run",
+      "text": "Fly the kites again. Watch the lightning over AZ a, the database fail over to its standby in AZ b, and the fleet carry on from AZ b. CloudWatch's log on the right says what happens, minute by minute.",
+      "highlight": "button:fly",
+      "advanceWhen": {
+        "kind": "run-finished"
+      }
+    },
+    {
+      "id": "wrap",
+      "text": "The storm took AZ a and the application stayed up: the fleet carried on from AZ b, the database failed over to its standby, and the database still knew the app tier by its security group. Kites failed while the failover ran, a minute or two that no architecture avoids. If some failed after it too, AZ b had too little room on its own until replacements arrived: that is the third star.",
+      "advanceWhen": {
+        "kind": "level-complete"
+      }
+    }
+  ],
+  "initialScene": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": []
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "ec2-app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-db",
+        "name": "rds-db-sg",
+        "inbound": [
+          {
+            "ports": "mysql",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "10.0.11.0/24"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "https",
+        "targetIds": ["asg"]
+      },
+      {
+        "kind": "auto-scaling-group",
+        "id": "asg",
+        "name": "web fleet",
+        "subnetIds": ["private-a"],
+        "securityGroupIds": ["sg-app"],
+        "roleId": null,
+        "size": "small",
+        "min": 2,
+        "desired": 2,
+        "max": 4,
+        "scaling": null
+      },
+      {
+        "kind": "rds-database",
+        "id": "db",
+        "name": "orders database",
+        "engine": "mysql",
+        "subnetIds": ["private-a", "private-b"],
+        "securityGroupIds": ["sg-db"],
+        "primarySubnetId": "private-a",
+        "multiAz": false,
+        "status": "available"
+      }
+    ]
+  },
+  "population": [
+    {
+      "id": "green-1",
+      "kind": "friendly",
+      "groundPosition": 0,
+      "ip": "203.0.113.10",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "looks up an order",
+      "says": "Where is my order?",
+      "backendCall": {
+        "destinationId": "db"
+      }
+    },
+    {
+      "id": "green-2",
+      "kind": "friendly",
+      "groundPosition": 1,
+      "ip": "203.0.113.11",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "looks up an order",
+      "says": "Where is my order?",
+      "backendCall": {
+        "destinationId": "db"
+      }
+    },
+    {
+      "id": "green-3",
+      "kind": "friendly",
+      "groundPosition": 2,
+      "ip": "203.0.113.12",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "looks up an order",
+      "says": "Where is my order?",
+      "backendCall": {
+        "destinationId": "db"
+      }
+    },
+    {
+      "id": "green-4",
+      "kind": "friendly",
+      "groundPosition": 3,
+      "ip": "203.0.113.13",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "looks up an order",
+      "says": "Where is my order?",
+      "backendCall": {
+        "destinationId": "db"
+      }
+    }
+  ],
+  "crowd": {
+    "loadBalancerId": "alb",
+    "ip": "203.0.113.50",
+    "kitesPerTick": 8,
+    "ticks": 26,
+    "backendCall": {
+      "destinationId": "db"
+    }
+  },
+  "events": [
+    {
+      "kind": "az-failure",
+      "atTick": 8,
+      "zone": "a"
+    }
+  ],
+  "objectives": [
+    {
+      "id": "through-the-storm",
+      "text": "At least 90% of kites are answered through the storm",
+      "predicate": {
+        "kind": "crowd-delivered-at-least",
+        "percent": 90
+      }
+    },
+    {
+      "id": "reads-after-failover",
+      "text": "After the failover, the app still reads from the database: every kite is answered at the end",
+      "predicate": {
+        "kind": "crowd-answered-at-end"
+      }
+    }
+  ],
+  "stars": {
+    "wellArchitected": {
+      "text": "Statically stable: no kite fails outside the database's failover window, because AZ b alone can carry the crowd",
+      "predicates": [
+        {
+          "kind": "crowd-failures-only-during-failover"
+        }
+      ]
+    }
+  },
+  "hints": [
+    {
+      "objectiveId": "through-the-storm",
+      "nudge": "Watch where the kites stop after AZ a fails. Follow one in the trace: is it the fleet that cannot answer, or the database?",
+      "pointer": {
+        "text": "The web fleet runs only in AZ a, and so does the database. Their cards can spread each of them into AZ b.",
+        "highlight": "resource:asg"
+      },
+      "nearAnswer": "On the web fleet's card, tick Private subnet B. On the database's card, switch on Multi-AZ. On rds-db-sg, allow MySQL 3306 from ec2-app-sg and remove the 10.0.11.0/24 rule."
+    },
+    {
+      "objectiveId": "reads-after-failover",
+      "nudge": "After the storm every instance runs in AZ b. Can they all reach the database?",
+      "pointer": {
+        "text": "The database's security group lists who may connect. An address range belongs to one subnet, in one zone.",
+        "highlight": "resource:db"
+      },
+      "nearAnswer": "Switch on Multi-AZ on the database's card, and on rds-db-sg allow MySQL 3306 from ec2-app-sg instead of from 10.0.11.0/24."
+    }
+  ],
+  "factCards": [
+    "concept-static-stability",
+    "rds-database",
+    "auto-scaling-group",
+    "concept-security-group-chaining"
+  ],
+  "referenceSolution": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": []
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "ec2-app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-db",
+        "name": "rds-db-sg",
+        "inbound": [
+          {
+            "ports": "mysql",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-app"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "https",
+        "targetIds": ["asg"]
+      },
+      {
+        "kind": "auto-scaling-group",
+        "id": "asg",
+        "name": "web fleet",
+        "subnetIds": ["private-a", "private-b"],
+        "securityGroupIds": ["sg-app"],
+        "roleId": null,
+        "size": "small",
+        "min": 4,
+        "desired": 4,
+        "max": 4,
+        "scaling": null
+      },
+      {
+        "kind": "rds-database",
+        "id": "db",
+        "name": "orders database",
+        "engine": "mysql",
+        "subnetIds": ["private-a", "private-b"],
+        "securityGroupIds": ["sg-db"],
+        "primarySubnetId": "private-a",
+        "multiAz": true,
+        "status": "available"
+      }
+    ]
+  }
+}

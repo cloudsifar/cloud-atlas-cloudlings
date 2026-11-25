@@ -6,8 +6,9 @@ decided here and reported as a **verdict plus a trace**.
 
 This document walks the engine in reading order. Each rule section says what is
 modelled, the AWS behaviour it reflects, where the code is, and which tests cover it.
-Currently it covers Milestone 1: routing, security groups, network ACLs, IAM, S3, and
-the load balancer behaviour that Levels 1–3 need.
+It covers everything Levels 1–6 need: routing, security groups, network ACLs, IAM, S3,
+the load balancer, cost, Auto Scaling and crowds, the timeline, RDS and Availability
+Zone failure.
 
 ## 1. The data: `model.ts`
 
@@ -253,10 +254,27 @@ only the S3 access decision applies.
   or `during: 'surge'`), `crowd-scaled-out-and-back-in`, `crowd-quiet-cpu-at-least` and
   `crowd-zones-at-least`.
 - **Tests.** `tests/engine/auto-scaling.test.ts`: "capacity", "timed-out kites",
-  "target tracking scaling", "what each tick records", "crowd predicates".
-- **Not modelled yet.** Replacing unhealthy instances; scene events during a crowd (AZ
-  failure, instance failure); the cost of instance-hours over the run; the load
-  balancer's own capacity.
+  "target tracking scaling", "what each tick records", "crowd predicates";
+  `tests/engine/storm.test.ts`: "the crowd through the storm", "predicates for the
+  storm".
+- **Since Level 6** (ADR 0014), each tick also:
+  - builds a live scene for that minute (`liveScene`): the group's instances by zone,
+    those in a failed zone unhealthy, the databases' status and primary;
+  - evaluates one journey per healthy target (round robin through the load balancer's
+    nodes in zones that are up), and shares the crowd between targets by their room, so
+    a target whose journey fails costs exactly its share (a target the database turns
+    away, say);
+  - after `HEALTH_CHECK_TICKS` (2) in a failed zone, terminates a group's lost instances
+    and launches replacements in a zone that is up, if it has one;
+  - fails a Multi-AZ database over in `FAILOVER_TICKS` (2); a single-AZ database in a
+    failed zone is unavailable for the rest of the run.
+
+  The record keeps the failed zones, each database's status and zones, each serving
+  target's zone and outcome, each group's instances by zone and its replacements, and
+  `stopped`: the first journey that reached a target but failed after it.
+
+- **Not modelled yet.** Instance failure outside an AZ failure; the cost of
+  instance-hours over the run; the load balancer's own capacity.
 
 ## 14. The timeline: `timeline.ts`
 
@@ -270,11 +288,51 @@ only the S3 access decision applies.
   way; where surges overlap the bigger crowd wins, and a surge can lift a crowd that
   waves have grown. Why the timeline is
   separate from the simulation: `docs/adr/0005-crowds-and-the-event-timeline.md`.
-- **Code.** `crowdTimeline`, `waveCrowdAt`, `surgeKitesAt`, `surgeWindow`.
+  An `az-failure` event takes one Availability Zone down from its tick to the end of
+  the run; every later moment lists it in `failedZones` (`failedZonesAt`). The scene
+  itself is never edited: `simulateCrowd` applies the failure to each tick's live
+  scene (section 13), so undo and the authored scene stay as they were.
+- **Code.** `crowdTimeline`, `waveCrowdAt`, `surgeKitesAt`, `surgeWindow`,
+  `failedZonesAt`.
 - **Tests.** `tests/engine/timeline.test.ts`; level-file checks in
   `tests/levels/levels.test.ts`, "crowds and events".
 
+## 15. RDS and Availability Zone failure: `flow.ts`, `crowd.ts`
+
+- **Modelled.** An `rds-database` has a DB subnet group (`subnetIds`: private subnets
+  in at least two Availability Zones, checked by `validateScene`), a primary subnet,
+  `multiAz`, an engine (MySQL on 3306, PostgreSQL on 5432) and a status. A flow with a
+  `backendCall` goes on from the instance that answered it to the database
+  (`instanceToDatabaseChecks`): the instance's security group outbound, the VPC-local
+  route, the network ACLs when the subnets differ, the database's security group
+  inbound on the engine's port, then whether the database is available; the answer
+  comes back through the network ACLs. A security group or network ACL that refuses
+  gives `blocked`; a database failing over or down gives `dropped`. The endpoint
+  follows a failover: after it, calls reach the new primary.
+
+  In a failed zone (`scene.failedZones`, `subnetIsDown`): the load balancer has no
+  node there; instances there are unhealthy; a NAT Gateway there carries nothing. With
+  no healthy target left, the load balancer fails open (section 9), and a target in a
+  failed zone never answers: its trace says the zone is down and the request timed
+  out.
+
+- **AWS references.**
+  [Multi-AZ DB instance deployments](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.MultiAZSingleStandby.html),
+  [failing over a Multi-AZ DB instance](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.MultiAZ.Failover.html),
+  [DB subnet groups need two Availability Zones](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html),
+  [a DB instance accessed by an EC2 instance in the same VPC](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.Scenarios.html),
+  [Auto Scaling launches in an unaffected Availability Zone](https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-add-az-console.html),
+  [how Elastic Load Balancing works](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html),
+  [ALB fail-open](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/target-group-health-checks.html),
+  [NAT gateways](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html).
+- **Code.** `instanceToDatabaseChecks`, `ENGINE_PORT` in `flow.ts`; `subnetIsDown` in
+  `model.ts`; the RDS case in `validate.ts`; `liveScene` and the database states in
+  `crowd.ts`; predicates `group-spans-zones`, `database-multi-az`,
+  `security-group-allows-group`, `crowd-answered-at-end` and
+  `crowd-failures-only-during-failover`.
+- **Tests.** `tests/engine/storm.test.ts`.
+
 ## Not built yet
 
-WAF, Auto Scaling, capacity, RDS, DynamoDB, SQS, SNS, Lambda, KMS, SSM, Route 53,
-CloudWatch, events (`applyEvent`) and cost. See `PROGRESS.md`.
+WAF, DynamoDB, SQS, SNS, Lambda, KMS, SSM, Route 53, and CloudWatch alarms other than a
+scaling policy's. See `PROGRESS.md`.

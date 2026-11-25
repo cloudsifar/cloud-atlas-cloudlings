@@ -21,6 +21,7 @@ import {
   drawCloud,
   fleetSizes,
   GENUS_OF,
+  membersFailed,
   membersTimedOut,
   OUTCOME_LABELS,
   type GameState,
@@ -125,7 +126,7 @@ export function renderPalette(
 // ---------------------------------------------------------------------------
 
 /** Which crowd kite's journey to open in the trace inspector: one from a given tick. */
-export type CrowdKiteChoice = { tick: number; fate: 'served' | 'timed-out' }
+export type CrowdKiteChoice = { tick: number; fate: 'served' | 'timed-out' | 'stopped' }
 
 /**
  * The objectives, stars and running cost. `ticked` is how many objectives have ticked
@@ -255,6 +256,11 @@ export function renderObjectives(
 // Weather station: CloudWatch's view of a crowd
 // ---------------------------------------------------------------------------
 
+/** Each cloud's name by id, so CloudWatch's log can name the database. */
+function resourceNames(state: GameState): Record<string, string> {
+  return Object.fromEntries(state.scene.resources.map((resource) => [resource.id, resource.name]))
+}
+
 /** The scaling policy's CPU target, if a group in the scene has one. */
 function targetPercent(state: GameState): number | null {
   const group = resourcesOfKind(state.scene, 'auto-scaling-group').find(
@@ -292,7 +298,7 @@ function renderWeatherStation(
 
   // While the crowd flies: CloudWatch's log, a line for each change, as it happens.
   if (state.phase === 'flying' && state.lastRunIsCurrent && lastRun?.crowd) {
-    const entries = crowdLog(lastRun.crowd, target).filter(
+    const entries = crowdLog(lastRun.crowd, target, resourceNames(state)).filter(
       (entry) => entry.minute <= (minute ?? -1),
     )
     parts.push(
@@ -305,10 +311,13 @@ function renderWeatherStation(
   const crowd = judged ? lastRun?.crowd : null
   if (!crowd) {
     const sizes = crowdTimeline(level.crowd, level.events).map((moment) => moment.kites)
+    const steady = sizes.every((size) => size === sizes[0])
     parts.push(
       h('p', {
         class: 'note',
-        textContent: `A crowd is coming: from ${sizes[0] ?? 0} Cloudlings to ${Math.max(...sizes)}, in groups, then home again. Each keeps one kite up. Fly the kites and watch CloudWatch's dial, bottom right.`,
+        textContent: steady
+          ? `${sizes[0] ?? 0} Cloudlings each keep one kite up, all day. Fly the kites and watch the sky, and CloudWatch's dial, bottom right.`
+          : `A crowd is coming: from ${sizes[0] ?? 0} Cloudlings to ${Math.max(...sizes)}, in groups, then home again. Each keeps one kite up. Fly the kites and watch CloudWatch's dial, bottom right.`,
       }),
     )
     return parts
@@ -316,33 +325,113 @@ function renderWeatherStation(
 
   // After the run: what happened, in Cloudlings and instances rather than kite counts.
   const peak = Math.max(1, ...crowd.ticks.map((tick) => tick.demand))
-  const blocked = crowd.ticks.some((tick) => tick.blocked > 0)
+  const blocked = crowd.ticks.every((tick) => tick.blocked === tick.demand && tick.demand > 0)
   const timedOutMembers = membersTimedOut(crowd)
-  const worst = crowd.ticks.reduce((best, tick) => (tick.dropped > best.dropped ? tick : best))
+  const failedMembers = membersFailed(crowd)
+  const failedIn = (tick: TickRecord) => tick.dropped + tick.blocked
+  // Failures only while a database failed over: the part no architecture avoids.
+  const onlyInFailover =
+    crowd.ticks.some((tick) => failedIn(tick) > 0) &&
+    crowd.ticks.every(
+      (tick) =>
+        failedIn(tick) === 0 ||
+        tick.databases.some((database) => database.status === 'failing-over'),
+    )
+  const worst = crowd.ticks.reduce((best, tick) => (failedIn(tick) > failedIn(best) ? tick : best))
   parts.push(
     h('p', {
       class: 'cost-total',
       textContent: blocked
         ? 'No kite could get through'
-        : timedOutMembers === 0
+        : failedMembers === 0
           ? 'Every kite answered, all day'
-          : `${timedOutMembers} of ${peak} Cloudlings timed out`,
+          : onlyInFailover
+            ? 'Every kite answered, except while the database failed over'
+            : failedMembers === timedOutMembers
+              ? `${timedOutMembers} of ${peak} Cloudlings timed out`
+              : `${failedMembers} of ${peak} Cloudlings had a kite fail`,
     }),
   )
-  if (!blocked && worst.dropped > 0) {
+  if (!blocked && failedIn(worst) > 0) {
+    // Why the worst minute's kites failed, in the order the engine judged them.
+    const database = worst.databases.find((candidate) => candidate.status !== 'available')
+    const noRoom = worst.capacity > 0 ? Math.max(0, worst.demand - worst.capacity) : 0
+    const reason =
+      worst.targetsInService === 0
+        ? 'no healthy targets'
+        : database?.status === 'failing-over'
+          ? 'the database was failing over'
+          : database?.status === 'unavailable'
+            ? 'the database was down'
+            : worst.blocked > 0
+              ? 'some were turned away: see the trace'
+              : noRoom > 0
+                ? `room for ${worst.capacity}`
+                : 'see the trace'
     parts.push(
       h('p', {
         class: 'note',
-        textContent: `Worst minute: ${worst.tick}, when ${worst.dropped} of ${worst.demand} kites had no room (room for ${worst.capacity}).`,
+        textContent: `Worst minute: ${worst.tick}, when ${failedIn(worst)} of ${worst.demand} kites failed (${reason}).`,
       }),
     )
   }
+  const storm = crowd.ticks.find((tick) => tick.failedZones.length > 0)
   parts.push(
     h('p', {
       class: 'note',
-      textContent: `Instances serving: ${fleetSizes(crowd).join(' → ')}. Before the crowd, CPU was ${crowd.ticks[0]?.cpuPercent ?? 0}%.`,
+      textContent: storm
+        ? `AZ ${storm.failedZones.map((zone) => zone.toUpperCase()).join(' and ')} failed at minute ${storm.tick}. Healthy instances: ${fleetSizes(crowd).join(' → ')}.`
+        : `Instances serving: ${fleetSizes(crowd).join(' → ')}. Before the crowd, CPU was ${crowd.ticks[0]?.cpuPercent ?? 0}%.`,
     }),
   )
+  if (storm) {
+    // Whether each group could replace what it lost: only in a zone that is still up.
+    for (const fleet of crowd.ticks.at(-1)?.fleets ?? []) {
+      const name =
+        state.scene.resources.find((resource) => resource.id === fleet.groupId)?.name ?? 'The group'
+      const replacements = crowd.ticks.reduce(
+        (sum, tick) =>
+          sum + (tick.fleets.find((each) => each.groupId === fleet.groupId)?.replaced ?? 0),
+        0,
+      )
+      const stranded = fleet.zones.a.failed + fleet.zones.b.failed
+      if (replacements > 0) {
+        parts.push(
+          h('p', {
+            class: 'note',
+            textContent: `${name} launched ${replacements} replacement${replacements === 1 ? '' : 's'} in the zone that was still up.`,
+          }),
+        )
+      } else if (stranded > 0) {
+        parts.push(
+          h('p', {
+            class: 'note',
+            textContent: `${name} had no subnet in another zone, so it had nowhere to launch replacements.`,
+          }),
+        )
+      }
+    }
+  }
+  const lastDatabase = crowd.ticks.at(-1)?.databases[0]
+  if (lastDatabase) {
+    const failoverMinutes = crowd.ticks.filter((tick) =>
+      tick.databases.some((database) => database.status === 'failing-over'),
+    ).length
+    const name =
+      state.scene.resources.find((resource) => resource.id === lastDatabase.databaseId)?.name ??
+      'The database'
+    parts.push(
+      h('p', {
+        class: 'note',
+        textContent:
+          lastDatabase.status === 'unavailable'
+            ? `${name} went down with its zone: it had no standby.`
+            : failoverMinutes > 0
+              ? `${name} failed over to AZ ${lastDatabase.primaryZone.toUpperCase()} in ${failoverMinutes} minutes.`
+              : `${name} answered all day, from AZ ${lastDatabase.primaryZone.toUpperCase()}.`,
+      }),
+    )
+  }
 
   // One bar per minute: solid for kites answered, hatched for kites that were not.
   parts.push(
@@ -392,7 +481,38 @@ function renderWeatherStation(
     (tick) => tick.demand > 0,
     (tick) => tick.demand,
   )
+  // A kite that reached a target but was turned away after it, or got no answer from
+  // the database: the first minute it happened, when the cause is easiest to see.
+  const stopped = crowd.ticks.find((tick) => tick.stopped !== null) ?? null
+  // A minute with nothing healthy behind the load balancer: it fails open and tries a
+  // target anyway, and the kite's journey shows why that target never answers.
+  const unserved =
+    crowd.ticks.find(
+      (tick) => tick.capacity === 0 && tick.demand > 0 && tick.served.outcome === 'dropped',
+    ) ?? null
   const follow = h('div', { class: 'follow-buttons' })
+  if (unserved) {
+    follow.append(
+      button(
+        'Follow a kite with no healthy instance to answer it',
+        () => onFollowCrowdKite({ tick: unserved.tick, fate: 'served' }),
+        'follow-unserved',
+        'link',
+      ),
+    )
+  }
+  if (stopped) {
+    follow.append(
+      button(
+        stopped.stopped?.outcome === 'blocked'
+          ? 'Follow a kite that was turned away'
+          : 'Follow a kite that got no answer',
+        () => onFollowCrowdKite({ tick: stopped.tick, fate: 'stopped' }),
+        'follow-stopped',
+        'link',
+      ),
+    )
+  }
   if (timedOut) {
     follow.append(
       button(
@@ -422,7 +542,7 @@ function renderWeatherStation(
       'details',
       { class: 'crowd-log' },
       h('summary', { textContent: 'CloudWatch log' }),
-      logList(crowdLog(crowd, target)),
+      logList(crowdLog(crowd, target, resourceNames(state))),
     ),
   )
   return parts
@@ -574,14 +694,17 @@ export function renderTraceInspector(
     h(
       'p',
       { class: `outcome ${good ? 'good' : 'bad'}` },
-      `${OUTCOME_LABELS[result.outcome]}${failed ? ` by ${CHECK_LABELS[failed.check]}` : ''}. `,
+      // Turned away by a check; timed out (nothing answered) at one.
+      `${OUTCOME_LABELS[result.outcome]}${failed ? ` ${result.outcome === 'dropped' ? 'at' : 'by'} ${CHECK_LABELS[failed.check]}` : ''}. `,
       kite.kind === 'hostile'
         ? good
           ? 'The attacker was stopped: that is what you want.'
           : 'The attacker got through.'
         : good
           ? 'The visitor was served.'
-          : 'A visitor was turned away: something needs fixing.',
+          : result.outcome === 'dropped'
+            ? 'The visitor got no answer: something needs fixing.'
+            : 'A visitor was turned away: something needs fixing.',
     ),
     body,
   )

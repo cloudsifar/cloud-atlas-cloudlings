@@ -17,6 +17,8 @@ export const PORT_OPTIONS: Record<PortOption, PortRange> = {
 
 export const HTTP_PORT = 80
 export const HTTPS_PORT = 443
+export const MYSQL_PORT = 3306
+export const POSTGRESQL_PORT = 5432
 
 /**
  * The port a client listens on for the reply to a request it started.

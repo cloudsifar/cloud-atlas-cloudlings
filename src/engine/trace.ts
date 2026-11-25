@@ -9,8 +9,12 @@ export type FlowEndpoint =
   | { kind: 'internet'; ip: string } // a Cloudling on the ground
   | { kind: 'resource'; id: string }
 
-/** A call the serving instance makes on the request's behalf, e.g. storing an upload in S3. */
-export type BackendCall = { destinationId: string; action: ServiceAction }
+/**
+ * A call the serving instance makes on the request's behalf: storing an upload in S3
+ * (which names the IAM action), or querying an RDS database (which needs no IAM action:
+ * the network and the database's security group decide).
+ */
+export type BackendCall = { destinationId: string; action?: ServiceAction }
 
 export type Flow = {
   id: string

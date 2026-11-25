@@ -7,11 +7,14 @@
 // simulation can be tested with any pattern of demand, and the events can be
 // tested without simulating anything.
 //
-// Two kinds of event so far, both about who is flying: a crowd surge (a smooth climb
-// to a peak and back) and crowd waves (groups of Cloudlings who arrive, stay and later
-// leave). They change the moments rather than the scene. Events that change
-// the scene, such as an Availability Zone failing, will be applied by a pure
-// `applyEvent(scene, event) → scene` when they arrive (docs/adr/0005).
+// Three kinds of event so far. Two are about who is flying: a crowd surge (a smooth
+// climb to a peak and back) and crowd waves (groups of Cloudlings who arrive, stay and
+// later leave). The third, an Availability Zone failing, is about the sky: each
+// moment says which zones are down, and the crowd simulation applies that to the scene
+// on each tick (crowd.ts, ADR 0014). None of them changes the scene itself.
+
+import type { AvailabilityZone } from './model'
+import type { BackendCall } from './trace'
 
 /** The usual crowd of friendly visitors, all sending HTTPS requests to one load balancer. */
 export type Crowd = {
@@ -25,6 +28,11 @@ export type Crowd = {
   kitesPerTick: number
   /** How many ticks the run lasts. */
   ticks: number
+  /**
+   * Work the application does for each request before it can answer, e.g. reading
+   * from its database (ADR 0014). The same call a kite's `backendCall` makes.
+   */
+  backendCall?: BackendCall
 }
 
 /** For a while, many more Cloudlings than usual turn up, then drift away again. */
@@ -53,7 +61,19 @@ export type CrowdWave = {
   cloudlings: number
 }
 
-export type ScenarioEvent = CrowdSurge | CrowdWave
+/**
+ * An Availability Zone fails from `atTick` until the end of the run (ADR 0014).
+ * Everything in it becomes unhealthy: instances, a load balancer's node there, a NAT
+ * Gateway, and a database whose primary runs there. The scene is not changed; the
+ * crowd simulation applies the outage tick by tick (crowd.ts).
+ */
+export type AzFailure = {
+  kind: 'az-failure'
+  atTick: number
+  zone: AvailabilityZone
+}
+
+export type ScenarioEvent = CrowdSurge | CrowdWave | AzFailure
 
 /** What happens on one tick. */
 export type CrowdMoment = {
@@ -64,6 +84,8 @@ export type CrowdMoment = {
    * first tick to the end of its ramp down), or while waves have added Cloudlings.
    */
   surge: boolean
+  /** Availability Zones that are down on this tick. Absent means none. */
+  failedZones?: AvailabilityZone[]
 }
 
 /** The ticks a surge covers, first to last inclusive. */
@@ -95,10 +117,18 @@ export function surgeKitesAt(surge: CrowdSurge, usual: number, tick: number): nu
 export function waveCrowdAt(usual: number, events: ScenarioEvent[], tick: number): number {
   let size = usual
   for (const event of events) {
-    if (event.kind === 'crowd-surge' || event.atTick > tick) continue
+    if (event.kind === 'crowd-surge' || event.kind === 'az-failure' || event.atTick > tick) continue
     size += event.kind === 'crowd-arrives' ? event.cloudlings : -event.cloudlings
   }
   return Math.max(usual, size)
+}
+
+/** The Availability Zones that are down at a tick: every zone that has failed by then. */
+export function failedZonesAt(events: ScenarioEvent[], tick: number): AvailabilityZone[] {
+  const zones = events
+    .filter((event): event is AzFailure => event.kind === 'az-failure' && event.atTick <= tick)
+    .map((event) => event.zone)
+  return [...new Set(zones)].sort()
 }
 
 /**
@@ -114,12 +144,14 @@ export function crowdTimeline(crowd: Crowd, events: ScenarioEvent[]): CrowdMomen
       return tick >= span.first && tick <= span.last
     })
     const waves = waveCrowdAt(crowd.kitesPerTick, events, tick)
+    const failedZones = failedZonesAt(events, tick)
     return {
       kites: Math.max(
         waves,
         ...active.map((surge) => surgeKitesAt(surge, crowd.kitesPerTick, tick)),
       ),
       surge: active.length > 0 || waves > crowd.kitesPerTick,
+      ...(failedZones.length > 0 ? { failedZones } : {}),
     }
   })
 }

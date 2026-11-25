@@ -15,9 +15,24 @@
 // there is room. New arrivals walk on and send their kites up before they count;
 // leavers reel their kites in and walk off.
 
-import { failingStep, LAUNCH_TICKS, type CrowdRecord, type Scene, type TickRecord } from '../engine'
+import {
+  failingStep,
+  LAUNCH_TICKS,
+  type AvailabilityZone,
+  type CrowdRecord,
+  type FlowOutcome,
+  type Scene,
+  type TickRecord,
+} from '../engine'
 import type { Kite } from '../levels'
-import { cloudlingPosition, positionOfRef, SKY, type Point, type SceneLayout } from './layout'
+import {
+  cloudlingPosition,
+  databaseRect,
+  positionOfRef,
+  SKY,
+  type Point,
+  type SceneLayout,
+} from './layout'
 import type { SoundId } from './sound'
 
 /** How long one simulation tick (one CloudWatch minute) lasts on screen, in milliseconds. */
@@ -42,6 +57,65 @@ export type CrowdFate = 'delivered' | 'timed-out' | 'blocked'
 
 export function crowdRunDuration(record: CrowdRecord): number {
   return record.ticks.length * TICK_DURATION + SETTLE_DURATION
+}
+
+/**
+ * How long an eventful minute lasts on screen. A storm's story (the zone fails, the
+ * database fails over, the group replaces what it lost) happens in a few minutes, and
+ * at one minute every 1.25 s it would be over before it could be read. So those
+ * minutes play slower, like a replay: the level is not a race.
+ */
+export const HELD_MINUTE_DURATION = 3 * TICK_DURATION
+
+/**
+ * The minutes that play slower (HELD_MINUTE_DURATION): a zone fails, a database changes
+ * state or is failing over, or, during a storm, a group launches replacements or its
+ * serving instances change. A day with no storm and no database has none.
+ */
+export function heldMinutes(record: CrowdRecord): number[] {
+  const serving = (tick: TickRecord) =>
+    tick.fleets.map((fleet) => fleet.zones.a.serving + fleet.zones.b.serving).join(',')
+  return record.ticks
+    .filter((tick, index) => {
+      const previous = index > 0 ? record.ticks[index - 1] : undefined
+      if (!previous) return false
+      const zonesChanged = tick.failedZones.join() !== previous.failedZones.join()
+      const databaseChanged = tick.databases.some(
+        (database, at) =>
+          database.status === 'failing-over' || database.status !== previous.databases[at]?.status,
+      )
+      const storm = tick.failedZones.length > 0
+      const replacing =
+        storm &&
+        (tick.fleets.some((fleet) => fleet.replaced > 0) || serving(tick) !== serving(previous))
+      return zonesChanged || databaseChanged || replacing
+    })
+    .map((tick) => tick.tick)
+}
+
+/**
+ * The crowd's clock: from the time since the run started to the time every other
+ * function here reads (minute m starts at m × TICK_DURATION). Held minutes run at a
+ * third of the speed; the rest, and the pause after the last minute, run as they are.
+ */
+export function crowdClock(record: CrowdRecord, elapsed: number): number {
+  const held = new Set(heldMinutes(record))
+  let realStart = 0
+  for (let minute = 0; minute < record.ticks.length; minute++) {
+    const length = held.has(minute) ? HELD_MINUTE_DURATION : TICK_DURATION
+    if (elapsed < realStart + length) {
+      return (minute + (elapsed - realStart) / length) * TICK_DURATION
+    }
+    realStart += length
+  }
+  return record.ticks.length * TICK_DURATION + (elapsed - realStart)
+}
+
+/** How long a crowd run takes on screen, held minutes included. */
+export function crowdRealDuration(record: CrowdRecord): number {
+  return (
+    crowdRunDuration(record) + heldMinutes(record).length * (HELD_MINUTE_DURATION - TICK_DURATION)
+  )
 }
 
 export type CrowdFrame = {
@@ -80,12 +154,14 @@ const ease = (amount: number): number => {
  */
 export function fateOf(member: number, tick: TickRecord): CrowdFate | null {
   if (member >= tick.demand) return null
-  if (tick.blocked > 0) return 'blocked'
-  // The same even spreading a line-drawing routine uses: member m times out when the
-  // running share of timeouts steps up between m and m + 1.
-  const before = Math.floor((member * tick.dropped) / tick.demand)
-  const after = Math.floor(((member + 1) * tick.dropped) / tick.demand)
-  return after > before ? 'timed-out' : 'delivered'
+  const failures = tick.dropped + tick.blocked
+  // The same even spreading a line-drawing routine uses: member m fails when the
+  // running share of failures steps up between m and m + 1.
+  const before = Math.floor((member * failures) / tick.demand)
+  const after = Math.floor(((member + 1) * failures) / tick.demand)
+  if (after === before) return 'delivered'
+  // Among the failures, the first share were stopped by a control, the rest got no answer.
+  return before < tick.blocked ? 'blocked' : 'timed-out'
 }
 
 /**
@@ -99,9 +175,14 @@ export const WEATHER_STATION: Point = { x: 940, y: SKY.groundY }
  * keep their own places; everyone else fills two rows, from the middle outwards, so
  * the crowd grows around them. Both rows stop short of the weather station on the
  * right. There are places for MAX_CROWD (levels/schema.ts) and a few more.
+ *
+ * A small crowd, at most twice the regulars at its `peak`, stands in one spaced-out
+ * row instead: newcomers take the gaps between the regulars first, then the places
+ * beyond the ends, so nobody stands on anybody's feet.
  */
-export function crowdSpots(population: Kite[]): Point[] {
+export function crowdSpots(population: Kite[], peak = Number.POSITIVE_INFINITY): Point[] {
   const regulars = population.map((kite) => cloudlingPosition(kite.groundPosition))
+  const spread = spreadSpots(regulars, peak)
   const start = SKY.left + 40
   const end = WEATHER_STATION.x - 46
   const middle = (start + end) / 2
@@ -117,7 +198,32 @@ export function crowdSpots(population: Kite[]): Point[] {
     }
   }
   candidates.sort((first, second) => first.order - second.order)
-  return [...regulars, ...candidates.map(({ x, y }) => ({ x, y }))]
+  const others = candidates
+    .map(({ x, y }) => ({ x, y }))
+    .filter(
+      (spot) => !spread.some((taken) => Math.abs(taken.x - spot.x) < 28 && taken.y === spot.y),
+    )
+  return [...regulars, ...spread, ...others]
+}
+
+/** The gaps between the regulars, then beyond the ends: for a small crowd (crowdSpots). */
+function spreadSpots(regulars: Point[], peak: number): Point[] {
+  const row = regulars
+    .filter((spot) => spot.y === SKY.groundY)
+    .map((spot) => spot.x)
+    .sort((first, second) => first - second)
+  if (row.length < 2 || peak > regulars.length * 2) return []
+  const middle = (row[0]! + row.at(-1)!) / 2
+  const step = (row[1]! - row[0]!) / 2
+  const gaps = row.slice(1).map((x, index) => (x + row[index]!) / 2)
+  const ends = [row.at(-1)! + step, row[0]! - step].filter(
+    (x) => x > SKY.left + 30 && x < WEATHER_STATION.x - 46,
+  )
+  const byMiddle = (first: number, second: number) =>
+    Math.abs(first - middle) - Math.abs(second - middle)
+  return [...gaps.sort(byMiddle), ...ends.sort(byMiddle)]
+    .slice(0, Math.max(0, peak - regulars.length))
+    .map((x) => ({ x, y: SKY.groundY }))
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +389,14 @@ export type FleetView = {
   leaveFade: number
   /** Whether any load balancer sends this group kites. */
   attached: boolean
+  /**
+   * The same by Availability Zone, plus instances there that are unhealthy and not yet
+   * replaced (`failed`) and failed ones being terminated this minute (`terminating`).
+   */
+  zones: Record<
+    AvailabilityZone,
+    { serving: number; launching: number; leaving: number; failed: number; terminating: number }
+  >
 }
 
 /**
@@ -314,6 +428,25 @@ export function fleetViewAt(record: CrowdRecord, groupId: string, time: number):
     leaving: acted ? fleet.stopped : 0,
     leaveFade: acted ? Math.min(1, (frame.progress - ALARM_AT) / (1 - ALARM_AT)) : 0,
     attached: fleet.attached,
+    zones: {
+      a: zoneView(fleet.zones.a, acted),
+      b: zoneView(fleet.zones.b, acted),
+    },
+  }
+}
+
+function zoneView(
+  count: TickRecord['fleets'][number]['zones']['a'],
+  acted: boolean,
+): FleetView['zones']['a'] {
+  // A failed instance is terminated when the group replaces it; one scaled in is leaving.
+  const terminatingFailed = acted ? Math.min(count.failed, count.terminated) : 0
+  return {
+    serving: count.serving,
+    launching: Math.max(0, acted ? count.launching : count.launching - count.started),
+    leaving: acted ? Math.max(0, count.terminated - terminatingFailed) : 0,
+    failed: count.failed,
+    terminating: terminatingFailed,
   }
 }
 
@@ -350,6 +483,80 @@ export function alarmAt(record: CrowdRecord, time: number): TickRecord['alarm'] 
 }
 
 // ---------------------------------------------------------------------------
+// The storm: an Availability Zone failing, and a database failing over
+// ---------------------------------------------------------------------------
+
+/**
+ * The outage on show at `time`: which zones are down, and how bright the lightning over
+ * a zone that has just failed is (0 to 1). The strike comes at the very start of the
+ * minute the zone fails, flickers twice, and fades within the minute.
+ */
+export function outageAt(
+  record: CrowdRecord,
+  time: number,
+): { zones: AvailabilityZone[]; strike: number; struck: AvailabilityZone[] } {
+  const frame = crowdFrameAt(record, time)
+  if (!frame) return { zones: [], strike: 0, struck: [] }
+  const zones = frame.tick.failedZones
+  const struck = zones.filter((zone) => !(frame.previous?.failedZones ?? []).includes(zone))
+  if (struck.length === 0 || frame.progress >= 1) return { zones, strike: 0, struck: [] }
+  const flicker =
+    frame.progress < 0.08 ? 1 : frame.progress < 0.14 ? 0.3 : frame.progress < 0.22 ? 0.9 : 0
+  const fade = frame.progress < 0.22 ? 1 : Math.max(0, 1 - (frame.progress - 0.22) / 0.4)
+  return { zones, strike: Math.max(flicker, fade * 0.5), struck }
+}
+
+export type DatabaseView = {
+  status: TickRecord['databases'][number]['status']
+  primaryZone: AvailabilityZone
+  standbyZone: AvailabilityZone | null
+  /** While failing over: 0 to 1 through the failover; the standby wakes as it rises. */
+  failover: number
+  /** The zone the database ran in before a failover, now down; null if none. */
+  lostZone: AvailabilityZone | null
+}
+
+/** A database at `time`, from the engine's record: where its primary and standby are. */
+export function databaseViewAt(
+  record: CrowdRecord,
+  databaseId: string,
+  time: number,
+): DatabaseView | null {
+  const frame = crowdFrameAt(record, time)
+  const state = frame?.tick.databases.find((candidate) => candidate.databaseId === databaseId)
+  if (!frame || !state) return null
+  let failover = 0
+  if (state.status === 'failing-over') {
+    let first = frame.index
+    while (
+      first > 0 &&
+      record.ticks[first - 1]?.databases.find((candidate) => candidate.databaseId === databaseId)
+        ?.status === 'failing-over'
+    )
+      first -= 1
+    let last = frame.index
+    while (
+      record.ticks[last + 1]?.databases.find((candidate) => candidate.databaseId === databaseId)
+        ?.status === 'failing-over'
+    )
+      last += 1
+    failover = (frame.index + frame.progress - first) / (last + 1 - first)
+  }
+  const initial = record.ticks[0]?.databases.find(
+    (candidate) => candidate.databaseId === databaseId,
+  )
+  const lostZone =
+    initial && frame.tick.failedZones.includes(initial.primaryZone) ? initial.primaryZone : null
+  return {
+    status: state.status,
+    primaryZone: state.primaryZone,
+    standbyZone: state.standbyZone,
+    failover: Math.min(1, failover),
+    lostZone,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Where the crowd's kites go
 // ---------------------------------------------------------------------------
 
@@ -360,10 +567,21 @@ export function alarmAt(record: CrowdRecord, time: number): TickRecord['alarm'] 
  */
 export type CrowdStream = {
   trunk: Point[]
-  /** One branch per cloud serving kites, with its share of this minute's answered kites. */
-  branches: { to: Point; share: number }[]
-  /** Where the crowd was stopped, if it was. */
+  /**
+   * One branch per cloud serving kites (a group counts once per zone), with its share
+   * of the room, what happens to kites sent there, and, for an application that reads
+   * a database, where it goes on to.
+   */
+  branches: { to: Point; share: number; outcome: FlowOutcome; database: Point | null }[]
+  /** Where the crowd was stopped on its way in, if it was, and what to say there. */
   stoppedAt: Point | null
+  stoppedLabel: string
+  /**
+   * The kites got all the way to the application, but its database could not answer
+   * (failing over, or down): where to say so. Turned away by the database's security
+   * group shows as red branches instead.
+   */
+  databaseNote: { at: Point; label: string } | null
 }
 
 export function crowdStream(
@@ -374,7 +592,11 @@ export function crowdStream(
 ): CrowdStream {
   const places: Point[] = [origin]
   let previous = origin
-  const stop = failingStep(tick.served)
+  const failed = failingStep(tick.served)
+  // A kite that reached the application but whose database did not answer, or turned
+  // it away, still went the whole way: draw its branches, and say so at the database.
+  const atDatabase = failed?.leg === 'backend-request' || failed?.leg === 'backend-response'
+  const stop = atDatabase ? undefined : failed
   const steps = stop
     ? tick.served.trace.slice(0, tick.served.trace.indexOf(stop) + 1)
     : tick.served.trace
@@ -388,19 +610,59 @@ export function crowdStream(
     previous = place
   }
   const total = tick.serving.reduce((sum, entry) => sum + entry.capacity, 0)
+  // The database the application reads, if any: where its primary is this minute.
+  const databaseId = tick.databases[0]?.databaseId
+  const database = databaseId
+    ? scene.resources.find((resource) => resource.id === databaseId)
+    : undefined
+  const databaseAt =
+    database?.kind === 'rds-database'
+      ? databaseRect(scene, layout, database, tick.databases[0]?.primaryZone ?? 'a')
+      : null
   const branches = stop
     ? []
     : tick.serving.flatMap((entry) => {
         const rect = layout.clouds[entry.resourceId]
         if (!rect || total === 0) return []
+        // A group's instances in zone a are in its left half, in zone b its right.
+        const resource = scene.resources.find((candidate) => candidate.id === entry.resourceId)
+        const x =
+          resource?.kind === 'auto-scaling-group'
+            ? rect.x + rect.width * (entry.zone === 'a' ? 0.25 : 0.75)
+            : rect.x + rect.width / 2
         return [
           {
-            to: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
+            to: { x, y: rect.y + rect.height / 2 },
             share: entry.capacity / total,
+            outcome: entry.outcome,
+            database: databaseAt
+              ? { x: databaseAt.x + databaseAt.width / 2, y: databaseAt.y + databaseAt.height / 2 }
+              : null,
           },
         ]
       })
-  return { trunk: places, branches, stoppedAt: stop ? (places.at(-1) ?? null) : null }
+  // A database that cannot answer is marked where it is; one that turns kites away is
+  // marked by the red branches that end at it (drawCrowdStream).
+  const silentDatabase = atDatabase && tick.served.outcome === 'dropped' && databaseAt !== null
+  const status = tick.databases[0]?.status
+  return {
+    trunk: places,
+    branches,
+    stoppedAt: stop ? (places.at(-1) ?? null) : null,
+    // A target that never answers (its zone is down, say) is silent, not a barrier.
+    stoppedLabel:
+      stop?.check === 'delivery' ? '✕ nothing answers here' : '✕ stopped here: see the trace',
+    databaseNote: silentDatabase
+      ? {
+          // In the gap below the mid band, clear of the fleet's caption above.
+          at: { x: databaseAt.x + databaseAt.width / 2, y: databaseAt.y + databaseAt.height + 12 },
+          label:
+            status === 'failing-over'
+              ? '✕ no answer while it fails over'
+              : '✕ the database does not answer',
+        }
+      : null,
+  }
 }
 
 /** Where along a path the dot is, for `amount` from 0 (its start) to 1 (its end). */
@@ -433,7 +695,7 @@ export function alongPath(path: Point[], amount: number): Point {
 export type LogEntry = {
   minute: number
   text: string
-  kind: 'crowd' | 'alarm' | 'fleet' | 'timeout' | 'info'
+  kind: 'crowd' | 'alarm' | 'fleet' | 'timeout' | 'info' | 'storm' | 'database'
 }
 
 const plural = (count: number, one: string, many = `${one}s`) =>
@@ -443,12 +705,53 @@ const plural = (count: number, one: string, many = `${one}s`) =>
  * CloudWatch's log of the day: one line for each thing that changed. Shown in the side
  * panel as the run plays, so the player can read what the dial and the bell meant.
  */
-export function crowdLog(record: CrowdRecord, targetPercent: number | null): LogEntry[] {
+export function crowdLog(
+  record: CrowdRecord,
+  targetPercent: number | null,
+  names: Record<string, string> = {},
+): LogEntry[] {
   const entries: LogEntry[] = []
   record.ticks.forEach((tick, index) => {
     const previous = index > 0 ? record.ticks[index - 1]! : null
     const minute = index
     const room = `room for ${tick.capacity}`
+    // The storm first: it is the cause of everything else that happens this minute.
+    for (const zone of tick.failedZones) {
+      if (previous?.failedZones.includes(zone)) continue
+      entries.push({
+        minute,
+        kind: 'storm',
+        text: `AZ ${zone.toUpperCase()} fails: everything in it is down. The load balancer stops sending kites there`,
+      })
+    }
+    for (const database of tick.databases) {
+      const before = previous?.databases.find(
+        (candidate) => candidate.databaseId === database.databaseId,
+      )
+      if (!before || before.status === database.status) continue
+      const name = names[database.databaseId] ?? 'The database'
+      entries.push({
+        minute,
+        kind: 'database',
+        text:
+          database.status === 'failing-over'
+            ? `${name}: failing over to its standby in AZ ${database.standbyZone?.toUpperCase() ?? '?'}`
+            : database.status === 'unavailable'
+              ? `${name} is down: it ran in one zone, with no standby`
+              : `${name} answering again, from AZ ${database.primaryZone.toUpperCase()}`,
+      })
+    }
+    const replaced = tick.fleets.reduce((sum, fleet) => sum + fleet.replaced, 0)
+    if (replaced > 0) {
+      entries.push({
+        minute,
+        kind: 'fleet',
+        text: `Health checks: ${plural(replaced, 'unhealthy instance')} terminated, replacements launching`,
+      })
+    }
+    if (tick.targetsInService === 0 && (previous?.targetsInService ?? 1) > 0 && tick.demand > 0) {
+      entries.push({ minute, kind: 'timeout', text: 'No healthy targets: every kite fails' })
+    }
     if (!previous) {
       entries.push({
         minute,
@@ -472,17 +775,36 @@ export function crowdLog(record: CrowdRecord, targetPercent: number | null): Log
         })
       }
     }
+    // Kites that got no answer: for lack of room, or because the database could not answer.
+    const noRoom = tick.capacity > 0 ? Math.max(0, tick.demand - tick.capacity) : 0
+    const noAnswer = tick.dropped - noRoom
     if (tick.dropped > 0 && (previous?.dropped ?? 0) !== tick.dropped) {
+      if (noRoom > 0) {
+        entries.push({
+          minute,
+          kind: 'timeout',
+          text: `${plural(noRoom, 'kite')} timed out: no room (HTTP 504)`,
+        })
+      }
+      if (noAnswer > 0 && tick.targetsInService > 0) {
+        entries.push({
+          minute,
+          kind: 'timeout',
+          text: `${plural(noAnswer, 'kite')} failed: the database could not answer`,
+        })
+      }
+    }
+    if (tick.blocked > 0 && (previous?.blocked ?? 0) !== tick.blocked) {
       entries.push({
         minute,
         kind: 'timeout',
-        text: `${plural(tick.dropped, 'kite')} timed out: no room (HTTP 504)`,
+        text:
+          tick.blocked === tick.demand
+            ? 'No kite can get through: see the trace'
+            : `${plural(tick.blocked, 'kite')} turned away on the way: see the trace`,
       })
     }
-    if (tick.blocked > 0 && (previous?.blocked ?? 0) === 0) {
-      entries.push({ minute, kind: 'timeout', text: 'No kite can get through: see the trace' })
-    }
-    const started = tick.fleets.reduce((sum, fleet) => sum + fleet.started, 0)
+    const started = tick.fleets.reduce((sum, fleet) => sum + fleet.started, 0) - replaced
     const stopped = tick.fleets.reduce((sum, fleet) => sum + fleet.stopped, 0)
     const target = targetPercent === null ? '' : ` ${targetPercent}%`
     if (tick.alarm !== 'ok' && tick.alarm !== previous?.alarm) {
@@ -514,10 +836,19 @@ export function fleetSizes(record: CrowdRecord): number[] {
 
 /** How many different crowd members had a kite time out at least once during the day. */
 export function membersTimedOut(record: CrowdRecord): number {
+  return membersWith(record, (fate) => fate === 'timed-out')
+}
+
+/** How many different crowd members had a kite fail at least once, for any reason. */
+export function membersFailed(record: CrowdRecord): number {
+  return membersWith(record, (fate) => fate === 'timed-out' || fate === 'blocked')
+}
+
+function membersWith(record: CrowdRecord, matches: (fate: CrowdFate | null) => boolean): number {
   const biggest = Math.max(0, ...record.ticks.map((tick) => tick.demand))
   let count = 0
   for (let member = 0; member < biggest; member++) {
-    if (record.ticks.some((tick) => fateOf(member, tick) === 'timed-out')) count += 1
+    if (record.ticks.some((tick) => matches(fateOf(member, tick)))) count += 1
   }
   return count
 }
@@ -566,6 +897,21 @@ export function cuesForTick(
   }
   if (tick.alarm !== 'ok' && tick.alarm !== previous?.alarm) {
     cues.push({ at: ALARM_AT, cue: { sound: 'alarm-bell', volume: 0.8 } })
+  }
+  // The storm: thunder as a zone fails; a crackle as a database starts to fail over,
+  // and a shimmer when its standby answers.
+  if (tick.failedZones.some((zone) => !(previous?.failedZones ?? []).includes(zone))) {
+    cues.push({ at: 0, cue: { sound: 'thunder', volume: 1 } })
+  }
+  for (const database of tick.databases) {
+    const before = previous?.databases.find(
+      (candidate) => candidate.databaseId === database.databaseId,
+    )
+    if (!before || before.status === database.status) continue
+    if (database.status === 'failing-over')
+      cues.push({ at: 0.3, cue: { sound: 'failover', volume: 0.9 } })
+    if (database.status === 'available')
+      cues.push({ at: 0.05, cue: { sound: 'connected', volume: 0.8 } })
   }
   return cues
 }

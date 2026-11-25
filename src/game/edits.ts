@@ -214,6 +214,27 @@ export function setGroupSettings(
   })
 }
 
+/**
+ * Which subnets an Auto Scaling group spreads its instances across, and so which
+ * Availability Zones. A group always keeps at least one subnet.
+ */
+export function setGroupSubnets(scene: Scene, groupId: string, subnetIds: string[]): Scene {
+  if (subnetIds.length === 0) return scene
+  return changeResource(scene, 'auto-scaling-group', groupId, (group) => {
+    // Keep the scene's own order, so "A then B" never depends on the order of clicks.
+    group.subnetIds = scene.subnets
+      .map((subnet) => subnet.id)
+      .filter((id) => subnetIds.includes(id))
+  })
+}
+
+/** Switch an RDS database's Multi-AZ standby on or off. */
+export function setDatabaseMultiAz(scene: Scene, databaseId: string, on: boolean): Scene {
+  return changeResource(scene, 'rds-database', databaseId, (database) => {
+    database.multiAz = on
+  })
+}
+
 export function setInstanceRole(scene: Scene, instanceId: string, roleId: string | null): Scene {
   return changeResource(scene, 'ec2-instance', instanceId, (instance) => {
     instance.roleId = roleId

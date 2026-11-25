@@ -57,6 +57,20 @@ export type Predicate =
   | { kind: 'group-can-scale'; groupId: string }
   /** None of these holds, e.g. neither fixed instance is a target any more. */
   | { kind: 'none-of'; predicates: Predicate[] }
+  /** The Auto Scaling group's subnets span at least this many Availability Zones. */
+  | { kind: 'group-spans-zones'; groupId: string; zones: number }
+  /** The RDS database is Multi-AZ: it keeps a standby in another Availability Zone. */
+  | { kind: 'database-multi-az'; databaseId: string }
+  /**
+   * The security group has an inbound rule allowing these ports from another security
+   * group: the tiers are chained by name rather than by address.
+   */
+  | {
+      kind: 'security-group-allows-group'
+      securityGroupId: string
+      ports: PortOption
+      fromSecurityGroupId: string
+    }
   /** Every inbound rule on every target names the load balancer's security group and nothing wider. */
   | { kind: 'targets-accept-only-load-balancer'; loadBalancerId: string }
   | { kind: 'role-attached'; instanceIds: string[] }
@@ -85,6 +99,16 @@ export type Predicate =
   | { kind: 'crowd-quiet-cpu-at-least'; percent: number }
   /** On every tick, the healthy targets span at least this many Availability Zones. */
   | { kind: 'crowd-zones-at-least'; zones: number }
+  /**
+   * On the last tick of the run, every kite is answered: the application is still
+   * working, database and all, after whatever happened during the run.
+   */
+  | { kind: 'crowd-answered-at-end' }
+  /**
+   * Kites fail only while a database is failing over: outside that period, which no
+   * architecture can avoid, every kite is answered (needs a database and an outage).
+   */
+  | { kind: 'crowd-failures-only-during-failover' }
 
 export type Objective = {
   id: string
@@ -176,6 +200,44 @@ export function evaluatePredicate(
       const group = findResourceOfKind(authoredScene, 'auto-scaling-group', predicate.groupId)
       return group !== undefined && group.scaling !== null && group.max > group.min
     }
+    case 'group-spans-zones': {
+      const group = findResourceOfKind(authoredScene, 'auto-scaling-group', predicate.groupId)
+      const zones = new Set(
+        (group?.subnetIds ?? []).map(
+          (id) => authoredScene.subnets.find((subnet) => subnet.id === id)?.availabilityZone,
+        ),
+      )
+      return group !== undefined && zones.size >= predicate.zones
+    }
+    case 'database-multi-az':
+      return (
+        findResourceOfKind(authoredScene, 'rds-database', predicate.databaseId)?.multiAz ?? false
+      )
+    case 'security-group-allows-group':
+      return (
+        authoredScene.securityGroups
+          .find((group) => group.id === predicate.securityGroupId)
+          ?.inbound.some(
+            (rule) =>
+              rule.ports === predicate.ports &&
+              rule.peer.kind === 'security-group' &&
+              rule.peer.securityGroupId === predicate.fromSecurityGroupId,
+          ) ?? false
+      )
+    case 'crowd-answered-at-end': {
+      const last = crowd?.ticks.at(-1)
+      return last !== undefined && last.demand > 0 && last.delivered === last.demand
+    }
+    case 'crowd-failures-only-during-failover':
+      return (
+        crowd !== null &&
+        crowd.ticks.length > 0 &&
+        crowd.ticks.every(
+          (tick) =>
+            tick.delivered === tick.demand ||
+            tick.databases.some((database) => database.status === 'failing-over'),
+        )
+      )
     case 'none-of':
       return predicate.predicates.every(
         (inner) => !evaluatePredicate(authoredScene, runs, inner, crowd),

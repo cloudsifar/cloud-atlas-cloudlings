@@ -188,8 +188,45 @@ export type AutoScalingGroup = {
   scaling: TargetTrackingPolicy | null
 }
 
+/**
+ * An RDS database (a DB instance). AWS behaviour modelled (docs/ENGINE.md, "Databases"):
+ * - It lives in private subnets: its DB subnet group must cover at least two
+ *   Availability Zones, even when it runs in one, so that it can become Multi-AZ.
+ * - Its security group must allow the engine port (MySQL 3306, PostgreSQL 5432) from
+ *   whatever calls it, ideally by naming the application tier's security group.
+ * - Multi-AZ keeps a synchronous standby in another Availability Zone. The standby
+ *   serves nothing until the primary's AZ fails; then RDS fails over to it, which takes
+ *   a couple of minutes, and the database's endpoint follows the new primary.
+ * - Without Multi-AZ, a failure of the primary's AZ takes the database down.
+ */
+export type RdsDatabase = {
+  kind: 'rds-database'
+  id: string
+  name: string
+  engine: 'mysql' | 'postgresql'
+  /** The DB subnet group: private subnets in at least two Availability Zones. */
+  subnetIds: string[]
+  securityGroupIds: string[]
+  /** The subnet the primary runs in: one of `subnetIds`. */
+  primarySubnetId: string
+  /** A standby in another Availability Zone of the subnet group, ready to take over. */
+  multiAz: boolean
+  /**
+   * Set by events, never by the player: 'failing-over' while the standby takes over,
+   * 'unavailable' when the primary's AZ has failed and there is no standby.
+   */
+  status: 'available' | 'failing-over' | 'unavailable'
+}
+
 export type Resource =
-  InternetGateway | NatGateway | LoadBalancer | Ec2Instance | AutoScalingGroup | S3Bucket | IamRole
+  | InternetGateway
+  | NatGateway
+  | LoadBalancer
+  | Ec2Instance
+  | AutoScalingGroup
+  | S3Bucket
+  | IamRole
+  | RdsDatabase
 
 export type ResourceKind = Resource['kind']
 
@@ -204,6 +241,16 @@ export type Scene = {
   networkAcls: NetworkAcl[]
   securityGroups: SecurityGroup[]
   resources: Resource[]
+  /**
+   * Availability Zones that are down: set by an event during a run (timeline.ts,
+   * `az-failure`), never by the player or a level's scene. Absent means none.
+   */
+  failedZones?: AvailabilityZone[]
+}
+
+/** Whether a subnet's Availability Zone is down. */
+export function subnetIsDown(scene: Scene, subnet: Subnet): boolean {
+  return scene.failedZones?.includes(subnet.availabilityZone) ?? false
 }
 
 // ---------------------------------------------------------------------------

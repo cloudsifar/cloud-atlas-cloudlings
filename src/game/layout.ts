@@ -12,6 +12,7 @@ import {
   type ResourceRef,
   type Scene,
   type Subnet,
+  type AvailabilityZone,
 } from '../engine'
 import manifest from '../../assets/manifest.json'
 
@@ -21,7 +22,8 @@ export type Rect = { x: number; y: number; width: number; height: number }
 export const STAGE = { width: 1280, height: 720 }
 
 /** The ten cloud genera are the internal vocabulary for service families (brief, Section 6). */
-export type CloudGenus = 'stratocumulus' | 'cumulus' | 'altocumulus' | 'cumulonimbus' | 'cirrus'
+export type CloudGenus =
+  'stratocumulus' | 'cumulus' | 'altocumulus' | 'altostratus' | 'cumulonimbus' | 'cirrus'
 
 export const GENUS_OF: Record<ResourceKind, CloudGenus> = {
   'internet-gateway': 'stratocumulus',
@@ -31,6 +33,8 @@ export const GENUS_OF: Record<ResourceKind, CloudGenus> = {
   'auto-scaling-group': 'altocumulus',
   's3-bucket': 'cumulonimbus',
   'iam-role': 'cirrus',
+  // Flat, layered, steady: structured, persistent data (brief, Section 6).
+  'rds-database': 'altostratus',
 }
 
 /** Which band of sky each kind of cloud belongs to. 'vertical' spans every band. */
@@ -44,6 +48,7 @@ export const BAND_OF: Record<ResourceKind, SkyBand> = {
   'auto-scaling-group': 'mid',
   's3-bucket': 'vertical',
   'iam-role': 'high',
+  'rds-database': 'mid',
 }
 
 // The fixed geometry of the sky. Altitude means distance from the internet:
@@ -164,8 +169,10 @@ export function layoutScene(scene: Scene): SceneLayout {
         const columns = resource.subnetIds
           .map((id) => subnets[id])
           .filter((rect): rect is Rect => rect !== undefined)
-        const height = 92
-        const y = midCentreY + 4 - height / 2
+        // Sharing the mid band with a database, the fleet takes its upper part.
+        const sharing = resourcesOfKind(scene, 'rds-database').length > 0
+        const height = sharing ? 42 : 92
+        const y = sharing ? SKY.mid.top + 22 : midCentreY + 4 - height / 2
         if (crowded || columns.length === 0) {
           clouds[resource.id] = { x: vpcCentreX - 105, y, width: 210, height }
         } else {
@@ -175,6 +182,14 @@ export function layoutScene(scene: Scene): SceneLayout {
         }
         break
       }
+      case 'rds-database': {
+        // In the lower part of its primary's subnet; a standby, if any, sits in the
+        // same place in the other zone's subnet (databaseRect).
+        const subnet = scene.subnets.find((each) => each.id === resource.primarySubnetId)
+        const rect = subnets[resource.primarySubnetId]
+        if (rect && subnet) clouds[resource.id] = databaseSpot(rect, subnet.availabilityZone)
+        break
+      }
       case 'ec2-instance':
       case 'nat-gateway':
         break // placed above
@@ -182,6 +197,43 @@ export function layoutScene(scene: Scene): SceneLayout {
   })
 
   return { vpc: SKY.vpc, subnets, clouds }
+}
+
+/**
+ * Where a database is drawn in a subnet: the lower part, clear of a fleet and its caption
+ * above, on the side nearest the other zone. Primary and standby then sit either side of
+ * the zone divider with a short bridge between them, and their captions go on the outer
+ * side (databaseCaptionSide), where nothing crosses them.
+ */
+function databaseSpot(subnet: Rect, zone: AvailabilityZone): Rect {
+  const { width, height } = spriteSize('rds-database')
+  return {
+    x: zone === 'a' ? subnet.x + subnet.width - width - 26 : subnet.x + 26,
+    y: subnet.y + subnet.height - height - 10,
+    width,
+    height,
+  }
+}
+
+/** Which side of a database's cloud its caption goes: away from the zone divider. */
+export const databaseCaptionSide = (zone: AvailabilityZone): 'left' | 'right' =>
+  zone === 'a' ? 'left' : 'right'
+
+/**
+ * Where a database's copy in an Availability Zone is drawn: its primary or its
+ * standby, in that zone's subnet of its DB subnet group. Null if it has no subnet there.
+ */
+export function databaseRect(
+  scene: Scene,
+  layout: SceneLayout,
+  database: { subnetIds: string[] },
+  zone: AvailabilityZone,
+): Rect | null {
+  const subnetId = database.subnetIds.find(
+    (id) => scene.subnets.find((subnet) => subnet.id === id)?.availabilityZone === zone,
+  )
+  const rect = subnetId ? layout.subnets[subnetId] : undefined
+  return rect ? databaseSpot(rect, zone) : null
 }
 
 export const centreOf = (rect: Rect): Point => ({

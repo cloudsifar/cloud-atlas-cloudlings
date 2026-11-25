@@ -180,7 +180,7 @@ export function mountMenu(root: HTMLElement, actions: MenuActions): void {
         h('div', { class: 'level-grid' }, ...levelCards),
         h('p', {
           class: 'note',
-          textContent: 'Levels 6–12, Demo Mode and the Field Guide to the Sky are still to come.',
+          textContent: 'Levels 7–12, Demo Mode and the Field Guide to the Sky are still to come.',
         }),
       ),
       h(

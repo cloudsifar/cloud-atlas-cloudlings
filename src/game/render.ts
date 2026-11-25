@@ -9,9 +9,13 @@ import {
   isPublicSubnet,
   resolveRoute,
   resourcesOfKind,
+  groupInstances,
   runningCount,
+  type AutoScalingGroup,
+  type AvailabilityZone,
   type CheckKind,
   type CrowdRecord,
+  type RdsDatabase,
   type Resource,
   type ResourceKind,
   type Scene,
@@ -24,6 +28,8 @@ import {
   centreOf,
   cidrLabelRect,
   cloudlingPosition,
+  databaseCaptionSide,
+  databaseRect,
   GENUS_OF,
   handlePosition,
   SKY,
@@ -51,9 +57,11 @@ import {
   crowdFrameAt,
   crowdSpots,
   crowdStream,
+  databaseViewAt,
   dialCpuAt,
   fleetViewAt,
   memberViewAt,
+  outageAt,
   WEATHER_STATION,
   type CrowdFrame,
   type FleetView,
@@ -235,6 +243,19 @@ function caption(
   context.fillStyle = colour
   context.fillText(text, x, y)
   context.restore()
+}
+
+/** A group's instances by zone when it is not flying: spread evenly across its subnets. */
+function restingZones(group: AutoScalingGroup, scene: Scene): FleetView['zones'] {
+  const zones: FleetView['zones'] = {
+    a: { serving: 0, launching: 0, leaving: 0, failed: 0, terminating: 0 },
+    b: { serving: 0, launching: 0, leaving: 0, failed: 0, terminating: 0 },
+  }
+  for (const instance of groupInstances(group)) {
+    const zone = scene.subnets.find((subnet) => subnet.id === instance.subnetId)?.availabilityZone
+    if (zone) zones[zone].serving += 1
+  }
+  return zones
 }
 
 /** Whether any load balancer sends requests to this cloud. */
@@ -559,17 +580,20 @@ function drawSunRays(
 
 /**
  * An Auto Scaling group: one small cloud per instance, each half of the fleet in its
- * own Availability Zone (instances alternate between the group's subnets, as AWS
- * balances them). Instances still launching are drawn dashed and faint, filling in as
- * they start; instances being removed fade away. Every instance has its own place, so
- * the fleet can be counted as it grows: 2, 4, 8, 16 (ADR 0012).
+ * own Availability Zone, as AWS balances them. Instances still launching are drawn
+ * dashed and faint, filling in as they start; instances being removed fade away;
+ * instances in a failed zone are grey and droop until they are replaced. Every instance
+ * has its own place, so the fleet can be counted as it grows: 2, 4, 8, 16 (ADR 0012).
+ * `slotsPerZone` is how many places each half keeps: enough for the most instances a
+ * zone can hold in this level.
  */
 function drawFleet(
   context: CanvasRenderingContext2D,
   rect: Rect,
-  zones: ('a' | 'b')[],
   view: FleetView,
+  slotsPerZone: number,
   look: { tint: string[]; sunlight: number; burst: number; opacity: number },
+  time: number,
 ): void {
   // The fleet's outline: a soft rounded patch, so an empty-looking fleet still reads as one.
   context.save()
@@ -580,9 +604,7 @@ function drawFleet(
   context.stroke()
   context.restore()
 
-  const total = view.serving + view.launching
-  // Every place a half could need: MAX_GROUP_SIZE instances split between two zones.
-  const perHalf = 8
+  const perHalf = Math.max(1, slotsPerZone)
   const halfWidth = rect.width / 2 - 8
   let best = { columns: 1, rows: perHalf, width: 0, height: 0 }
   for (let columns = 1; columns <= perHalf; columns++) {
@@ -595,32 +617,310 @@ function drawFleet(
   const { columns, rows, width, height } = best
   const gridWidth = columns * width + (columns - 1) * 6
   const gridHeight = rows * height + (rows - 1) * 4
-  const counts = { a: 0, b: 0 }
-  for (let index = 0; index < total; index++) {
-    const zone = zones[index % Math.max(1, zones.length)] ?? 'a'
-    const slot = counts[zone]++
-    const halfLeft = zone === 'a' ? rect.x + 4 : rect.x + rect.width / 2 + 4
-    const x = halfLeft + (halfWidth - gridWidth) / 2 + (slot % columns) * (width + 6)
-    const y = rect.y + (rect.height - gridHeight) / 2 + Math.floor(slot / columns) * (height + 4)
-    const launching = index >= view.serving
-    const leaving = !launching && index >= view.serving - view.leaving
-    if (launching) {
+  for (const zone of ['a', 'b'] as const) {
+    const counts = view.zones[zone]
+    // Serving first (those scaling in last), then failed, then launching.
+    const kinds: ('serving' | 'leaving' | 'failed' | 'terminating' | 'launching')[] = [
+      ...Array<'serving'>(Math.max(0, counts.serving - counts.leaving)).fill('serving'),
+      ...Array<'leaving'>(counts.leaving).fill('leaving'),
+      ...Array<'failed'>(Math.max(0, counts.failed - counts.terminating)).fill('failed'),
+      ...Array<'terminating'>(counts.terminating).fill('terminating'),
+      ...Array<'launching'>(counts.launching).fill('launching'),
+    ]
+    kinds.slice(0, perHalf).forEach((kind, slot) => {
+      const halfLeft = zone === 'a' ? rect.x + 4 : rect.x + rect.width / 2 + 4
+      const x = halfLeft + (halfWidth - gridWidth) / 2 + (slot % columns) * (width + 6)
+      const y = rect.y + (rect.height - gridHeight) / 2 + Math.floor(slot / columns) * (height + 4)
+      if (kind === 'launching') {
+        context.save()
+        context.strokeStyle = 'rgba(60, 74, 120, 0.8)'
+        context.setLineDash([3, 3])
+        context.lineWidth = 1.2
+        roundedRectPath(context, { x, y, width, height }, 8, 0)
+        context.stroke()
+        context.restore()
+        drawCloud(context, 'altocumulus', x, y, width, height, {
+          ...look,
+          opacity: look.opacity * (0.15 + 0.45 * view.launchProgress),
+        })
+      } else if (kind === 'failed' || kind === 'terminating') {
+        // Unhealthy in a failed zone: grey and drooping, until the group replaces it.
+        const droop = 4 + (time > 0 ? Math.sin(time / 700 + slot) : 0)
+        drawCloud(context, 'altocumulus', x, y + droop, width, height, {
+          ...look,
+          tint: [GREY_TINT],
+          opacity: look.opacity * (kind === 'terminating' ? 1 - view.leaveFade : 0.85),
+        })
+      } else {
+        drawCloud(context, 'altocumulus', x, y, width, height, {
+          ...look,
+          opacity: look.opacity * (kind === 'leaving' ? 1 - view.leaveFade : 1),
+        })
+      }
+    })
+  }
+}
+
+/** A database copy's two-line caption, beside its cloud on the side away from the zone divider. */
+function databaseCaption(
+  context: CanvasRenderingContext2D,
+  rect: Rect,
+  zone: AvailabilityZone,
+  lines: [string, string],
+  colour: string,
+): void {
+  const side = databaseCaptionSide(zone)
+  const x = side === 'left' ? rect.x - 14 : rect.x + rect.width + 14
+  const align = side === 'left' ? 'right' : 'left'
+  const middle = rect.y + rect.height / 2
+  caption(context, lines[0], x, middle - 7, 12, align, colour)
+  caption(context, lines[1], x, middle + 8, 11, align, colour)
+}
+
+/**
+ * An RDS database (ADR 0014): its primary as a flat altostratus in its subnet and, with
+ * Multi-AZ, its standby as a fainter one in the other zone, joined by a wisp bridge (the
+ * grammar's "connected"). During a failover, lightning arcs from the failed primary to
+ * the standby, which wakes up as it takes over (the grammar's "failover"). A copy in a
+ * failed zone is grey and droops.
+ */
+function drawDatabase(
+  context: CanvasRenderingContext2D,
+  model: SkyViewModel,
+  database: RdsDatabase,
+  locked: boolean,
+): void {
+  const { scene, layout } = model
+  const record = model.crowd
+  const flying = record !== null && model.crowd !== null && crowdFrameAt(record, model.runTime)
+  const view = flying && record ? databaseViewAt(record, database.id, model.runTime) : null
+  const authoredZone =
+    scene.subnets.find((subnet) => subnet.id === database.primarySubnetId)?.availabilityZone ?? 'a'
+  const otherZone: AvailabilityZone = authoredZone === 'a' ? 'b' : 'a'
+  const primaryZone = view?.primaryZone ?? authoredZone
+  const standbyZone = view ? view.standbyZone : database.multiAz ? otherZone : null
+  const lostZone = view?.lostZone ?? null
+  const down = outageZones(model)
+  const bob = model.reducedMotion ? 0 : Math.sin(model.time / 900 + 3) * 1.5
+  const look = { tint: [BAND_TINT.mid], sunlight: 0, burst: 0, opacity: locked ? 0.62 : 1 }
+  const primary = databaseRect(scene, layout, database, primaryZone)
+  const standby = standbyZone ? databaseRect(scene, layout, database, standbyZone) : null
+  const lost =
+    lostZone && lostZone !== primaryZone ? databaseRect(scene, layout, database, lostZone) : null
+  const failingOver = view?.status === 'failing-over'
+  const waking = failingOver ? (view?.failover ?? 0) : 0
+
+  // The wisp bridge between primary and standby: they are kept in step.
+  if (primary && standby && !failingOver) {
+    drawWispBridge(context, centreOf(primary), centreOf(standby), model.time, model.reducedMotion)
+  }
+
+  // A copy that was lost with its zone: grey and drooping.
+  if (lost) {
+    drawCloud(context, 'altostratus', lost.x, lost.y + 6, lost.width, lost.height, {
+      ...look,
+      tint: [GREY_TINT],
+    })
+    databaseCaption(
+      context,
+      lost,
+      lostZone!,
+      ['lost with', `AZ ${lostZone!.toUpperCase()}`],
+      '#57536a',
+    )
+  }
+
+  if (standby) {
+    // During a failover the standby wakes: from faint to solid as it takes over.
+    drawCloud(context, 'altostratus', standby.x, standby.y + bob, standby.width, standby.height, {
+      ...look,
+      opacity: look.opacity * (0.42 + 0.58 * waking),
+    })
+    databaseCaption(
+      context,
+      standby,
+      standbyZone!,
+      failingOver ? ['standby:', 'taking over…'] : ['standby', '(Multi-AZ)'],
+      failingOver ? '#7a5a12' : '#3c4a78',
+    )
+  }
+
+  if (primary) {
+    const primaryDown =
+      view?.status === 'unavailable' || failingOver || (down.includes(primaryZone) && !view)
+    const y = primary.y + (primaryDown ? 6 : bob)
+    drawCloud(context, 'altostratus', primary.x, y, primary.width, primary.height, {
+      ...look,
+      tint: primaryDown ? [GREY_TINT] : look.tint,
+    })
+    // Its security group's pencilled outline goes where the primary is.
+    database.securityGroupIds.forEach((groupId: string, layer: number) => {
+      const style =
+        OUTLINE_STYLES[
+          scene.securityGroups.findIndex((group) => group.id === groupId) % OUTLINE_STYLES.length
+        ]
+      if (!style) return
       context.save()
-      context.strokeStyle = 'rgba(60, 74, 120, 0.8)'
-      context.setLineDash([3, 3])
-      context.lineWidth = 1.2
-      roundedRectPath(context, { x, y, width, height }, 8, 0)
+      context.strokeStyle = style.colour
+      context.lineWidth = 1.7
+      context.setLineDash(style.dash)
+      roundedRectPath(context, { ...primary, y }, 14, 6 + layer * 5)
       context.stroke()
       context.restore()
-      drawCloud(context, 'altocumulus', x, y, width, height, {
-        ...look,
-        opacity: look.opacity * (0.15 + 0.45 * view.launchProgress),
-      })
-    } else {
-      drawCloud(context, 'altocumulus', x, y, width, height, {
-        ...look,
-        opacity: look.opacity * (leaving ? 1 - view.leaveFade : 1),
-      })
+    })
+    const state =
+      view?.status === 'unavailable'
+        ? 'down'
+        : failingOver
+          ? 'failing over'
+          : database.multiAz || standbyZone
+            ? 'primary'
+            : 'single-AZ'
+    databaseCaption(
+      context,
+      { ...primary, y },
+      primaryZone,
+      [database.name, state],
+      primaryDown ? '#9b2c22' : PENCIL,
+    )
+    if (locked) drawPadlock(context, primary.x + primary.width - 2, y + 4)
+  }
+
+  // Failover: lightning arcs between the clouds, from the failed primary to the standby.
+  if (failingOver && primary && standby && !model.reducedMotion) {
+    const flicker = Math.sin(model.time / 37) > -0.2
+    if (flicker) drawLightning(context, centreOf(primary), centreOf(standby), model.time, 0.9)
+  }
+}
+
+/** A wisp bridge: a soft, slightly wavy band joining two clouds that are connected. */
+function drawWispBridge(
+  context: CanvasRenderingContext2D,
+  from: Point,
+  to: Point,
+  time: number,
+  still: boolean,
+): void {
+  context.save()
+  context.strokeStyle = 'rgba(255, 255, 255, 0.75)'
+  context.lineCap = 'round'
+  for (let strand = 0; strand < 3; strand++) {
+    const wave = still ? 0 : Math.sin(time / 800 + strand * 2) * 4
+    context.lineWidth = 4 - strand
+    context.beginPath()
+    context.moveTo(from.x, from.y + strand * 3)
+    context.quadraticCurveTo(
+      (from.x + to.x) / 2,
+      (from.y + to.y) / 2 - 16 + wave + strand * 4,
+      to.x,
+      to.y + strand * 3,
+    )
+    context.stroke()
+  }
+  context.restore()
+}
+
+/** A jagged lightning bolt from one point to another, with a soft glow. Deterministic. */
+function drawLightning(
+  context: CanvasRenderingContext2D,
+  from: Point,
+  to: Point,
+  time: number,
+  strength: number,
+): void {
+  const steps = 9
+  const points: Point[] = [from]
+  const seed = Math.floor(time / 90)
+  for (let step = 1; step < steps; step++) {
+    const along = step / steps
+    const jitter = Math.sin(seed * 12.9898 + step * 78.233) * 43758.5453
+    const offset = (jitter - Math.floor(jitter) - 0.5) * 26
+    const dx = to.x - from.x
+    const dy = to.y - from.y
+    const length = Math.hypot(dx, dy) || 1
+    points.push({
+      x: from.x + dx * along + (-dy / length) * offset,
+      y: from.y + dy * along + (dx / length) * offset,
+    })
+  }
+  points.push(to)
+  context.save()
+  context.lineJoin = 'round'
+  for (const [width, colour] of [
+    [9, `rgba(255, 244, 170, ${0.35 * strength})`],
+    [3.2, `rgba(255, 250, 220, ${strength})`],
+  ] as const) {
+    context.strokeStyle = colour
+    context.lineWidth = width
+    context.beginPath()
+    points.forEach((point, index) =>
+      index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y),
+    )
+    context.stroke()
+  }
+  context.restore()
+}
+
+/** The zones down at this moment of a crowd run; none outside a run. */
+function outageZones(model: SkyViewModel): AvailabilityZone[] {
+  return model.crowd && crowdFrameAt(model.crowd, model.runTime)
+    ? outageAt(model.crowd, model.runTime).zones
+    : []
+}
+
+/**
+ * An Availability Zone failing (ADR 0014): lightning strikes the ground over its column
+ * as it fails, and while it is down the column is washed grey, its clouds greyed, with
+ * a caption in words. The grammar's "outage or AZ failure".
+ */
+function drawOutage(context: CanvasRenderingContext2D, model: SkyViewModel): void {
+  if (!model.crowd || !crowdFrameAt(model.crowd, model.runTime)) return
+  const { zones, strike, struck } = outageAt(model.crowd, model.runTime)
+  for (const zone of zones) {
+    const cells = model.scene.subnets
+      .filter((subnet) => subnet.availabilityZone === zone)
+      .map((subnet) => model.layout.subnets[subnet.id])
+      .filter((rect): rect is Rect => rect !== undefined)
+    if (cells.length === 0) continue
+    const left = Math.min(...cells.map((rect) => rect.x))
+    const right = Math.max(...cells.map((rect) => rect.x + rect.width))
+    const top = Math.min(...cells.map((rect) => rect.y))
+    const bottom = Math.max(...cells.map((rect) => rect.y + rect.height))
+    context.save()
+    context.fillStyle = 'rgba(96, 98, 112, 0.36)'
+    context.fillRect(left, top, right - left, bottom - top)
+    context.restore()
+    // Above the VPC, over its column, where it does not cover the clouds it is about.
+    caption(
+      context,
+      `⚡ Availability Zone ${zone} is down`,
+      (left + right) / 2,
+      model.layout.vpc.y - 20,
+      14,
+      'center',
+      '#2b2b38',
+    )
+    if (struck.includes(zone) && strike > 0 && !model.reducedMotion) {
+      // Cloud to ground: from the sky above the column down to the ground.
+      const x = (left + right) / 2
+      drawLightning(
+        context,
+        { x: x - 30, y: SKY.high.top },
+        { x: x + 20, y: SKY.groundY - 40 },
+        model.time,
+        strike,
+      )
+      drawLightning(
+        context,
+        { x: x + 40, y: top },
+        { x: x - 50, y: SKY.groundY - 60 },
+        model.time + 300,
+        strike * 0.7,
+      )
+      context.save()
+      context.fillStyle = `rgba(255, 255, 240, ${0.22 * strike})`
+      context.fillRect(SKY.left, 0, SKY.right - SKY.left, SKY.groundY)
+      context.restore()
     }
   }
 }
@@ -636,6 +936,10 @@ function drawClouds(
     const rect = layout.clouds[resource.id]
     if (!rect) continue
     const locked = model.lockedIds.includes(resource.id)
+    if (resource.kind === 'rds-database') {
+      drawDatabase(context, model, resource, locked)
+      continue
+    }
     const compromised = model.compromisedIds.includes(resource.id)
     const unhealthy = resource.kind === 'ec2-instance' && !resource.healthy
     const bob = model.reducedMotion ? 0 : Math.sin(time / 900 + rect.x * 0.05) * 1.5
@@ -674,8 +978,13 @@ function drawClouds(
         leaving: 0,
         leaveFade: 0,
         attached: isAttached(scene, resource.id),
+        zones: restingZones(resource, scene),
       }
-      drawFleet(context, { ...rect, y }, zones, view, look)
+      // Each half keeps room for its share of the maximum; in a level with a storm, for
+      // the whole maximum, since every instance may end up in the zone that is left.
+      const storm = model.level.events.some((event) => event.kind === 'az-failure')
+      const slots = storm ? resource.max : Math.ceil(resource.max / Math.max(1, zones.length))
+      drawFleet(context, { ...rect, y }, view, slots, look, model.reducedMotion ? 0 : time)
     } else {
       drawCloud(context, GENUS_OF[resource.kind], rect.x, y, rect.width, rect.height, look)
     }
@@ -1067,8 +1376,8 @@ function drawCrowd(context: CanvasRenderingContext2D, model: SkyViewModel, costu
   const record = model.crowd
   const crowd = model.level.crowd
   if (!record || !crowd) return
-  const spots = crowdSpots(model.level.population)
   const biggest = Math.max(0, ...record.ticks.map((tick) => tick.demand))
+  const spots = crowdSpots(model.level.population, biggest)
   const lerp = (from: Point, to: Point, amount: number): Point => ({
     x: from.x + (to.x - from.x) * amount,
     y: from.y + (to.y - from.y) * amount,
@@ -1176,20 +1485,32 @@ function drawCrowdStream(
     context.restore()
   }
   const tick = frame.tick
-  // The kites' strings show the way up to the load balancer; dots show where it sends them on.
+  // The kites' strings show the way up to the load balancer; dots show where it sends
+  // them on, and on again to the database if the application reads one. Blue dots get
+  // an answer; red ones are turned away where they stop; grey ones get no answer.
   const hub = stream.trunk.at(-1)
   if (hub) {
+    const served = Math.min(tick.demand, tick.capacity)
+    const turnedAway: Point[] = []
     for (const branch of stream.branches) {
-      dots(
-        [hub, branch.to],
-        Math.max(1, Math.round((branch.share * tick.delivered) / 2)),
-        '#2f6fb3',
-      )
+      const count = Math.max(1, Math.round((branch.share * served) / 2))
+      const colour =
+        branch.outcome === 'delivered'
+          ? '#2f6fb3'
+          : branch.outcome === 'blocked'
+            ? '#b5443a'
+            : '#8a8a96'
+      dots([hub, branch.to], count, colour)
+      if (branch.database) {
+        dots([branch.to, branch.database], count, colour)
+        if (branch.outcome === 'blocked') turnedAway.push(branch.database)
+      }
     }
-    if (tick.dropped > 0) {
+    const noRoom = tick.capacity > 0 ? Math.max(0, tick.demand - tick.capacity) : 0
+    if (noRoom > 0) {
       caption(
         context,
-        `no room for ${tick.dropped} kite${tick.dropped === 1 ? '' : 's'}`,
+        `no room for ${noRoom} kite${noRoom === 1 ? '' : 's'}`,
         hub.x + 96,
         hub.y - 6,
         12,
@@ -1197,11 +1518,19 @@ function drawCrowdStream(
         '#9b2c22',
       )
     }
+    const at = turnedAway[0]
+    if (at) {
+      caption(context, '✕ turned away here', at.x + 70, at.y - 4, 12, 'left', '#9b2c22')
+    }
+  }
+  if (stream.databaseNote) {
+    const { at, label } = stream.databaseNote
+    caption(context, label, at.x, at.y, 12, 'center', '#9b2c22')
   }
   if (stream.stoppedAt) {
     caption(
       context,
-      '✕ stopped here: see the trace',
+      stream.stoppedLabel,
       stream.stoppedAt.x + 14,
       stream.stoppedAt.y,
       12,
@@ -1371,6 +1700,15 @@ function drawWeatherStation(
     caption(context, 'OK', left, y - 161, 12, 'left', '#2f5f34')
   }
   caption(context, `${tick.demand} kites · room for ${tick.capacity}`, left, y - 143, 12, 'left')
+  caption(
+    context,
+    `${tick.targetsInService} healthy host${tick.targetsInService === 1 ? '' : 's'}`,
+    left,
+    y - 127,
+    12,
+    'left',
+    tick.targetsInService === 0 ? '#9b2c22' : '#57536a',
+  )
 }
 
 /** Splits text into lines no wider than `maxWidth` at the current font. */
@@ -1509,6 +1847,7 @@ export function drawSky(context: CanvasRenderingContext2D, model: SkyViewModel):
   }
   const crowdFrame = model.crowd ? crowdFrameAt(model.crowd, model.runTime) : null
   drawClouds(context, model, burstFor, crowdFrame)
+  drawOutage(context, model)
   drawHighlight(context, model)
   if (crowdFrame) drawCrowdStream(context, model, crowdFrame)
   if (model.level.crowd) drawWeatherStation(context, model, crowdFrame)

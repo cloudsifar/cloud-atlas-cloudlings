@@ -26,6 +26,7 @@ export * from './storage'
 export {
   crowdLog,
   fleetSizes,
+  membersFailed,
   membersTimedOut,
   TICK_DURATION,
   type LogEntry,

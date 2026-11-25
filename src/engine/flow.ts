@@ -13,15 +13,24 @@ import {
   findResourceOfKind,
   requireNetworkAcl,
   requireSubnet,
+  subnetIsDown,
   type Ec2Instance,
   type LoadBalancer,
+  type RdsDatabase,
   type S3Bucket,
   type Scene,
   type ServiceAction,
   type Subnet,
 } from './model'
 import { evaluateNetworkAcl } from './networkAcls'
-import { describePort, HTTP_PORT, HTTPS_PORT, REPRESENTATIVE_EPHEMERAL_PORT } from './ports'
+import {
+  describePort,
+  HTTP_PORT,
+  HTTPS_PORT,
+  MYSQL_PORT,
+  POSTGRESQL_PORT,
+  REPRESENTATIVE_EPHEMERAL_PORT,
+} from './ports'
 import { isPublicSubnet, resolveRoute } from './routing'
 import { evaluateBucketAccess, type Caller } from './s3'
 import { evaluateSecurityGroups, type ConnectionPeer } from './securityGroups'
@@ -126,11 +135,16 @@ function evaluateInternetToLoadBalancer(
 ): FlowResult {
   const trace: TraceStep[] = []
   const sequence = flow.sequence ?? 0
-  const nodeCount = Math.max(loadBalancer.subnetIds.length, 1)
-
   // A load balancer has one node per subnet. DNS spreads clients across the nodes;
-  // we rotate through them by sequence so the choice is repeatable.
-  const nodeSubnetId = loadBalancer.subnetIds[sequence % nodeCount]
+  // we rotate through them by sequence so the choice is repeatable. A node whose
+  // Availability Zone is down is taken out of DNS, so clients reach the others
+  // (docs/ENGINE.md, "Availability Zone failure").
+  const nodes = loadBalancer.subnetIds.filter((id) => {
+    const subnet = scene.subnets.find((candidate) => candidate.id === id)
+    return subnet !== undefined && !subnetIsDown(scene, subnet)
+  })
+  const nodeCount = Math.max(nodes.length, 1)
+  const nodeSubnetId = nodes[sequence % nodeCount]
   if (nodeSubnetId === undefined) {
     trace.push(
       makeStep('request', { kind: 'vpc' }, 'route', {
@@ -177,10 +191,14 @@ function evaluateInternetToLoadBalancer(
   if (!reachedTarget) return { outcome: 'blocked', trace }
 
   if (!target.healthy) {
+    const targetSubnet = scene.subnets.find((subnet) => subnet.id === target.subnetId)
+    const zoneDown = targetSubnet !== undefined && subnetIsDown(scene, targetSubnet)
     trace.push(
       makeStep('request', atResource(target.id), 'delivery', {
         result: 'fail',
-        explanation: `"${target.name}" is not running, so nothing answers and the request times out.`,
+        explanation: zoneDown
+          ? `"${target.name}" is in Availability Zone ${targetSubnet.availabilityZone}, which is down, so nothing answers and the request times out.`
+          : `"${target.name}" is not running, so nothing answers and the request times out.`,
       }),
     )
     return { outcome: 'dropped', trace }
@@ -197,7 +215,16 @@ function evaluateInternetToLoadBalancer(
   if (breached) return { outcome: 'breach', trace }
 
   // Any work the application does before it can answer (e.g. storing an upload).
-  if (flow.backendCall) {
+  const database = flow.backendCall
+    ? findResourceOfKind(scene, 'rds-database', flow.backendCall.destinationId)
+    : undefined
+  if (database) {
+    // A query to the database: network checks there and back, then the database itself.
+    const call = instanceToDatabaseChecks(scene, target, database)
+    if (!runChecks(trace, call.request)) return { outcome: 'blocked', trace }
+    if (!runChecks(trace, [call.answer])) return { outcome: 'dropped', trace }
+    if (!runChecks(trace, call.response)) return { outcome: 'blocked', trace }
+  } else if (flow.backendCall) {
     const bucket = findResourceOfKind(scene, 's3-bucket', flow.backendCall.destinationId)
     if (!bucket) {
       trace.push(
@@ -208,10 +235,16 @@ function evaluateInternetToLoadBalancer(
       )
       return { outcome: 'blocked', trace }
     }
-    const call = instanceToBucketChecks(scene, target, bucket, flow.backendCall.action, {
-      request: 'backend-request',
-      response: 'backend-response',
-    })
+    const call = instanceToBucketChecks(
+      scene,
+      target,
+      bucket,
+      flow.backendCall.action ?? 's3:Read',
+      {
+        request: 'backend-request',
+        response: 'backend-response',
+      },
+    )
     if (!runChecks(trace, [...call.request, ...call.response])) return { outcome: 'blocked', trace }
   }
 
@@ -461,6 +494,131 @@ function selectTarget(
 }
 
 // ---------------------------------------------------------------------------
+// An application instance querying its RDS database
+// ---------------------------------------------------------------------------
+
+/** The port each database engine listens on. */
+export const ENGINE_PORT: Record<RdsDatabase['engine'], number> = {
+  mysql: MYSQL_PORT,
+  postgresql: POSTGRESQL_PORT,
+}
+
+/**
+ * The checks for an instance querying an RDS database in the same VPC.
+ *
+ * AWS behaviour modelled:
+ * - The VPC's local route carries the traffic; it can never be removed.
+ * - NACLs judge it where it crosses a subnet boundary, both ways (stateless).
+ * - The database's security group must allow the engine port from the caller: by
+ *   naming the caller's security group, or an address range the caller is in.
+ *   Security groups are stateful, so the reply needs no rule.
+ * - The database's endpoint always points at the current primary, so after a
+ *   Multi-AZ failover the same query reaches the new primary in the other AZ.
+ * - While a failover is under way, or when the primary's AZ is down and there is
+ *   no standby, nothing answers: the query fails and so does the request.
+ */
+function instanceToDatabaseChecks(
+  scene: Scene,
+  instance: Ec2Instance,
+  database: RdsDatabase,
+): { request: PendingCheck[]; answer: PendingCheck; response: PendingCheck[] } {
+  const instanceSubnet = requireSubnet(scene, instance.subnetId)
+  const databaseSubnet = requireSubnet(scene, database.primarySubnetId)
+  const instanceIp = addressInSubnet(instanceSubnet)
+  const databaseIp = addressInSubnet(databaseSubnet)
+  const port = ENGINE_PORT[database.engine]
+  const crossesBoundary = instanceSubnet.id !== databaseSubnet.id
+  const leg = 'backend-request'
+  const back = 'backend-response'
+  const databasePeer: ConnectionPeer = {
+    ip: databaseIp,
+    securityGroupIds: database.securityGroupIds,
+    description: `the database "${database.name}"`,
+  }
+  return {
+    request: [
+      () =>
+        makeStep(leg, atResource(instance.id), 'security-group', {
+          ...evaluateSecurityGroups(
+            scene,
+            instance.securityGroupIds,
+            'outbound',
+            databasePeer,
+            port,
+          ),
+        }),
+      () =>
+        makeStep(leg, atSubnet(instanceSubnet), 'route', {
+          result: 'pass',
+          ruleRef: 'local route (VPC)',
+          explanation: `The database is inside the VPC, so the local route of "${instanceSubnet.name}" carries the query. Every route table has it, and it cannot be removed.`,
+        }),
+      ...(crossesBoundary
+        ? [
+            () => naclStep(scene, instanceSubnet, 'outbound', databaseIp, port, leg),
+            () => naclStep(scene, databaseSubnet, 'inbound', instanceIp, port, leg),
+          ]
+        : []),
+      () =>
+        makeStep(
+          leg,
+          atResource(database.id),
+          'security-group',
+          evaluateSecurityGroups(
+            scene,
+            database.securityGroupIds,
+            'inbound',
+            instancePeer(scene, instance),
+            port,
+          ),
+        ),
+    ],
+    answer: () => {
+      const zone = databaseSubnet.availabilityZone.toUpperCase()
+      switch (database.status) {
+        case 'available':
+          return makeStep(leg, atResource(database.id), 'delivery', {
+            result: 'pass',
+            explanation: `"${database.name}" answers the query from its primary in AZ ${zone}.`,
+          })
+        case 'failing-over':
+          return makeStep(leg, atResource(database.id), 'delivery', {
+            result: 'fail',
+            explanation: `"${database.name}" is failing over: its primary's Availability Zone is down, and RDS is promoting the standby in the other AZ. That takes a minute or two, and no query is answered until it is done, so this request fails.`,
+          })
+        case 'unavailable':
+          return makeStep(leg, atResource(database.id), 'delivery', {
+            result: 'fail',
+            explanation: `"${database.name}" is down: it ran only in AZ ${zone}, which has failed, and it has no standby to take over. With Multi-AZ, RDS would have failed over to a standby in the other AZ.`,
+          })
+      }
+    },
+    response: crossesBoundary
+      ? [
+          () =>
+            naclStep(
+              scene,
+              databaseSubnet,
+              'outbound',
+              instanceIp,
+              REPRESENTATIVE_EPHEMERAL_PORT,
+              back,
+            ),
+          () =>
+            naclStep(
+              scene,
+              instanceSubnet,
+              'inbound',
+              databaseIp,
+              REPRESENTATIVE_EPHEMERAL_PORT,
+              back,
+            ),
+        ]
+      : [],
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Journey 2: an instance calling S3 (as a backend call, or as a flow of its own)
 // ---------------------------------------------------------------------------
 
@@ -564,6 +722,19 @@ function instanceToBucketChecks(
             ...leaveInstance,
             ...routeFails(
               `The route table of "${subnet.name}" sends this to "${nat.name}", but that NAT Gateway sits in "${natSubnet.name}", which is not a public subnet. A NAT Gateway needs its own route to an Internet Gateway.`,
+            ),
+          ],
+          response: [],
+        }
+      }
+      if (subnetIsDown(scene, natSubnet)) {
+        // AWS behaviour modelled: a NAT Gateway lives in one Availability Zone. If that
+        // zone fails, private subnets routed to it lose their way out (ADR 0014).
+        return {
+          request: [
+            ...leaveInstance,
+            ...routeFails(
+              `The route table of "${subnet.name}" sends this to "${nat.name}", but that NAT Gateway is in Availability Zone ${natSubnet.availabilityZone.toUpperCase()}, which is down. A NAT Gateway lives in one zone; a NAT Gateway in each zone avoids this.`,
             ),
           ],
           response: [],

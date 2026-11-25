@@ -27,7 +27,7 @@
     "simplifications": [
       "Targets always receive traffic on HTTP 80; the load balancer handles HTTPS (certificates are assumed).",
       "One listener and one set of targets. Real load balancers can have several, with rules.",
-      "Health is judged instantly. Real health checks take a few intervals to change their mind.",
+      "Health is judged instantly, and when an Availability Zone fails, the load balancer stops sending kites there the same minute. Real health checks take a few intervals to change their mind.",
       "The load balancer itself never runs out of capacity. Real ones scale automatically, but a sudden spike can briefly outpace them."
     ],
     "atlasPage": "TODO(Simon)"
@@ -123,10 +123,11 @@
       "Only target tracking on CPU is offered. Step, simple, scheduled and predictive scaling are left out.",
       "When CPU has stayed below the target for 2 minutes, the group removes enough instances to bring it back up to the target, but never more than half the fleet at once. AWS also scales in more gradually than out, at a pace it decides itself.",
       "A kite that finds every target busy times out in the same tick. Real requests wait in a queue first, and some are served late.",
-      "Every kite in a crowd is treated alike, so one journey stands for all of them.",
+      "Every kite in a crowd is treated alike, so one journey through each instance stands for all the kites that instance is sent.",
       "A group keeps at least one instance; AWS allows a minimum of zero.",
-      "Launch templates, health-check replacement and instance warm-up settings are left out.",
-      "A group can have at most 16 instances here, so the sky can draw every one. Real groups can be far larger."
+      "Launch templates and instance warm-up settings are left out. Instances are replaced only when their Availability Zone fails; real groups also replace instances that fail their health checks for other reasons.",
+      "A group can have at most 16 instances here, so the sky can draw every one. Real groups can be far larger.",
+      "When an Availability Zone fails, the group notices its instances there are unhealthy 2 minutes later, terminates them and launches replacements in its other zones, which serve 2 minutes after that. Real health checks and launches vary."
     ],
     "atlasPage": "TODO(Simon)"
   },
@@ -187,6 +188,38 @@
     ],
     "simplifications": [
       "There is no bastion host in these levels: nothing here needs anyone to log in to an EC2 instance."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "rds-database": {
+    "title": "RDS database",
+    "body": "Amazon RDS runs a relational database (MySQL, PostgreSQL and others) for you: AWS installs it, patches it and backs it up. It lives in private subnets, and only the application tier talks to it, on the engine's port.",
+    "points": [
+      "It needs a DB subnet group: private subnets in at least two Availability Zones, even when the database runs in one. That is what lets it become Multi-AZ later.",
+      "Its security group should allow MySQL 3306 (or PostgreSQL 5432) from the application tier's security group, not from an address range. An address range belongs to one subnet, in one zone; a security group follows the instances wherever they run.",
+      "Single-AZ: one copy, in one zone. If that zone fails, the database is down until the zone comes back.",
+      "Multi-AZ: RDS keeps a standby in another zone, updated with every write as it happens. If the primary's zone fails, RDS fails over to the standby by itself, typically in 60–120 seconds. The database's endpoint (its address) moves with it, so the application reconnects to the same name.",
+      "The standby serves nothing until it takes over: it is not for spreading reads. Read replicas are the feature for that."
+    ],
+    "simplifications": [
+      "Database users and passwords, engine versions, storage and backups are left out: the application always has the right credentials here.",
+      "A failover takes exactly 2 minutes here. In AWS it is typically 60–120 seconds, and can take longer.",
+      "After a failover the database has no standby until its old zone recovers, and zones do not recover during a run here.",
+      "Encryption at rest is chosen when a database is created and cannot be added in place. This level does not show it."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "concept-static-stability": {
+    "title": "Surviving the loss of an Availability Zone",
+    "body": "Each AWS Region has several Availability Zones: separate data centres with their own power, cooling and networking, close enough to each other for fast links. A zone can fail. An application rides it out if nothing it needs lives in only one zone, and the zones that are left can carry the load.",
+    "points": [
+      "Spread the compute: an Auto Scaling group across subnets in two zones. When one zone fails, the load balancer stops sending it requests, and the group launches replacements in the zone that is up.",
+      "Keep the data available: a Multi-AZ database fails over to its standby in the other zone.",
+      "Chain security groups by name, not by address. An address range is one subnet's, in one zone; when the instances move, the rule does not.",
+      "Static stability: run enough in each zone to carry the load on its own. Then nothing has to launch in a hurry when a zone fails. Replacements take minutes, and the visitors do not wait."
+    ],
+    "simplifications": [
+      "Here a zone fails all at once and stays down until the end of the run. Real outages are often partial and end; when a zone recovers, Auto Scaling spreads the group across the zones again."
     ],
     "atlasPage": "TODO(Simon)"
   }

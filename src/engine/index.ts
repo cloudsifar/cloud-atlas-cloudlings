@@ -3,9 +3,16 @@
 
 export * from './model'
 export * from './trace'
-export { PORT_OPTIONS, describePort, portOptionCovers, HTTP_PORT, HTTPS_PORT } from './ports'
+export {
+  PORT_OPTIONS,
+  describePort,
+  portOptionCovers,
+  HTTP_PORT,
+  HTTPS_PORT,
+  MYSQL_PORT,
+} from './ports'
 export { cidrContains, addressInSubnet } from './address'
-export { evaluateFlow, healthyTargets } from './flow'
+export { evaluateFlow, healthyTargets, ENGINE_PORT } from './flow'
 export {
   expandAutoScalingGroups,
   groupInstances,
@@ -18,15 +25,20 @@ export {
   REQUESTS_PER_TICK,
   LAUNCH_TICKS,
   SCALE_IN_TICKS,
+  HEALTH_CHECK_TICKS,
+  FAILOVER_TICKS,
   type AlarmState,
   type CrowdRecord,
   type TickRecord,
+  type ZoneCount,
 } from './crowd'
 export {
   crowdTimeline,
   surgeKitesAt,
   surgeWindow,
   waveCrowdAt,
+  failedZonesAt,
+  type AzFailure,
   type Crowd,
   type CrowdMoment,
   type CrowdSurge,

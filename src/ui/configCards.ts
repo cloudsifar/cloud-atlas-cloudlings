@@ -18,6 +18,8 @@ import {
   type ServiceAction,
   LAUNCH_TICKS,
   REQUESTS_PER_TICK,
+  ENGINE_PORT,
+  describePort,
   type Ec2Instance,
 } from '../engine'
 import {
@@ -29,7 +31,9 @@ import {
   removeRoute,
   removeSecurityGroupRule,
   setBlockPublicAccess,
+  setDatabaseMultiAz,
   setGroupSettings,
+  setGroupSubnets,
   setInstanceRole,
   setListener,
   setPublicRead,
@@ -425,6 +429,7 @@ const KIND_SUBTITLE: Record<Resource['kind'], string> = {
   'auto-scaling-group': 'A fleet of instances that grows and shrinks',
   's3-bucket': 'Object storage, outside the VPC',
   'iam-role': 'Permissions a resource can wear',
+  'rds-database': 'A managed relational database',
 }
 
 function resourceCard(state: GameState, resource: Resource, actions: CardActions): HTMLElement[] {
@@ -627,10 +632,52 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
         locked,
       )
       attention(scalingField.firstElementChild, actions, `group-scaling:${resource.id}`)
+      // Which private subnets, and so which Availability Zones, the fleet runs in (ADR 0014).
+      const privateSubnets = scene.subnets.filter((subnet) => subnet.band === 'mid')
+      const subnetBoxes = privateSubnets.map((subnet) => {
+        const on = resource.subnetIds.includes(subnet.id)
+        const box = h('input', {
+          type: 'checkbox',
+          checked: on,
+          // A group always keeps at least one subnet.
+          disabled: locked || (on && resource.subnetIds.length === 1),
+          attrs: { 'data-focus-key': `group-subnet-${subnet.id}` },
+        })
+        box.onchange = () =>
+          actions.edit((current) =>
+            setGroupSubnets(
+              current,
+              resource.id,
+              box.checked
+                ? [...resource.subnetIds, subnet.id]
+                : resource.subnetIds.filter((id) => id !== subnet.id),
+            ),
+          )
+        return h(
+          'label',
+          { class: 'check' },
+          box,
+          `${subnet.name} (Availability Zone ${subnet.availabilityZone.toUpperCase()})`,
+        )
+      })
+      const zones = new Set(
+        resource.subnetIds.map(
+          (id) => scene.subnets.find((subnet) => subnet.id === id)?.availabilityZone,
+        ),
+      )
       body.append(
+        attention(
+          h('h5', { textContent: 'Subnets (and so Availability Zones)' }),
+          actions,
+          `group-subnets:${resource.id}`,
+        ),
+        ...subnetBoxes,
         h('p', {
           class: 'note',
-          textContent: `Identical instances, spread across ${resource.subnetIds.map(subnetName).join(' and ')}.`,
+          textContent:
+            zones.size > 1
+              ? 'Identical instances, spread evenly across these zones. If one zone fails, the group launches replacements in the other.'
+              : 'Every instance is in one Availability Zone. If that zone fails, the group has nowhere else to launch.',
         }),
         dropdown(
           'Instance size',
@@ -647,6 +694,45 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
         h('p', {
           class: 'note',
           textContent: `With a policy, CloudWatch alarms watch the fleet’s CPU. When it rises above the target, the group launches enough instances to bring it back down; they take ${LAUNCH_TICKS} minutes to start serving. When it stays below the target, the group removes instances, at most half the fleet at a time.`,
+        }),
+      )
+      break
+    }
+    case 'rds-database': {
+      // An RDS database: where it runs, its standby, and who may connect (ADR 0014).
+      const zoneOf = (id: string) =>
+        scene.subnets.find((subnet) => subnet.id === id)?.availabilityZone.toUpperCase() ?? '?'
+      const primaryZone = zoneOf(resource.primarySubnetId)
+      const standbySubnet = resource.subnetIds.find((id) => zoneOf(id) !== primaryZone)
+      const multiAzBox = h('input', {
+        type: 'checkbox',
+        checked: resource.multiAz,
+        disabled: locked || standbySubnet === undefined,
+        attrs: { 'data-focus-key': 'multi-az' },
+      })
+      multiAzBox.onchange = () =>
+        actions.edit((current) => setDatabaseMultiAz(current, resource.id, multiAzBox.checked))
+      const engine = resource.engine === 'mysql' ? 'MySQL' : 'PostgreSQL'
+      body.append(
+        h('p', {
+          class: 'note',
+          textContent: `${engine}, listening on ${describePort(ENGINE_PORT[resource.engine])} · DB subnet group: ${resource.subnetIds.map(subnetName).join(' and ')}`,
+        }),
+        h('p', {
+          class: 'note',
+          textContent: resource.multiAz
+            ? `Primary in AZ ${primaryZone} (${subnetName(resource.primarySubnetId)}); standby in AZ ${standbySubnet ? zoneOf(standbySubnet) : '?'}, kept in step with every write. The standby answers nothing until it takes over.`
+            : `Runs in AZ ${primaryZone} only (${subnetName(resource.primarySubnetId)}). If that zone fails, the database is down.`,
+        }),
+        attention(
+          h('label', { class: 'check' }, multiAzBox, 'Multi-AZ: a standby in another zone'),
+          actions,
+          `database-multi-az:${resource.id}`,
+        ),
+        h('p', {
+          class: 'note',
+          textContent:
+            'If the primary’s zone fails, RDS fails over to the standby by itself, typically within a minute or two (2 minutes here). The database keeps its address, so the application reconnects to the same name. A Multi-AZ database costs about twice as much.',
         }),
       )
       break

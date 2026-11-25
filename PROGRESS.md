@@ -9,8 +9,8 @@ Running log. Newest state first; updated at the end of every milestone.
       balancer target selection) with tests citing AWS docs; `docs/ENGINE.md`,
       `docs/SIMPLIFICATIONS.md`
 - [x] **Milestone 2** — Levels 1–3 playable with placeholder art
-- [ ] **Milestone 3** — in progress: Levels 4 (Skyway) and 5 (Crowd Day) finished; Levels 6–12
-      and the rest of the engine to do. See "Handover: what to build next" below
+- [ ] **Milestone 3** — in progress: Levels 4 (Skyway), 5 (Crowd Day) and 6 (Storm Front)
+      finished; Levels 7–12 and the rest of the engine to do. See "Handover: what to build next" below
 - [ ] Milestone 4 — shell (partly started: start screen, level select with ticks and stars,
       Guided Run from Level 1 with "Next level", settings)
 - [ ] Milestone 5 — finish
@@ -63,19 +63,41 @@ Running log. Newest state first; updated at the end of every milestone.
       8 and 16 and back down, with the log reading as expected minute by minute. The
       level was completed with three stars, and every narrator step advanced.
     - No console errors in any of these runs.
+  - Level 6, Storm Front (ADR 0014), on the esbuild bundle, 25 November 2026:
+    - The unsolved run: 8 of 8 Cloudlings timed out from minute 8. The weather station
+      said no healthy targets, that the fleet had nowhere to launch replacements, and
+      that the database went down with its zone. "Follow a kite with no healthy
+      instance to answer it" opened a trace ending "is in Availability Zone a, which is
+      down … times out".
+    - The fleet spread to both subnets, nothing else: AZ b's instance was turned away by
+      the database's 10.0.11.0/24 rule from the first minute ("✕ turned away here" at
+      the database), and the database went down with AZ a at minute 8.
+    - The guided fix through the interface: Private subnet B ticked on the fleet card,
+      minimum raised to 4, Multi-AZ ticked, MySQL from `ec2-app-sg` added on
+      `rds-db-sg` and the address-range rule removed. Every narrator step advanced. The
+      storm played over minutes 8–11 in slow motion (the run took 44 s): lightning
+      over AZ a, the database failing over with lightning between primary and standby,
+      replacements launching in AZ b. Only the two failover minutes failed. Both
+      objectives and all three stars, and the completion card listed the four fact
+      cards.
+    - Level 5 replayed to minute 10 afterwards: unchanged.
+    - No console errors in any of these runs.
   - No console errors in any of the earlier runs.
 
 ## Not verified — do these first
 
 1. **Vitest, the Vite build and lint on Windows, on everything since 18 November**
-   (ADRs 0007–0013). In that time the suite has run only on the offline runner
-   (267 tests), and ESLint, Prettier and the project `tsc` were run against the
+   (ADRs 0007–0014). In that time the suite has run only on the offline runner
+   (308 tests), and ESLint, Prettier and the project `tsc` were run against the
    installed packages from the cloud sandbox. On Windows, after `git pull`:
-   `npm ci --ignore-scripts`, then `npm test` (expect 19 test files and **267 passed**),
+   `npm ci --ignore-scripts`, then `npm test` (expect 21 test files and **308 passed**),
    `npm run build` (writes `dist/`, including `dist/sounds/README.md`) and
    `npm run lint`. Read each output, not only the exit code.
-2. **Level 5 played by a person** (ADR 0012): whether the pace, the fleet, the dial and
-   the CloudWatch log now read clearly, and how the new sounds land.
+2. **Level 6 played by a person** (ADR 0014): whether the storm's slow-motion minutes
+   are slow enough to follow, whether the database's primary, standby and failover
+   read clearly, whether the security group trap is fair, and how the new `thunder`
+   and `failover` placeholder sounds land. Level 5 (ADR 0012) was played by Simon on
+   25 November and works.
 3. **A person playing it again.** Simon played Levels 1–5 in a real browser on
    18–19 November; his changes are in ADR 0007. They need his eye: how dragging feels
    now, the sound levels, the subnet tints, the speech bubbles, Resume.
@@ -121,15 +143,19 @@ Running log. Newest state first; updated at the end of every milestone.
 - Level 5: clicking one of the four named Cloudlings after a crowd run opens _its own_
   journey, flown at a quiet moment, so it is always delivered when the network is
   right. The crowd's journeys (timed out, or got through at the busiest tick) are
-  opened from the weather station's "Follow a kite…" links.
+  opened from the weather station's "Follow a kite…" links. The same holds in Level 6:
+  a named Cloudling's own journey is flown before the storm.
+- Level 6: the load balancer is one cloud across both zones, so in the storm only its
+  left half is greyed; its node in AZ a is out of service, which the CloudWatch log and
+  the trace say in words.
 
 ## Not started (from the brief)
 
-- Engine: WAF, scene events (`applyEvent`: AZ failure, instance failure), replacing
-  unhealthy instances in a group, RDS, DynamoDB, SQS, SNS, Lambda, KMS, SSM, Route 53,
+- Engine: WAF, instance failure outside an AZ failure, RDS encryption and read replicas,
+  DynamoDB, SQS, SNS, Lambda, KMS, SSM, Route 53,
   CloudWatch alarms other than a scaling policy's (e.g. publishing to SNS), EBS, EFS,
   DynamoDB gateway endpoint flows, and the cost penalty for idle oversized instances.
-- Levels 6–12.
+- Levels 7–12.
 - Demo Mode, Field Guide, About screen, phone path, link
   preview tags, regional scenes beyond N. Virginia, costumes.
 - `docs/ASSET_LIST.md`, `CREDITS.md`, font choice ADR (the game currently uses system
@@ -197,14 +223,33 @@ Still not done for Level 5, and left for later milestones:
   help once the player knows what to watch.
 - The Field Guide entries for the new signs (bell, slack string, crowd) — Milestone 4.
 
-**Level 6, Storm Front.** Add an `az-failure` kind to `ScenarioEvent`
-(`src/engine/timeline.ts`) and a pure `applyEvent(scene, event) → scene`; let a moment
-carry the scene events of its tick, applied by `simulateCrowd` before it evaluates the
-tick (ADR 0005). Then: AZ failure as an event (everything in the AZ becomes
-unhealthy, including a NAT Gateway; the ALB stops routing there; the ASG relaunches
-elsewhere), RDS as a resource (private subnets, subnet group across two AZs, engine
-port from the app tier's security group, Multi-AZ failover over a few ticks, standby
-serves no reads), and an instance → database flow in `flow.ts`.
+**Level 6, Storm Front: built (ADR 0014, 25 November 2026).** What the level does:
+
+- Eight Cloudlings look up their orders: load balancer → web fleet → orders database
+  (RDS for MySQL). The fleet and the database start in AZ a only, and AZ a fails at
+  minute 8.
+- Three fixes, one narrator step each: spread the fleet over both subnets, make the
+  database Multi-AZ, and chain its security group to `ec2-app-sg`. The third is a trap:
+  the database starts by allowing MySQL from Private subnet A's range only, so a spread
+  fleet's AZ b instances are turned away.
+- Objectives: at least 90% answered through the storm, and every kite answered at the
+  end. Third star, static stability: no kite fails outside the failover, which needs a
+  minimum of 4 (two per zone).
+- The storm's minutes play three times slower, so the strike, the failover and the
+  replacements can be followed (15 s); the rest keeps Level 5's pace.
+
+Still not done for Level 6, and left for later milestones:
+
+- The four fact cards' `atlasPage` links are `TODO(Simon)`, like every card.
+- `thunder` and `failover` are synthesised placeholders.
+- A replay speed control would now help on both crowd levels.
+
+**Level 7, The Wrong Kite (next).** Brief, Section 6. Needs WAF (a web ACL on the load
+balancer with the Core rule set and a rate-based rule), custom network ACLs on the
+public subnets with rule order that matters, and three kinds of red kite: a known bad
+range, a malicious payload, and a flood. The engine already evaluates network ACLs in
+rule order with ephemeral ports (section 6 of `docs/ENGINE.md`); WAF is new, and a
+flood needs a hostile crowd or a rate count on the timeline.
 
 **Smaller jobs, any time.**
 
@@ -318,3 +363,12 @@ None found so far. Two places where the brief's wording was made more exact:
   knocked loose and fallen means no room, as kites behave in the other levels. Simon's
   own Level 4 summary edit was pulled in first. ADR 0013. 267 tests pass offline; played
   headlessly, unsolved and solved, with no console errors.
+- **Session 3, continued: Level 6, Storm Front.** RDS (MySQL/PostgreSQL, DB subnet
+  group, Multi-AZ failover in two minutes), an `az-failure` event, health-check
+  replacement in a zone that is up, load balancer nodes leaving a failed zone, NAT
+  Gateways failing with their zone, and a crowd shared between targets by room. Five
+  predicates. The sky draws the storm, the fleet by zone and the database's primary,
+  standby and failover; the storm's minutes play slower, after Simon's Level 5 lesson
+  that a level is not a race. Fact cards for RDS and static stability. ADR 0014;
+  SIMPLIFICATIONS 30–37. 308 tests pass offline; played headlessly unsolved, half
+  solved and solved to three stars, no console errors.

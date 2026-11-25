@@ -93,8 +93,8 @@ export type NarrationStep = {
 /**
  * The config card sections that can pulse, and what the id after the colon names:
  * a security group, a route table, a load balancer (its listener or its targets), a
- * role (its statements or who wears it), an instance (the role it wears), or an Auto
- * Scaling group (its scaling policy).
+ * role (its statements or who wears it), an instance (the role it wears), an Auto
+ * Scaling group (its scaling policy or its subnets), or an RDS database (Multi-AZ).
  */
 export const PULSE_SECTIONS = [
   'security-group',
@@ -105,6 +105,8 @@ export const PULSE_SECTIONS = [
   'role-wearers',
   'instance-role',
   'group-scaling',
+  'group-subnets',
+  'database-multi-az',
 ] as const
 
 /**

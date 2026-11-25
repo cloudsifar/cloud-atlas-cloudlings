@@ -10,6 +10,7 @@
 //   resource, so it does not appear in this table at all.
 // - An Internet Gateway and an IAM role have no charge.
 // - A larger instance costs more whether or not the extra capacity is used.
+// - A Multi-AZ database costs about twice a single-AZ one: you pay for the standby too.
 
 import { runningCount } from './autoScaling'
 import type { Resource, Scene } from './model'
@@ -30,6 +31,8 @@ export function coinsFor(resource: Resource): number {
       return runningCount(resource) * INSTANCE_COINS[resource.size]
     case 's3-bucket':
       return 1
+    case 'rds-database':
+      return resource.multiAz ? 12 : 6
     case 'internet-gateway':
     case 'iam-role':
       return 0

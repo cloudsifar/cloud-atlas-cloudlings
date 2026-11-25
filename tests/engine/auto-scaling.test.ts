@@ -195,14 +195,17 @@ describe('what each tick records', () => {
     expect(tick?.capacity).toBe(2 * SMALL)
     expect(tick?.zonesInService).toBe(2)
     expect(tick?.serving).toEqual([
-      { resourceId: 'app-a', instances: 1, capacity: SMALL },
-      { resourceId: 'app-b', instances: 1, capacity: SMALL },
+      { resourceId: 'app-a', zone: 'a', instances: 1, capacity: SMALL, outcome: 'delivered' },
+      { resourceId: 'app-b', zone: 'b', instances: 1, capacity: SMALL, outcome: 'delivered' },
     ])
   })
 
-  it('counts a group’s instances under the group', () => {
+  it('counts a group’s instances under the group, zone by zone', () => {
     const [tick] = simulateCrowd(sceneWithGroup({ desired: 4 }), CROWD, timeline([1, 4])).ticks
-    expect(tick?.serving).toEqual([{ resourceId: 'asg', instances: 4, capacity: 4 * SMALL }])
+    expect(tick?.serving).toEqual([
+      { resourceId: 'asg', zone: 'a', instances: 2, capacity: 2 * SMALL, outcome: 'delivered' },
+      { resourceId: 'asg', zone: 'b', instances: 2, capacity: 2 * SMALL, outcome: 'delivered' },
+    ])
     expect(tick?.zonesInService).toBe(2)
   })
 

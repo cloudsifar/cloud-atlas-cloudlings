@@ -66,6 +66,12 @@
       "width": 150,
       "height": 76,
       "anchor": [0.5, 0.5]
+    },
+    "cloud.altostratus.rds-database": {
+      "file": null,
+      "width": 124,
+      "height": 34,
+      "anchor": [0.5, 0.5]
     }
   }
 }

@@ -13,6 +13,33 @@ reference, and this guide is the tour.
 3. Run the tests (`npm test`). The level tests pick the new file up automatically and
    tell you, by field name, what is wrong.
 
+## Pacing: a level is not a race
+
+Simon's lesson from Level 5 (25 November 2026), for every level from here on: **leave
+enough time between events for the player to see each one, work out what it meant, and
+read the cards.** A level could be completed in ten seconds. It should instead invite
+the player to linger: let the run play out, watch the cause and its effect, and open
+the clouds' cards before and after.
+
+In practice:
+
+- **One thing at a time.** Space events so each has finished, and its effect is visible,
+  before the next begins. In Level 5, groups arrive four minutes (5 s) apart, so the
+  dial can climb, the bell ring, instances launch and the dial fall back in between.
+- **Show cause, then effect.** The thing that happens (a group arrives, an Availability
+  Zone fails) comes first; its consequences (CPU rises, the alarm rings, the fleet grows)
+  follow visibly, a moment later, in the order AWS does them.
+- **Slow is fine.** A minute lasts 1.25 s on screen (`TICK_DURATION`), and a crowd run
+  about 30 s. Minutes in which a storm's story happens (a zone fails, a database fails
+  over, a group replaces what it lost) play three times slower, automatically
+  (`heldMinutes` in `src/game/crowdPlayback.ts`, ADR 0014); Level 6's storm takes 15 s. Start with a calm stretch, so the player sees the normal working state
+  before anything changes, and end with one, so the final state can be read.
+- **Make every change readable without the animation.** CloudWatch's log in the side
+  panel, the captions on clouds and the trace say in words what the sky showed, for a
+  player who missed it or wants to check.
+- **Invite reading.** The first narrator step can say the cards are worth opening before
+  the first run. The results card waits until the run has played out (ADR 0009).
+
 ## Fields
 
 | Field                            | What goes in it                                                                                                                                                                                           |
@@ -44,6 +71,24 @@ in as the new `initialScene` and change what the story needs.
 ## Scenes
 
 `initialScene` and `referenceSolution` are engine `Scene` values (`src/engine/model.ts`).
+An RDS database is a resource like any other:
+
+```json
+{
+  "kind": "rds-database",
+  "id": "db",
+  "name": "orders database",
+  "engine": "mysql",
+  "subnetIds": ["private-a", "private-b"],
+  "securityGroupIds": ["sg-db"],
+  "primarySubnetId": "private-a",
+  "multiAz": false,
+  "status": "available"
+}
+```
+
+Its subnets are its DB subnet group: private, in both zones, with the primary among
+them. Its security group should allow the engine's port (`mysql` or `postgresql`).
 The simplest way to write `referenceSolution` is to copy `initialScene` and make the
 changes the player is meant to make. Two rules the validator enforces:
 
@@ -82,6 +127,10 @@ carries a complete resource with a fixed id (for example the bucket `photos`).
 - A hostile kite must aim at something the internet can reach: the load balancer or
   S3, never an EC2 instance in a private subnet. Add a row to `docs/THREATS.md` saying
   what it tries and what stops it; a level test checks the target.
+- A `backendCall` to an RDS database (`{ "destinationId": "db" }`, no `action`) is a
+  query from the instance that answered the kite: it needs the database's security
+  group to allow the engine's port from that instance, and the database to be
+  available (Level 6).
 - `label` names what the kite does, for the trace inspector. `says` is what the
   Cloudling says in its speech bubble when clicked, in its own voice: "I want to visit
   the website!", or for a hostile one, what it is after.
@@ -114,9 +163,28 @@ reference solution and that the address is a documentation address. It also chec
 every wave is inside the run, that nobody leaves who has not arrived, and that the crowd
 never exceeds `MAX_CROWD` (40), the places on the ground.
 
-A `crowd-surge` (`atTick`, `rampTicks`, `holdTicks`, `peakKitesPerTick`) is the other
+A `crowd-surge` (`atTick`, `rampTicks`, `holdTicks`, `peakKitesPerTick`) is another
 kind of event: a straight-line climb to a peak, a hold, and a fall. It must be over
 before the run ends, and its peak must be above the usual crowd.
+
+An `az-failure` (`atTick`, `zone`) takes an Availability Zone down from its tick to the
+end of the run (ADR 0014). It must fall inside the run, after the first tick and before
+the last, and the level must have both zones. Leave a calm stretch first: in Level 6 the
+storm comes at minute 8, 10 s in, so the player sees the application working before it
+breaks.
+
+```json
+"crowd": { "loadBalancerId": "alb", "ip": "203.0.113.50", "kitesPerTick": 8, "ticks": 26,
+           "backendCall": { "destinationId": "db" } },
+"events": [{ "kind": "az-failure", "atTick": 8, "zone": "a" }]
+```
+
+`crowd.backendCall` is what the application does for each crowd kite, as on a named
+kite: here, query the orders database. Each healthy target's journey decides what
+happens to its share of the crowd.
+
+A crowd of at most twice the named Cloudlings stands in one spaced-out row, the
+newcomers between the regulars; a bigger one fills two rows from the middle out.
 
 To tune a crowd level, simulate a few builds before choosing numbers: the reference
 solution should pass comfortably, the initial scene should fail clearly, and an
@@ -161,6 +229,11 @@ The predicates available today (`src/engine/predicates.ts`):
 | `targets-include`                         | The load balancer sends requests to that cloud (an instance, or a whole Auto Scaling group)                                                 |
 | `group-can-scale`                         | The Auto Scaling group has a scaling policy and a maximum above its minimum                                                                 |
 | `none-of`                                 | None of the listed `predicates` holds, e.g. neither fixed instance is a target any more                                                     |
+| `group-spans-zones`                       | The Auto Scaling group `groupId` has subnets in every one of `zones`                                                                        |
+| `database-multi-az`                       | The RDS database `databaseId` is Multi-AZ                                                                                                   |
+| `security-group-allows-group`             | The group `securityGroupId` allows `ports` inbound from the group `fromSecurityGroupId` (security group chaining)                           |
+| `crowd-answered-at-end`                   | Every crowd kite in the last tick was answered (needs `crowd`)                                                                              |
+| `crowd-failures-only-during-failover`     | Every tick was fully answered, or a database was failing over during it: static stability (needs `crowd` and a database)                    |
 
 Select kites with `{ "intent": "legitimate" }`, `{ "intent": "hostile" }` or
 `{ "flowIds": ["green-1"] }`. Values for `by`: `route`, `nacl`, `security-group`,
@@ -213,7 +286,8 @@ security group).
 say "over here" (ADR 0008), e.g. `"pulse": ["security-group:sg-alb"]`. The sections are
 `security-group:<id>`, `route-table:<id>`, `listener:<load balancer id>`,
 `targets:<load balancer id>`, `role-statements:<role id>`, `role-wearers:<role id>`,
-`instance-role:<instance id>` and `group-scaling:<group id>`. In Levels 1–3 every step that asks for a setting to
+`instance-role:<instance id>`, `group-scaling:<group id>`, `group-subnets:<group id>` and
+`database-multi-az:<database id>`. In Levels 1–3 every step that asks for a setting to
 change must have one; the level tests check it.
 
 **Linking a phrase to a fact card.** A step's text may contain

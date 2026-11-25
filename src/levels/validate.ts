@@ -38,6 +38,14 @@ const RESOURCE_FIELDS: Record<ResourceKind, Record<string, 'string' | 'boolean' 
     size: 'string',
     scaling: 'object',
   },
+  'rds-database': {
+    engine: 'string',
+    subnetIds: 'object',
+    securityGroupIds: 'object',
+    primarySubnetId: 'string',
+    multiAz: 'boolean',
+    status: 'string',
+  },
   'ec2-instance': {
     subnetId: 'string',
     securityGroupIds: 'object',
@@ -348,16 +356,42 @@ function checkCrowdAndEvents(level: Level, errors: string[]): void {
   let eventsValid = true
   level.events.forEach((event: unknown, index) => {
     const path = `events[${index}]`
-    const kinds = ['crowd-surge', 'crowd-arrives', 'crowd-leaves']
+    const kinds = ['crowd-surge', 'crowd-arrives', 'crowd-leaves', 'az-failure']
     if (!isObject(event) || !kinds.includes(String(event.kind))) {
-      errors.push(`${path}.kind: expected "crowd-surge", "crowd-arrives" or "crowd-leaves"`)
+      errors.push(
+        `${path}.kind: expected "crowd-surge", "crowd-arrives", "crowd-leaves" or "az-failure"`,
+      )
       eventsValid = false
       return
     }
     if (crowd === undefined) {
-      const what = event.kind === 'crowd-surge' ? 'surge' : 'wave'
-      errors.push(`${path}: a crowd ${what} needs the level to have a crowd`)
+      const what =
+        event.kind === 'crowd-surge'
+          ? 'crowd surge'
+          : event.kind === 'az-failure'
+            ? 'Availability Zone failure'
+            : 'crowd wave'
+      errors.push(`${path}: a ${what} needs the level to have a crowd`)
       eventsValid = false
+      return
+    }
+    if (event.kind === 'az-failure') {
+      // An outage of one zone the level actually has, during the run.
+      if (!wholeNumber(event.atTick, 1) || Number(event.atTick) >= crowd.ticks) {
+        errors.push(
+          `${path}.atTick: expected a tick from 1 to ${crowd.ticks - 1}, so the player sees the sky working first`,
+        )
+        eventsValid = false
+      }
+      const zones = new Set(level.initialScene.subnets.map((subnet) => subnet.availabilityZone))
+      if (!zones.has(event.zone as 'a' | 'b')) {
+        errors.push(`${path}.zone: expected an Availability Zone the level has`)
+        eventsValid = false
+      }
+      if (zones.size < 2) {
+        errors.push(`${path}: an Availability Zone failure needs a level with two zones`)
+        eventsValid = false
+      }
       return
     }
     if (event.kind !== 'crowd-surge') {
@@ -391,7 +425,8 @@ function checkCrowdAndEvents(level: Level, errors: string[]): void {
     for (let tick = 0; tick < crowd.ticks; tick++) {
       let size = crowd.kitesPerTick
       for (const event of level.events) {
-        if (event.kind === 'crowd-surge' || event.atTick > tick) continue
+        if (event.kind === 'crowd-surge' || event.kind === 'az-failure' || event.atTick > tick)
+          continue
         size += event.kind === 'crowd-arrives' ? event.cloudlings : -event.cloudlings
       }
       if (size < crowd.kitesPerTick) {

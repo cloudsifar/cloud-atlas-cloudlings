@@ -515,7 +515,12 @@ function crowdKiteRun(
   choice: CrowdKiteChoice,
 ): KiteRun | undefined {
   const tick = crowd.ticks[choice.tick]
-  const result = choice.fate === 'timed-out' ? tick?.timedOut : tick?.served
+  const result =
+    choice.fate === 'timed-out'
+      ? tick?.timedOut
+      : choice.fate === 'stopped'
+        ? tick?.stopped
+        : tick?.served
   if (!tick || !result || !level.crowd) return undefined
   const kite: Kite = {
     id: 'crowd',
@@ -525,8 +530,9 @@ function crowdKiteRun(
     destinationId: level.crowd.loadBalancerId,
     port: HTTPS_PORT,
     payload: 'clean',
-    label: `one of ${tick.demand} kites in the crowd, tick ${tick.tick + 1}`,
-    says: 'I want to visit the website!',
+    label: `one of ${tick.demand} kites in the crowd, minute ${tick.tick}`,
+    says: level.population[0]?.says ?? 'I want to visit the website!',
+    ...(level.crowd.backendCall ? { backendCall: level.crowd.backendCall } : {}),
   }
   return { kite, flow: kiteToFlow(kite, tick.tick), result }
 }

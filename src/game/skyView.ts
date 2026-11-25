@@ -19,7 +19,7 @@ import {
   zoneAt,
   type Point,
 } from './layout'
-import { crowdCuesBetween, crowdRunDuration, TICK_DURATION } from './crowdPlayback'
+import { crowdClock, crowdCuesBetween, crowdRunDuration, TICK_DURATION } from './crowdPlayback'
 import { buildScripts, runDuration, soundsBetween, type KiteScript } from './playback'
 import { drawSky, SPEECH_DURATION, type DragView } from './render'
 import { playSound } from './sound'
@@ -172,7 +172,9 @@ export function createSkyView(
         ? timestamp - runStartedAt > 400
           ? Infinity
           : 0
-        : timestamp - runStartedAt
+        : crowd
+          ? crowdClock(crowd, timestamp - runStartedAt) // eventful minutes play slower
+          : timestamp - runStartedAt
       if (!reducedMotion) {
         if (crowd) {
           for (const cue of crowdCuesBetween(crowd, previousRunTime, runTime))
