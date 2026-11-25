@@ -80,7 +80,9 @@
   - lower-case zones in shipped text;
   - the one-to-one fleet count.
 - **Not changed.** A standalone EC2 instance (Levels 2–5) is still drawn as a patch of
-  four cloudlets. Under rule 4 it could be one cloudlet too. That is left for Simon to
-  decide, because it changes the look of four levels he has played.
+  four cloudlets. Simon decided on 25 November 2026 to keep it, since it reads as one
+  cloud. The rule for the final art: one EC2 instance is one EC2 graphic
+  (`cloud.altocumulus.ec2-instance`), and a fleet is made of the smaller cluster
+  graphic (`cloud.altocumulus.fleet-instance`), one per instance.
 - **Not covered by the bold rule.** Text in a dropdown option stays plain: an option
   cannot hold bold text.

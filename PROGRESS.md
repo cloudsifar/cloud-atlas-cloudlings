@@ -161,9 +161,11 @@ Running log. Newest state first; updated at the end of every milestone.
   right. The crowd's journeys (timed out, or got through at the busiest tick) are
   opened from the weather station's "Follow a kite…" links. The same holds in Level 6:
   a named Cloudling's own journey is flown before the storm.
-- A standalone EC2 instance (Levels 2–5) is still drawn as a patch of four cloudlets,
-  while each instance in a fleet is now one cloudlet (ADR 0015). Whether a standalone
-  instance should become one cloudlet too is Simon's call.
+- A standalone EC2 instance (Levels 2–5) is drawn as a patch of four cloudlets, while
+  each instance in a fleet is one cloudlet (ADR 0015). Simon, 25 November 2026: the
+  patch stays, since it reads as one cloud. When the final art arrives, one EC2
+  instance is one EC2 graphic, and a fleet is made of the smaller cluster graphic, one
+  per instance (4 = 4, 8 = 8).
 - Level 6: the load balancer is one cloud across both zones, so in the storm only its
   left half is greyed; its node in AZ a is out of service, which the CloudWatch log and
   the trace say in words.
