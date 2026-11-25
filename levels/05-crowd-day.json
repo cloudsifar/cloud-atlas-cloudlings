@@ -2,24 +2,101 @@
   "id": 5,
   "slug": "crowd-day",
   "title": "Crowd Day",
-  "concept": "Elasticity: an Auto Scaling group adds capacity when a crowd arrives and removes it when the crowd leaves.",
+  "concept": "Elasticity: an Auto Scaling group adds EC2 instances as a crowd arrives and removes them as it leaves, so the crowd is served and the quiet hours cost little.",
   "guidance": "hints",
   "region": "eu-central-1",
   "azs": 2,
   "narration": [
     {
       "id": "brief",
-      "text": "Word has spread. Today the usual four Cloudlings become a crowd of forty, then drift away again. Two small EC2 instances serve five kites each per tick. Fly the kites, then watch the crowd and the CloudWatch weather station.",
+      "text": "A crowd is coming. Four Cloudlings are here now; more will walk on in groups until there are forty, then drift home again. Each keeps one kite up. A small EC2 instance has room for five kites, so the two here have room for ten. The CloudWatch weather station, bottom right, shows how busy they are: its dial is CPU. Press \"Fly kites\" and watch the dial.",
+      "highlight": "button:fly",
       "advanceWhen": {
         "kind": "run-finished"
       }
     },
     {
       "id": "task",
-      "text": "Most of the crowd timed out: there was never enough capacity. You could run eight EC2 instances all day, but you would pay for all eight all day. Build a fleet that grows with the crowd and shrinks again afterwards.",
-      "highlight": "palette:asg",
+      "text": "Once nineteen Cloudlings had come, there was room for only ten kites, so the rest timed out. Large instances all day would make room, but before and after the crowd they would sit almost idle, and you would pay for every one. An Auto Scaling group grows and shrinks with the crowd instead.",
       "advanceWhen": {
         "kind": "acknowledged"
+      }
+    },
+    {
+      "id": "place-group",
+      "text": "Drag the Auto Scaling group into the band marked Mid – private, between the two EC2 instances. When that part of the sky lights up, let go.",
+      "highlight": "palette:asg",
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "resource-exists",
+          "resourceId": "asg"
+        }
+      }
+    },
+    {
+      "id": "configure",
+      "text": "Click the web fleet. Keep at least two instances, so there is one in each Availability Zone; let it grow to sixteen; and choose a scaling policy that keeps average CPU near 50%.",
+      "highlight": "resource:asg",
+      "pulse": ["group-scaling:asg"],
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "group-can-scale",
+          "groupId": "asg"
+        }
+      }
+    },
+    {
+      "id": "attach",
+      "text": "Now click the load balancer and tick the web fleet as a target. Until it is a target, no kites reach its instances, however many it has.",
+      "highlight": "resource:alb",
+      "pulse": ["targets:alb"],
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "targets-include",
+          "loadBalancerId": "alb",
+          "targetId": "asg"
+        }
+      }
+    },
+    {
+      "id": "retire",
+      "text": "The fleet replaces the two fixed EC2 instances. Click each one and choose \"Remove from the sky\" (or untick it on the load balancer). Removed, they also leave the fleet room to spread across both subnets.",
+      "highlight": ["resource:app-a", "resource:app-b"],
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "none-of",
+          "predicates": [
+            {
+              "kind": "targets-include",
+              "loadBalancerId": "alb",
+              "targetId": "app-a"
+            },
+            {
+              "kind": "targets-include",
+              "loadBalancerId": "alb",
+              "targetId": "app-b"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "second-run",
+      "text": "Fly the kites again. As each group arrives, watch the dial climb past your target, the bell ring, new instances launch in the fleet, and the dial fall back once they are serving.",
+      "highlight": "button:fly",
+      "advanceWhen": {
+        "kind": "run-finished"
+      }
+    },
+    {
+      "id": "wrap",
+      "text": "Capacity followed the crowd: the fleet grew as the groups arrived and shrank as they left, so every kite was answered and the quiet hours ran on two small instances. That is elasticity. CloudWatch measured, the scaling policy decided, and the Auto Scaling group did the work.",
+      "advanceWhen": {
+        "kind": "level-complete"
       }
     }
   ],
@@ -260,32 +337,62 @@
     "loadBalancerId": "alb",
     "ip": "203.0.113.50",
     "kitesPerTick": 4,
-    "ticks": 30
+    "ticks": 26
   },
   "events": [
     {
-      "kind": "crowd-surge",
-      "atTick": 3,
-      "rampTicks": 6,
-      "holdTicks": 6,
-      "peakKitesPerTick": 40
+      "kind": "crowd-arrives",
+      "atTick": 2,
+      "cloudlings": 5
+    },
+    {
+      "kind": "crowd-arrives",
+      "atTick": 6,
+      "cloudlings": 10
+    },
+    {
+      "kind": "crowd-arrives",
+      "atTick": 10,
+      "cloudlings": 21
+    },
+    {
+      "kind": "crowd-leaves",
+      "atTick": 14,
+      "cloudlings": 21
+    },
+    {
+      "kind": "crowd-leaves",
+      "atTick": 18,
+      "cloudlings": 10
+    },
+    {
+      "kind": "crowd-leaves",
+      "atTick": 22,
+      "cloudlings": 5
     }
   ],
   "objectives": [
     {
       "id": "crowd-served",
-      "text": "At least 95% of the crowd's kites are delivered during the surge",
+      "text": "Every Cloudling's kite is answered all day: none times out",
       "predicate": {
         "kind": "crowd-delivered-at-least",
-        "percent": 95,
-        "during": "surge"
+        "percent": 100
       }
     }
   ],
   "stars": {
     "wellArchitected": {
-      "text": "Capacity grows for the crowd and shrinks again afterwards",
+      "text": "Sized to demand: busy (CPU at least 30%) before the crowd, in two Availability Zones throughout, growing for the crowd and shrinking after it",
       "predicates": [
+        {
+          "kind": "crowd-quiet-cpu-at-least",
+          "percent": 30
+        },
+        {
+          "kind": "crowd-zones-at-least",
+          "zones": 2
+        },
         {
           "kind": "crowd-scaled-out-and-back-in"
         }
@@ -295,12 +402,12 @@
   "hints": [
     {
       "objectiveId": "crowd-served",
-      "nudge": "Open \"Tick by tick\" on the weather station. When do kites start timing out, and how many targets are in service then?",
+      "nudge": "Watch the CloudWatch dial during the run. When does it reach 100%, and how many instances are serving then?",
       "pointer": {
-        "text": "An Auto Scaling group can run more EC2 instances when it is busy. Drag one in, make the load balancer send requests to it, and the fixed EC2 instances are no longer needed.",
+        "text": "An Auto Scaling group adds instances when CPU climbs. Place one, give it a scaling policy, and tick it as a target on the load balancer: until it is a target, it receives no kites.",
         "highlight": "palette:asg"
       },
-      "nearAnswer": "Place the Auto Scaling group. On its card set the maximum to 8 and choose \"Keep average CPU near 50%\". On the load balancer's card, tick the group as a target. New EC2 instances take two ticks to start, so a lower CPU target leaves headroom while they launch."
+      "nearAnswer": "Place the Auto Scaling group. On its card set the minimum to 2, the maximum to 16 and \"Keep average CPU near 50%\". On the load balancer's card, tick the web fleet; then remove both fixed EC2 instances. New instances take two minutes to start serving, so a target of 50% or lower leaves room for the next group while they launch."
     }
   ],
   "factCards": ["auto-scaling-group", "cloudwatch", "concept-elasticity"],
@@ -460,7 +567,7 @@
         "size": "small",
         "min": 2,
         "desired": 2,
-        "max": 8,
+        "max": 16,
         "scaling": {
           "targetCpuPercent": 50
         }

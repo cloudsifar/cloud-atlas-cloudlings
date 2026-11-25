@@ -23,4 +23,11 @@ export {
   resultsDelay,
 } from './reveal'
 export * from './storage'
+export {
+  crowdLog,
+  fleetSizes,
+  membersTimedOut,
+  TICK_DURATION,
+  type LogEntry,
+} from './crowdPlayback'
 export { CAPTION_FONT, drawCloud, drawCloudling, drawKite, drawString } from './placeholderArt'

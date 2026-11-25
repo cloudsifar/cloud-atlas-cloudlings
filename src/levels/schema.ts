@@ -93,7 +93,8 @@ export type NarrationStep = {
 /**
  * The config card sections that can pulse, and what the id after the colon names:
  * a security group, a route table, a load balancer (its listener or its targets), a
- * role (its statements or who wears it), or an instance (the role it wears).
+ * role (its statements or who wears it), an instance (the role it wears), or an Auto
+ * Scaling group (its scaling policy).
  */
 export const PULSE_SECTIONS = [
   'security-group',
@@ -103,7 +104,14 @@ export const PULSE_SECTIONS = [
   'role-statements',
   'role-wearers',
   'instance-role',
+  'group-scaling',
 ] as const
+
+/**
+ * The biggest crowd a level may have: the ground has a place for this many Cloudlings,
+ * so every one is drawn (src/game/crowdPlayback.ts).
+ */
+export const MAX_CROWD = 40
 export type PulseSection = (typeof PULSE_SECTIONS)[number]
 
 /** Three tiers, revealed one at a time. Hints carry no penalty. */
@@ -116,7 +124,8 @@ export type Hint = {
 
 /**
  * Scripted events on the level's timeline (src/engine/timeline.ts). So far: crowd
- * surges, which need the level to have a `crowd`. AZ and instance failures will follow.
+ * surges and crowd waves, which need the level to have a `crowd`. AZ and instance
+ * failures will follow.
  */
 export type LevelEvent = ScenarioEvent
 

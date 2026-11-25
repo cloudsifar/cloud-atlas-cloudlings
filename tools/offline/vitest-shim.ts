@@ -19,6 +19,8 @@ type Matchers = {
   toBeNull(): void
   toBeDefined(): void
   toBeGreaterThan(expected: number): void
+  toBeGreaterThanOrEqual(expected: number): void
+  toMatchObject(expected: Record<string, unknown>): void
   toThrow(expected?: RegExp | string): void
 }
 
@@ -59,6 +61,11 @@ function buildMatchers(actual: unknown, negate: boolean, message?: string): Matc
     toBeNull: () => check(actual === null, 'to be null'),
     toBeDefined: () => check(actual !== undefined, 'to be defined'),
     toBeGreaterThan: (expected) => check((actual as number) > expected, `to be > ${expected}`),
+    toBeGreaterThanOrEqual: (expected) =>
+      check((actual as number) >= expected, `to be >= ${expected}`),
+    // Vitest's toMatchObject: every property named in `expected` is deeply equal in `actual`.
+    toMatchObject: (expected) =>
+      check(matchesObject(actual, expected), `to match object ${format(expected)}`),
     toThrow: (expected) => {
       let thrown: unknown
       try {
@@ -74,6 +81,14 @@ function buildMatchers(actual: unknown, negate: boolean, message?: string): Matc
       check(matches, `to throw ${expected ? String(expected) : ''}`)
     },
   }
+}
+
+function matchesObject(actual: unknown, expected: unknown): boolean {
+  if (typeof expected !== 'object' || expected === null) return deepEqual(actual, expected)
+  if (typeof actual !== 'object' || actual === null) return false
+  return Object.entries(expected).every(([key, value]) =>
+    matchesObject((actual as Record<string, unknown>)[key], value),
+  )
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {

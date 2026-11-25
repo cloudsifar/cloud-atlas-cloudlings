@@ -19,7 +19,7 @@ import {
   zoneAt,
   type Point,
 } from './layout'
-import { crowdCuesBetween, crowdRunDuration } from './crowdPlayback'
+import { crowdCuesBetween, crowdRunDuration, TICK_DURATION } from './crowdPlayback'
 import { buildScripts, runDuration, soundsBetween, type KiteScript } from './playback'
 import { drawSky, SPEECH_DURATION, type DragView } from './render'
 import { playSound } from './sound'
@@ -41,6 +41,11 @@ export type SkyCallbacks = {
   onDriftedBack(resource: Resource): void
   /** A one-line explanation to show the player (e.g. why a connection was refused). */
   onMessage(text: string): void
+  /**
+   * In a crowd level, the minute on show changed: a number while the crowd flies, null
+   * otherwise. The side panel's CloudWatch log follows it (ADR 0012).
+   */
+  onCrowdMinute?(minute: number | null): void
 }
 
 export type SkyView = {
@@ -89,6 +94,8 @@ export function createSkyView(
   let speech: { kiteId: string; startedAt: number } | null = null
   let active = true
   let suspendedAt = 0
+  /** The crowd minute last reported to the screen, so it hears of each change once. */
+  let shownMinute: number | null = null
 
   let scripts: KiteScript[] = []
   let scriptsScene: Scene | null = null
@@ -176,6 +183,14 @@ export function createSkyView(
       }
       previousRunTime = runTime
       if (runTime >= (crowd ? crowdRunDuration(crowd) : runDuration(scripts))) store.finishRun()
+    }
+    const minute =
+      state.phase === 'flying' && crowd && Number.isFinite(runTime)
+        ? Math.min(crowd.ticks.length - 1, Math.floor(runTime / TICK_DURATION))
+        : null
+    if (minute !== shownMinute) {
+      shownMinute = minute
+      callbacks.onCrowdMinute?.(minute)
     }
 
     const compromisedIds =

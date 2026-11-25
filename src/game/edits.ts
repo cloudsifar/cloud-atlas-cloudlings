@@ -189,6 +189,12 @@ export function setTargetRegistered(
  * between the minimum and the maximum, so changing one limit can move it. The game
  * keeps at least one instance (a minimum of 0 is left out; docs/SIMPLIFICATIONS.md).
  */
+/**
+ * The most instances a group may have in the game, so the sky can draw every one
+ * (render.ts, drawFleet). Real groups can be far larger.
+ */
+export const MAX_GROUP_SIZE = 16
+
 export function setGroupSettings(
   scene: Scene,
   groupId: string,
@@ -198,8 +204,8 @@ export function setGroupSettings(
 ): Scene {
   return changeResource(scene, 'auto-scaling-group', groupId, (group) => {
     Object.assign(group, change)
-    group.min = Math.max(1, group.min)
-    group.max = Math.max(1, group.max)
+    group.min = Math.min(MAX_GROUP_SIZE, Math.max(1, group.min))
+    group.max = Math.min(MAX_GROUP_SIZE, Math.max(1, group.max))
     // Raising the minimum past the maximum lifts the maximum, and lowering the maximum
     // below the minimum lowers the minimum: whichever limit the player moved wins.
     if (change.max !== undefined) group.min = Math.min(group.min, group.max)

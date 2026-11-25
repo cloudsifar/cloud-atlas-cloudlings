@@ -1,15 +1,18 @@
-// The level timeline: the usual crowd and the crowd surges that change it.
+// The level timeline: the usual crowd and the surges and waves that change it.
 //
-// A crowd surge is a game event, not AWS behaviour, so there is no AWS page to cite
-// here. What AWS does with the extra kites is tested in auto-scaling.test.ts.
+// Crowd surges and waves are game events, not AWS behaviour, so there is no AWS page to
+// cite here. What AWS does with the extra kites is tested in auto-scaling.test.ts.
 
 import { describe, expect, it } from 'vitest'
 import {
   crowdTimeline,
   surgeKitesAt,
   surgeWindow,
+  waveCrowdAt,
   type Crowd,
   type CrowdSurge,
+  type CrowdWave,
+  type ScenarioEvent,
 } from '../../src/engine'
 
 const usual: Crowd = { loadBalancerId: 'alb', ip: '203.0.113.50', kitesPerTick: 4, ticks: 30 }
@@ -20,7 +23,7 @@ const surge: CrowdSurge = {
   holdTicks: 8,
   peakKitesPerTick: 40,
 }
-const kites = (crowd: Crowd, events: CrowdSurge[]) =>
+const kites = (crowd: Crowd, events: ScenarioEvent[]) =>
   crowdTimeline(crowd, events).map((moment) => moment.kites)
 
 describe('the usual crowd', () => {
@@ -74,5 +77,53 @@ describe('a crowd surge', () => {
   it('is cut short by the end of the run', () => {
     const late = { ...surge, atTick: 28 }
     expect(crowdTimeline(usual, [late])).toHaveLength(30)
+  })
+})
+
+describe('crowd waves', () => {
+  const day: Crowd = { ...usual, ticks: 12 }
+  const arrive = (atTick: number, cloudlings: number): CrowdWave => ({
+    kind: 'crowd-arrives',
+    atTick,
+    cloudlings,
+  })
+  const leave = (atTick: number, cloudlings: number): CrowdWave => ({
+    kind: 'crowd-leaves',
+    atTick,
+    cloudlings,
+  })
+  const waves = [arrive(2, 5), arrive(4, 10), leave(8, 10), leave(10, 5)]
+
+  it('adds each group from its tick on and takes it away when it leaves', () => {
+    expect(kites(day, waves)).toEqual([4, 4, 9, 9, 19, 19, 19, 19, 9, 9, 4, 4])
+  })
+
+  it('marks the ticks on which the crowd is bigger than usual', () => {
+    expect(crowdTimeline(day, waves).map((moment) => moment.surge)).toEqual([
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+    ])
+  })
+
+  it('never takes the crowd below the usual Cloudlings', () => {
+    expect(waveCrowdAt(4, [leave(0, 10)], 3)).toBe(4)
+  })
+
+  it('lets a surge lift a crowd that waves have already grown, without adding the two', () => {
+    const both = kites({ ...usual, ticks: 6 }, [
+      arrive(0, 6),
+      { ...surge, atTick: 0, rampTicks: 0, holdTicks: 2, peakKitesPerTick: 30 },
+    ])
+    expect(both).toEqual([30, 30, 10, 10, 10, 10])
   })
 })

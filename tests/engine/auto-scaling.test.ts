@@ -13,8 +13,12 @@
 // - Attaching a load balancer registers the group's instances as targets:
 //   https://docs.aws.amazon.com/autoscaling/ec2/userguide/autoscaling-load-balancer.html
 // - Target tracking scaling policies (CloudWatch alarms created for you; scales out
-//   in proportion to the metric, scales in more gradually):
+//   in proportion to the metric, scales in more gradually; "scale out ... when CPU
+//   exceeds 50 percent", "scale in ... when CPU drops below 50 percent"):
 //   https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-scaling-target-tracking.html
+//   and the same policy for Spot Fleet, which states it plainly: "scales out
+//   proportionally to the metric as fast as it can, but scales in more gradually":
+//   https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-fleet-target-tracking.html
 // - Dynamic scaling overview:
 //   https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-scale-based-on-demand.html
 //
@@ -31,6 +35,7 @@ import {
   healthyTargets,
   LAUNCH_TICKS,
   REQUESTS_PER_TICK,
+  SCALE_IN_TICKS,
   simulateCrowd,
   validateScene,
   failingStep,
@@ -184,6 +189,29 @@ describe('capacity', () => {
   })
 })
 
+describe('what each tick records', () => {
+  it('the room the targets have, which clouds they are, and the Availability Zones they span', () => {
+    const [tick] = simulateCrowd(workingScene(), CROWD, timeline([1, 4])).ticks
+    expect(tick?.capacity).toBe(2 * SMALL)
+    expect(tick?.zonesInService).toBe(2)
+    expect(tick?.serving).toEqual([
+      { resourceId: 'app-a', instances: 1, capacity: SMALL },
+      { resourceId: 'app-b', instances: 1, capacity: SMALL },
+    ])
+  })
+
+  it('counts a group’s instances under the group', () => {
+    const [tick] = simulateCrowd(sceneWithGroup({ desired: 4 }), CROWD, timeline([1, 4])).ticks
+    expect(tick?.serving).toEqual([{ resourceId: 'asg', instances: 4, capacity: 4 * SMALL }])
+    expect(tick?.zonesInService).toBe(2)
+  })
+
+  it('a single instance is in one Availability Zone', () => {
+    const scene = sceneWithGroup({ min: 1, desired: 1 })
+    expect(simulateCrowd(scene, CROWD, timeline([1, 4])).ticks[0]?.zonesInService).toBe(1)
+  })
+})
+
 describe('timed-out kites', () => {
   const busy = () => simulateCrowd(workingScene(), CROWD, timeline([1, 2 * SMALL + 7]))
 
@@ -272,18 +300,66 @@ describe('target tracking scaling', () => {
     expect(record.peakTargetsInService).toBe(3)
   })
 
-  it('scales in gradually, one instance per tick, once the crowd has gone', () => {
+  it('scales in more gradually than out: only after CPU stays low, and by at most half at once', () => {
     const record = simulateCrowd(
       sceneWithGroup({ scaling: { targetCpuPercent: 50 } }),
       CROWD,
-      surge,
+      timeline([4, 40], [10, 4]),
     )
-    const afterSurge = record.ticks.slice(12).map((tick) => tick.targetsInService)
-    for (let index = 1; index < afterSurge.length; index += 1) {
-      const change = afterSurge[index - 1]! - afterSurge[index]!
-      expect(change === 0 || change === 1).toBe(true)
+    const serving = record.ticks.map((tick) => tick.targetsInService)
+    // Scaling out reacted on the first busy tick: by tick 4 the fleet had grown to 8.
+    expect(serving[4]).toBe(8)
+    // The crowd left at tick 4. Nothing is removed until CPU has stayed low for a while…
+    for (let tick = 4; tick < 4 + SCALE_IN_TICKS; tick += 1) expect(serving[tick]).toBe(8)
+    expect(SCALE_IN_TICKS).toBeGreaterThan(1)
+    // …and then the fleet halves, rather than dropping straight to its minimum.
+    expect(serving[4 + SCALE_IN_TICKS]).toBe(4)
+    for (let tick = 1; tick < serving.length; tick += 1) {
+      expect(serving[tick]! >= Math.ceil(serving[tick - 1]! / 2)).toBe(true)
     }
-    expect(record.finalTargetsInService < record.peakTargetsInService).toBe(true)
+    expect(record.finalTargetsInService).toBe(2)
+  })
+
+  it('scales in to the fewest instances that keep CPU at or under the target', () => {
+    // Four small instances at 60% (12 kites, room for 20) and an 80% target: three
+    // instances would run at 80%, two at 120%. So the group settles at three.
+    const record = simulateCrowd(
+      sceneWithGroup({ desired: 4, scaling: { targetCpuPercent: 80 } }),
+      CROWD,
+      timeline([8, 12]),
+    )
+    expect(record.finalTargetsInService).toBe(3)
+    expect(record.ticks.at(-1)?.cpuPercent).toBe(80)
+    expect(record.ticks.some((tick) => tick.alarm === 'low-cpu')).toBe(true)
+  })
+
+  it('a group that no load balancer sends requests to serves nothing, so it never scales out', () => {
+    // The fixed instances are overwhelmed, but the group is not a target: its own CPU is 0%.
+    const scene = sceneWith((draft) => {
+      draft.resources.push(group({ scaling: { targetCpuPercent: 50 } }))
+    })
+    const record = simulateCrowd(scene, CROWD, timeline([6, 40]))
+    expect(record.ticks.every((tick) => tick.dropped > 0)).toBe(true)
+    expect(record.ticks.every((tick) => tick.launching === 0)).toBe(true)
+    expect(record.ticks.every((tick) => tick.fleets[0]?.attached === false)).toBe(true)
+    expect(record.ticks.every((tick) => tick.fleets[0]?.inService === 2)).toBe(true)
+  })
+
+  it('records when a group starts and removes instances', () => {
+    const record = simulateCrowd(
+      sceneWithGroup({ scaling: { targetCpuPercent: 50 } }),
+      CROWD,
+      timeline([4, 40], [10, 4]),
+    )
+    const fleet = (tick: number) => record.ticks[tick]?.fleets[0]
+    expect(fleet(0)?.started).toBe(2)
+    expect(fleet(0)?.attached).toBe(true)
+    expect(fleet(1)?.started).toBe(0)
+    expect(fleet(3 + SCALE_IN_TICKS)?.stopped).toBe(4)
+    const started = record.ticks.reduce((sum, tick) => sum + (tick.fleets[0]?.started ?? 0), 0)
+    const stopped = record.ticks.reduce((sum, tick) => sum + (tick.fleets[0]?.stopped ?? 0), 0)
+    // Every instance started and every one removed is accounted for: 2 + started − stopped = 2.
+    expect(2 + started - stopped).toBe(record.finalTargetsInService)
   })
 
   it('never goes below min', () => {
@@ -378,6 +454,48 @@ describe('crowd predicates', () => {
     ).toBe(false)
   })
 
+  it('crowd-quiet-cpu-at-least judges the ticks before the crowd first grows', () => {
+    const moments: CrowdMoment[] = [
+      { kites: 4, surge: false },
+      { kites: 4, surge: false },
+      { kites: 40, surge: true },
+    ]
+    const quiet = (scene: Scene, percent: number) =>
+      evaluatePredicate(
+        scene,
+        [],
+        { kind: 'crowd-quiet-cpu-at-least', percent },
+        simulateCrowd(scene, CROWD, moments),
+      )
+    // Two small instances, four kites: 40%.
+    expect(quiet(workingScene(), 40)).toBe(true)
+    expect(quiet(workingScene(), 41)).toBe(false)
+    // Two large instances for the same four kites: 10%, oversized for the usual crowd.
+    const large = sceneWithGroup({ size: 'large' })
+    expect(quiet(large, 30)).toBe(false)
+  })
+
+  it('crowd-quiet-cpu-at-least is false for a crowd that never grows or is busy from the start', () => {
+    const scene = workingScene()
+    const never = simulateCrowd(scene, CROWD, timeline([3, 4]))
+    const busy = simulateCrowd(scene, CROWD, [{ kites: 40, surge: true }])
+    const predicate = { kind: 'crowd-quiet-cpu-at-least', percent: 0 } as const
+    expect(evaluatePredicate(scene, [], predicate, never)).toBe(false)
+    expect(evaluatePredicate(scene, [], predicate, busy)).toBe(false)
+  })
+
+  it('crowd-zones-at-least needs targets in that many Availability Zones on every tick', () => {
+    const zones = (scene: Scene) =>
+      evaluatePredicate(
+        scene,
+        [],
+        { kind: 'crowd-zones-at-least', zones: 2 },
+        simulateCrowd(scene, CROWD, timeline([3, 4])),
+      )
+    expect(zones(workingScene())).toBe(true)
+    expect(zones(sceneWithGroup({ min: 1, desired: 1 }))).toBe(false)
+  })
+
   it('crowd-scaled-out-and-back-in needs capacity to have grown and then shrunk', () => {
     const fixed = workingScene()
     expect(
@@ -397,5 +515,41 @@ describe('crowd predicates', () => {
         simulateCrowd(scaled, CROWD, surge),
       ),
     ).toBe(true)
+  })
+})
+
+describe('predicates about attaching and scaling a group', () => {
+  it('targets-include asks whether the load balancer sends requests to that cloud', () => {
+    const attached = sceneWithGroup()
+    const detached = sceneWith((draft) => draft.resources.push(group()))
+    const asks = { kind: 'targets-include', loadBalancerId: 'alb', targetId: 'asg' } as const
+    expect(evaluatePredicate(attached, [], asks)).toBe(true)
+    expect(evaluatePredicate(detached, [], asks)).toBe(false)
+  })
+
+  it('group-can-scale needs a scaling policy and a maximum above the minimum', () => {
+    const can = (overrides: Partial<AutoScalingGroup>) =>
+      evaluatePredicate(sceneWithGroup(overrides), [], { kind: 'group-can-scale', groupId: 'asg' })
+    expect(can({ scaling: { targetCpuPercent: 50 } })).toBe(true)
+    expect(can({ scaling: null })).toBe(false)
+    expect(can({ min: 2, max: 2, scaling: { targetCpuPercent: 50 } })).toBe(false)
+  })
+
+  it('none-of holds only when none of its predicates do', () => {
+    const scene = sceneWithGroup()
+    const targets = (targetId: string) =>
+      ({ kind: 'targets-include', loadBalancerId: 'alb', targetId }) as const
+    expect(
+      evaluatePredicate(scene, [], {
+        kind: 'none-of',
+        predicates: [targets('app-a'), targets('app-b')],
+      }),
+    ).toBe(true)
+    expect(
+      evaluatePredicate(scene, [], {
+        kind: 'none-of',
+        predicates: [targets('app-a'), targets('asg')],
+      }),
+    ).toBe(false)
   })
 })

@@ -17,6 +17,7 @@ export {
   deliveredShare,
   REQUESTS_PER_TICK,
   LAUNCH_TICKS,
+  SCALE_IN_TICKS,
   type AlarmState,
   type CrowdRecord,
   type TickRecord,
@@ -25,9 +26,11 @@ export {
   crowdTimeline,
   surgeKitesAt,
   surgeWindow,
+  waveCrowdAt,
   type Crowd,
   type CrowdMoment,
   type CrowdSurge,
+  type CrowdWave,
   type ScenarioEvent,
 } from './timeline'
 export { resolveRoute, isPublicSubnet, type RouteDecision, type RouteQuery } from './routing'

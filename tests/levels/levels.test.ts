@@ -130,8 +130,21 @@ describe('validateLevel', () => {
       change(copy)
       return validateLevel(copy, Object.keys(FACT_CARDS))
     }
+    // The shipped crowd level uses waves. The surge rules are checked on a copy of it
+    // with a valid surge in place of its waves, then broken one rule at a time.
     type Surge = { atTick: number; peakKitesPerTick: number; kind: string }
-    const surgeOf = (level: Record<string, unknown>) => (level.events as Surge[])[0]!
+    const withSurge = (level: Record<string, unknown>) => {
+      level.events = [
+        { kind: 'crowd-surge', atTick: 3, rampTicks: 4, holdTicks: 6, peakKitesPerTick: 30 },
+      ]
+      return (level.events as Surge[])[0]!
+    }
+    type Wave = { kind: string; atTick: number; cloudlings: number }
+    const wavesOf = (level: Record<string, unknown>) => level.events as Wave[]
+
+    it('accepts the copy with a valid surge, so the surge checks below start from a valid level', () => {
+      expect(brokenCrowd((level) => withSurge(level))).toEqual([])
+    })
 
     it('ships at least one level with a crowd, so these checks are exercised', () => {
       expect(crowdLevel).toBeDefined()
@@ -150,28 +163,69 @@ describe('validateLevel', () => {
     })
 
     it('rejects a surge that is still going when the run ends', () => {
-      const errors = brokenCrowd((level) => (surgeOf(level).atTick = 25))
+      const errors = brokenCrowd((level) => (withSurge(level).atTick = 25))
       expect(errors.some((error) => error.includes('must be over before the run ends'))).toBe(true)
     })
 
     it('rejects a surge no bigger than the usual crowd', () => {
-      const errors = brokenCrowd((level) => (surgeOf(level).peakKitesPerTick = 2))
+      const errors = brokenCrowd((level) => (withSurge(level).peakKitesPerTick = 2))
       expect(errors[0]).toMatch('peakKitesPerTick')
     })
 
     it('rejects an event it does not know', () => {
-      const errors = brokenCrowd((level) => (surgeOf(level).kind = 'meteor-strike'))
+      const errors = brokenCrowd((level) => (wavesOf(level)[0]!.kind = 'meteor-strike'))
       expect(errors[0]).toMatch('events[0].kind')
     })
 
-    it('rejects a surge in a level with no crowd', () => {
-      const errors = brokenCrowd((level) => delete level.crowd)
-      expect(errors.some((error) => error.includes('needs the level to have a crowd'))).toBe(true)
+    it('rejects a surge or a wave in a level with no crowd', () => {
+      const noCrowd = (keepSurge: boolean) =>
+        brokenCrowd((level) => {
+          if (keepSurge) withSurge(level)
+          delete level.crowd
+        })
+      expect(
+        noCrowd(true).some((error) => error.includes('surge needs the level to have a crowd')),
+      ).toBe(true)
+      expect(
+        noCrowd(false).some((error) => error.includes('wave needs the level to have a crowd')),
+      ).toBe(true)
     })
 
     it('rejects an objective about the surge in a level that has none', () => {
-      const errors = brokenCrowd((level) => (level.events = []))
+      const errors = brokenCrowd((level) => {
+        const [objective] = level.objectives as { predicate: Record<string, unknown> }[]
+        objective!.predicate = { kind: 'crowd-delivered-at-least', percent: 95, during: 'surge' }
+      })
       expect(errors.some((error) => error.includes('has no crowd surge'))).toBe(true)
+    })
+
+    it('rejects a wave outside the run or with nobody in it', () => {
+      expect(brokenCrowd((level) => (wavesOf(level)[0]!.atTick = 99))[0]).toMatch(
+        'events[0].atTick',
+      )
+      expect(brokenCrowd((level) => (wavesOf(level)[0]!.cloudlings = 0))[0]).toMatch(
+        'events[0].cloudlings',
+      )
+    })
+
+    it('rejects more Cloudlings leaving than have arrived', () => {
+      const errors = brokenCrowd((level) => {
+        const leaving = wavesOf(level).find((wave) => wave.kind === 'crowd-leaves')
+        if (leaving) leaving.cloudlings += 30
+      })
+      expect(errors.some((error) => error.includes('more Cloudlings have left than arrived'))).toBe(
+        true,
+      )
+    })
+
+    it('rejects a crowd bigger than the ground has room for', () => {
+      const errors = brokenCrowd((level) => (wavesOf(level)[0]!.cloudlings = 60))
+      expect(errors.some((error) => error.includes('the ground has room for'))).toBe(true)
+    })
+
+    it('rejects a quiet-start star in a level whose crowd is busy from the first tick', () => {
+      const errors = brokenCrowd((level) => (wavesOf(level)[0]!.atTick = 0))
+      expect(errors.some((error) => error.includes('quiet start'))).toBe(true)
     })
   })
 

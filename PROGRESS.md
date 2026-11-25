@@ -52,30 +52,36 @@ Running log. Newest state first; updated at the end of every milestone.
     (dragging clouds from the tray, routes and rules on config cards, targets, roles,
     flying the kites, the trace inspector), and replayed after the Level 5 changes.
     Three stars were read off the side panel for Levels 1–3.
-  - Level 5: the unsolved run (crowd visibly timing out, 35% during the surge) and the
-    solved run (Auto Scaling group placed, maximum 8, 50% CPU target, load balancer
-    pointed at it, fixed instances removed) were played through the interface. The
-    solved run met its objective (98% during the surge) and the side panel and the
-    results card both showed three stars. "Follow a kite that timed out" opened the
-    inspector on a capacity failure. With `prefers-reduced-motion` the run jumps to
-    its final frame.
-  - No console errors in any of these runs.
+  - Level 5, rebuilt (ADR 0012), on the esbuild bundle, 25 November 2026:
+    - The unsolved run: 34 of 40 Cloudlings timed out; the worst minute had 30 of 40
+      kites with no room.
+    - Simon's case: a group of eight large instances with a 50% policy, never ticked as
+      a target. Its card warned, the sky captioned it, the dots went only to the fixed
+      instances, and the result was the same as with no group at all.
+    - The guided solution through the interface: place the group, minimum 2, maximum 16,
+      50%, tick it as a target, remove both fixed instances. The fleet was seen at 2, 4,
+      8 and 16 and back down, with the log reading as expected minute by minute. The
+      level was completed with three stars, and every narrator step advanced.
+    - No console errors in any of these runs.
+  - No console errors in any of the earlier runs.
 
 ## Not verified — do these first
 
 1. **Vitest, the Vite build and lint on Windows, on everything since 18 November**
-   (ADRs 0007–0011). In that time the suite has run only on the offline runner
-   (225 tests), and ESLint, Prettier and the project `tsc` were run against the
+   (ADRs 0007–0012). In that time the suite has run only on the offline runner
+   (266 tests), and ESLint, Prettier and the project `tsc` were run against the
    installed packages from the cloud sandbox. On Windows, after `git pull`:
-   `npm ci --ignore-scripts`, then `npm test` (expect 18 test files and **225 passed**),
+   `npm ci --ignore-scripts`, then `npm test` (expect 19 test files and **266 passed**),
    `npm run build` (writes `dist/`, including `dist/sounds/README.md`) and
    `npm run lint`. Read each output, not only the exit code.
-2. **A person playing it again.** Simon played Levels 1–5 in a real browser on
+2. **Level 5 played by a person** (ADR 0012): whether the pace, the fleet, the dial and
+   the CloudWatch log now read clearly, and how the new sounds land.
+3. **A person playing it again.** Simon played Levels 1–5 in a real browser on
    18–19 November; his changes are in ADR 0007. They need his eye: how dragging feels
    now, the sound levels, the subnet tints, the speech bubbles, Resume.
-3. Firefox, Safari and Edge. Only Chromium was tried.
-4. Window sizes other than 1280×720, tablets, and the phone path.
-5. Sound. The synthesised placeholders exist but headless testing cannot hear them.
+4. Firefox, Safari and Edge. Only Chromium was tried.
+5. Window sizes other than 1280×720, tablets, and the phone path.
+6. Sound. The synthesised placeholders exist but headless testing cannot hear them.
    The new `level-dissolve` placeholder (ADR 0011) and the per-objective tick sounds
    have not been heard by anyone. Playing a recording from `public/sounds/` is written
    but untested with a real file: when Simon's dissolve recording arrives, set its
@@ -84,9 +90,9 @@ Running log. Newest state first; updated at the end of every milestone.
    Simon heard them in the first playtest: the click and card sounds were too quiet and
    the level-complete jingle too loud, now adjusted (ADR 0007). Level 5's four crowd
    cues and their blending have only been checked in code.
-6. Frame rate with a crowd of 40 on a modest laptop or tablet. Chromium on the build
+7. Frame rate with a crowd of 40 on a modest laptop or tablet. Chromium on the build
    machine was smooth; nothing was measured.
-7. The AWS documentation links cited in the test files. Five behaviours were re-checked
+8. The AWS documentation links cited in the test files. Five behaviours were re-checked
    against the current AWS docs during the build (ALB health checks and fail-open, S3
    Block Public Access, network ACLs and ephemeral ports, IAM policy evaluation, route
    priority and gateway endpoints), and for Level 5: target tracking scaling, Auto
@@ -108,9 +114,10 @@ Running log. Newest state first; updated at the end of every milestone.
 - New security group rules default to HTTPS 443 in the port dropdown; Level 2 needs
   HTTP 80, which is easy to miss. The narrator names the port, and the step does not
   advance until the right rule exists.
-- Level 5: the fleet's caption ("2–8 instances · CPU target 50%") sits on the line
-  between the mid and low bands; during a crowd run the kites cover the Internet
-  Gateway's label. Both are readable, neither is tidy.
+- Level 5: while the two fixed EC2 instances are still in the sky, the fleet sits
+  between them and its instances are drawn small; removing the fixed instances (as the
+  narrator asks) gives it both subnets. During a crowd run the kites cover the Internet
+  Gateway's label.
 - Level 5: clicking one of the four named Cloudlings after a crowd run opens _its own_
   journey, flown at a quiet moment, so it is always delivered when the network is
   right. The crowd's journeys (timed out, or got through at the busiest tick) are
@@ -153,39 +160,38 @@ goes in the engine as a predicate with a test.
 5. Fact cards in `content/fact-cards.json`; docs: `ENGINE.md`, `SIMPLIFICATIONS.md`,
    `LEVEL_AUTHORING.md`, this file.
 
-**Level 5, Crowd Day: finished.** What the level now does (brief, Sections 5–8, 11):
+**Level 5, Crowd Day: rebuilt (ADR 0012, 25 November 2026).** What the level now does:
 
-- The crowd surge is an event on the level's timeline (`events`), not level data in
-  the crowd: 4 → 40 Cloudlings over 6 ticks, 6 at the peak, 6 back down, 9 quiet ticks.
-  See ADR 0005 for why the timeline is separate from the simulation.
-- The objective counts the surge only, as the brief says ("at least 95% … during the
-  surge"). The third star is capacity scaling back in afterwards.
-- The crowd is in the sky: up to 41 Cloudlings in two rows, each flying a kite every
-  tick along the path the engine's journey took. Delivered kites vanish into the fleet,
-  which flashes, and rain falls back; timed-out kites stall at the load balancer, go
-  slack and drift down. Cloudlings cheer or droop.
-- A timed-out kite has a full journey in the trace inspector, ending in a `capacity`
-  check at the load balancer (HTTP 504), opened from the weather station panel.
-- The fleet's cloud is a patch of cloudlets, one per instance; instances still
-  launching are faint.
-- CloudWatch is a weather station on the ground: CPU dial, anemometer spinning with the
-  crowd, a bell that rings when an alarm goes into ALARM, and an "OK / ALARM" line in
-  words (never colour alone). The side panel keeps the chart, a "during the surge"
-  line, and a tick-by-tick table that now fits the panel.
-- The fleet card sets instance size, minimum, desired and maximum (kept in order, as
-  AWS requires) and the scaling policy.
-- Sound: one pop and one blended crowd cheer per tick rather than forty; one "fwoop"
-  and a crowd groan for timeouts; a shimmer when instances join; the alarm bell.
-- Tuned by simulating builds (see `docs/LEVEL_AUTHORING.md`, "Crowds and events"): the
-  start delivers 35% during the surge; maximum 8 small instances at 40–60% CPU target
-  deliver 96–99%; a 70% or 80% target, or a maximum of 6, falls short; eight instances
-  or two large ones all day pass the objective but not the third star.
+- Each Cloudling keeps one kite up; the crowd's size is the load. Small, medium and large
+  instances have room for 5, 10 and 20 kites; CPU is kites ÷ room.
+- The crowd arrives in groups (crowd waves on the timeline): 4 → 9 → 19 → 40 at minutes
+  2, 6 and 10, then home the same way. A minute is 1.25 s, so groups are 5 s apart and a
+  run lasts about 34 s.
+- Target tracking scales out at once in proportion, and scales in after two low minutes,
+  at most half the fleet at a time. The reference fleet goes 2 → 4 → 8 → 16 → 8 → 4 → 2.
+- A group that is not a load balancer target gets no kites and never scales; its card,
+  its caption and the weather station all say so. This was why Simon always saw 226 of
+  552 delivered.
+- The fleet is drawn instance by instance, half in each Availability Zone, launching ones
+  dashed, removed ones fading. CloudWatch stands at the bottom right with a larger dial
+  that moves smoothly and marks the target, a bell, and a readout. The side panel shows
+  CloudWatch's log live, one line per change.
+- Objective: every kite answered all day. This changes the brief's "at least 95% during
+  the surge", because a single clear outcome reads better with one kite per Cloudling;
+  Simon can revert it (`percent` in the level file). Third star, "sized to demand": CPU
+  at least 30% before the crowd, two Availability Zones throughout, and the fleet grows
+  and shrinks. Two large instances, or eight of anything, all day pass the objective but
+  not the star.
+- Narration is guided: eight steps, from the first run to the wrap-up.
 
 Still not done for Level 5, and left for later milestones:
 
 - The four regional costumes are still a tunic colour only (Milestone 5 art).
-- The cost penalty for idle oversized instances (brief, Section 7) is not modelled; the
-  player can now choose size, so it can be, when cost scoring matters (Level 12).
+- Idle oversized instances now cost the third star (CPU at least 30% before the crowd),
+  but not coins: instance-minutes are not costed. That can come with cost scoring
+  (Level 12).
+- A speed control for crowd runs: the slow pace is deliberate, but a replay at 2× would
+  help once the player knows what to watch.
 - The Field Guide entries for the new signs (bell, slack string, crowd) — Milestone 4.
 
 **Level 6, Storm Front.** Add an `az-failure` kind to `ScenarioEvent`
@@ -295,3 +301,12 @@ None found so far. Two places where the brief's wording was made more exact:
   Level 2's link opens the card, ticks land at 0, 1 and 2 s, results at 3 s, and the
   Level 2 → 3 transition runs without console errors. Open question for Simon: how data
   should move between clouds (ADR 0011 does not decide it).
+- **Session 3, continued: Crowd Day rebuilt.** Simon found Level 5 broken: always 226 of
+  552 kites, whatever the fleet. The cause was a group never attached to the load
+  balancer, with nothing saying so; an unattached group also scaled on other targets'
+  CPU. Rebuilt around one kite per Cloudling and groups arriving 5 s apart (4 → 9 → 19 →
+  40 and back). Scale-in is more gradual than scale-out, at most half the fleet at once.
+  The fleet is drawn instance by instance in two Availability Zones; the CloudWatch dial
+  moves smoothly and the side panel shows its live log. The third star is "sized to
+  demand", and narration is guided. ADR 0012. 266 tests pass offline; played headlessly
+  unsolved, unattached and solved.

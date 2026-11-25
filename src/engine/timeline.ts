@@ -7,8 +7,9 @@
 // simulation can be tested with any pattern of demand, and the events can be
 // tested without simulating anything.
 //
-// So far there is one kind of event. A crowd surge changes who is flying, not the
-// architecture, so it changes the moments rather than the scene. Events that change
+// Two kinds of event so far, both about who is flying: a crowd surge (a smooth climb
+// to a peak and back) and crowd waves (groups of Cloudlings who arrive, stay and later
+// leave). They change the moments rather than the scene. Events that change
 // the scene, such as an Availability Zone failing, will be applied by a pure
 // `applyEvent(scene, event) → scene` when they arrive (docs/adr/0005).
 
@@ -17,7 +18,10 @@ export type Crowd = {
   loadBalancerId: string
   /** One representative address: every visitor in the crowd is treated alike. */
   ip: string
-  /** Kites per tick on an ordinary day, outside any surge. */
+  /**
+   * The usual crowd: how many Cloudlings are there on an ordinary day, outside any
+   * surge or wave. Each keeps one kite up, so this is also the kites flown per tick.
+   */
   kitesPerTick: number
   /** How many ticks the run lasts. */
   ticks: number
@@ -36,13 +40,29 @@ export type CrowdSurge = {
   peakKitesPerTick: number
 }
 
-export type ScenarioEvent = CrowdSurge
+/**
+ * Some Cloudlings walk on and stay, each keeping one kite up, until a later wave takes
+ * them home (ADR 0012). Waves add to and take from the usual crowd: the crowd at any
+ * tick is the usual crowd, plus everyone who has arrived, minus everyone who has left.
+ */
+export type CrowdWave = {
+  kind: 'crowd-arrives' | 'crowd-leaves'
+  /** The first tick on which the change is felt. */
+  atTick: number
+  /** How many Cloudlings arrive or leave. */
+  cloudlings: number
+}
+
+export type ScenarioEvent = CrowdSurge | CrowdWave
 
 /** What happens on one tick. */
 export type CrowdMoment = {
-  /** Kites flown this tick. */
+  /** Kites flown this tick: one for each Cloudling in the crowd. */
   kites: number
-  /** True while a surge is under way (from its first tick to the end of its ramp down). */
+  /**
+   * True while the crowd is bigger than usual: while a surge is under way (from its
+   * first tick to the end of its ramp down), or while waves have added Cloudlings.
+   */
   surge: boolean
 }
 
@@ -69,21 +89,37 @@ export function surgeKitesAt(surge: CrowdSurge, usual: number, tick: number): nu
 }
 
 /**
- * One moment per tick of the run. Where surges overlap, the biggest crowd wins:
- * a Cloudling who turned up for one surge is the same Cloudling in the other.
+ * The crowd's size at a tick from its waves alone: the usual crowd, plus everyone who
+ * has arrived by then, minus everyone who has left. Never below the usual crowd.
+ */
+export function waveCrowdAt(usual: number, events: ScenarioEvent[], tick: number): number {
+  let size = usual
+  for (const event of events) {
+    if (event.kind === 'crowd-surge' || event.atTick > tick) continue
+    size += event.kind === 'crowd-arrives' ? event.cloudlings : -event.cloudlings
+  }
+  return Math.max(usual, size)
+}
+
+/**
+ * One moment per tick of the run. Waves set the crowd; a surge can lift it higher.
+ * Where surges overlap, the biggest crowd wins: a Cloudling who turned up for one
+ * surge is the same Cloudling in the other.
  */
 export function crowdTimeline(crowd: Crowd, events: ScenarioEvent[]): CrowdMoment[] {
+  const surges = events.filter((event): event is CrowdSurge => event.kind === 'crowd-surge')
   return Array.from({ length: crowd.ticks }, (_, tick) => {
-    const surges = events.filter((event) => {
-      const span = surgeWindow(event)
+    const active = surges.filter((surge) => {
+      const span = surgeWindow(surge)
       return tick >= span.first && tick <= span.last
     })
+    const waves = waveCrowdAt(crowd.kitesPerTick, events, tick)
     return {
       kites: Math.max(
-        crowd.kitesPerTick,
-        ...surges.map((surge) => surgeKitesAt(surge, crowd.kitesPerTick, tick)),
+        waves,
+        ...active.map((surge) => surgeKitesAt(surge, crowd.kitesPerTick, tick)),
       ),
-      surge: surges.length > 0,
+      surge: active.length > 0 || waves > crowd.kitesPerTick,
     }
   })
 }

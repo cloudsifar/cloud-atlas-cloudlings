@@ -119,13 +119,14 @@
     "title": "Auto Scaling group",
     "body": "A fleet of identical EC2 instances with a minimum, a maximum and a desired size. It spreads its instances across the subnets you choose, and so across Availability Zones. With a scaling policy it changes its own size: a target tracking policy keeps a measure such as average CPU near a target, launching instances when the fleet is busy and removing them when it is quiet. Attached to a load balancer, its instances register as targets automatically.",
     "simplifications": [
-      "Every instance serves a fixed number of kites per tick, and a new instance takes 2 ticks to start serving. Real launch times and capacities vary.",
+      "Each Cloudling keeps one kite up, and every instance has room for a fixed number of kites by size (5, 10 or 20). A new instance takes 2 minutes to start serving. Real launch times and capacities vary.",
       "Only target tracking on CPU is offered. Step, simple, scheduled and predictive scaling are left out.",
-      "The group scales in one instance per tick when CPU is below the target; AWS decides the pace itself, more cautiously.",
+      "When CPU has stayed below the target for 2 minutes, the group removes enough instances to bring it back up to the target, but never more than half the fleet at once. AWS also scales in more gradually than out, at a pace it decides itself.",
       "A kite that finds every target busy times out in the same tick. Real requests wait in a queue first, and some are served late.",
       "Every kite in a crowd is treated alike, so one journey stands for all of them.",
       "A group keeps at least one instance; AWS allows a minimum of zero.",
-      "Launch templates, health-check replacement and instance warm-up settings are left out."
+      "Launch templates, health-check replacement and instance warm-up settings are left out.",
+      "A group can have at most 16 instances here, so the sky can draw every one. Real groups can be far larger."
     ],
     "atlasPage": "TODO(Simon)"
   },
@@ -133,8 +134,8 @@
     "title": "CloudWatch",
     "body": "The weather station. CloudWatch collects metrics, such as the CPU use of a fleet or the number of requests at a load balancer, and alarms watch a metric against a threshold. An alarm is either OK or in ALARM, and can trigger an action such as scaling a group. With a target tracking policy, EC2 Auto Scaling creates and manages the alarms for you.",
     "simplifications": [
-      "Metrics are measured once per tick. Real metrics arrive on a schedule of seconds or minutes, and alarms wait for several readings.",
-      "CPU is modelled as the share of the fleet's capacity in use."
+      "Metrics are measured once a minute, and an alarm acts on a single reading: above the target at once, below it after 2 minutes. Real alarms wait for several readings, and the scale-in alarm waits much longer.",
+      "CPU is modelled as the share of the targets' room in use: kites ÷ room."
     ],
     "atlasPage": "TODO(Simon)"
   },

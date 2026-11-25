@@ -51,6 +51,12 @@ export type Predicate =
   | { kind: 'listener-is'; loadBalancerId: string; listener: LoadBalancer['listener'] }
   | { kind: 'targets-registered'; loadBalancerId: string; atLeast: number }
   | { kind: 'targets-in-both-azs'; loadBalancerId: string }
+  /** The load balancer sends requests to this cloud (an instance, or a whole Auto Scaling group). */
+  | { kind: 'targets-include'; loadBalancerId: string; targetId: string }
+  /** The Auto Scaling group has a scaling policy and room to grow: its maximum is above its minimum. */
+  | { kind: 'group-can-scale'; groupId: string }
+  /** None of these holds, e.g. neither fixed instance is a target any more. */
+  | { kind: 'none-of'; predicates: Predicate[] }
   /** Every inbound rule on every target names the load balancer's security group and nothing wider. */
   | { kind: 'targets-accept-only-load-balancer'; loadBalancerId: string }
   | { kind: 'role-attached'; instanceIds: string[] }
@@ -72,6 +78,13 @@ export type Predicate =
   | { kind: 'crowd-delivered-at-least'; percent: number; during?: 'surge' }
   /** More targets were in service at the busiest moment than at the end: capacity grew, then shrank. */
   | { kind: 'crowd-scaled-out-and-back-in' }
+  /**
+   * Before the crowd first grows, the targets are at least this busy: the fleet is not
+   * oversized for the usual crowd, so nobody pays for instances that sit idle.
+   */
+  | { kind: 'crowd-quiet-cpu-at-least'; percent: number }
+  /** On every tick, the healthy targets span at least this many Availability Zones. */
+  | { kind: 'crowd-zones-at-least'; zones: number }
 
 export type Objective = {
   id: string
@@ -150,6 +163,23 @@ export function evaluatePredicate(
       const loadBalancer = findResourceOfKind(scene, 'load-balancer', predicate.loadBalancerId)
       return (loadBalancer?.targetIds.length ?? 0) >= predicate.atLeast
     }
+    case 'targets-include':
+      // Asked of the scene as the player built it, where a group is one target.
+      return (
+        findResourceOfKind(
+          authoredScene,
+          'load-balancer',
+          predicate.loadBalancerId,
+        )?.targetIds.includes(predicate.targetId) ?? false
+      )
+    case 'group-can-scale': {
+      const group = findResourceOfKind(authoredScene, 'auto-scaling-group', predicate.groupId)
+      return group !== undefined && group.scaling !== null && group.max > group.min
+    }
+    case 'none-of':
+      return predicate.predicates.every(
+        (inner) => !evaluatePredicate(authoredScene, runs, inner, crowd),
+      )
     case 'targets-in-both-azs': {
       const loadBalancer = findResourceOfKind(scene, 'load-balancer', predicate.loadBalancerId)
       if (!loadBalancer) return false
@@ -226,6 +256,19 @@ export function evaluatePredicate(
         crowd !== null &&
         crowd.peakTargetsInService > crowd.finalTargetsInService &&
         crowd.finalTargetsInService > 0
+      )
+    case 'crowd-quiet-cpu-at-least': {
+      if (crowd === null) return false
+      const firstBusy = crowd.ticks.findIndex((tick) => tick.surge)
+      // A crowd that never grows has no quiet start to judge, so this cannot be met by accident.
+      if (firstBusy <= 0) return false
+      return crowd.ticks.slice(0, firstBusy).every((tick) => tick.cpuPercent >= predicate.percent)
+    }
+    case 'crowd-zones-at-least':
+      return (
+        crowd !== null &&
+        crowd.ticks.length > 0 &&
+        crowd.ticks.every((tick) => tick.zonesInService >= predicate.zones)
       )
   }
 }

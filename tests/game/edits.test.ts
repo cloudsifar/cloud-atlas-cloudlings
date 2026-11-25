@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { AutoScalingGroup, Scene } from '../../src/engine'
-import { setGroupSettings } from '../../src/game/edits'
+import { MAX_GROUP_SIZE, setGroupSettings } from '../../src/game/edits'
 import { byId, sceneWith } from '../engine/fixtures'
 
 const withGroup = (settings: Pick<AutoScalingGroup, 'min' | 'desired' | 'max'>): Scene =>
@@ -72,5 +72,15 @@ describe('setGroupSettings', () => {
       desired: 1,
       max: 1,
     })
+  })
+
+  it('never goes above the most instances the sky can draw', () => {
+    // A game limit, not an AWS one: the fleet draws every instance (render.ts, drawFleet).
+    expect(settingsAfter({ min: 2, desired: 2, max: 8 }, { max: MAX_GROUP_SIZE + 4 })).toEqual({
+      min: 2,
+      desired: 2,
+      max: MAX_GROUP_SIZE,
+    })
+    expect(settingsAfter({ min: 2, desired: 2, max: 8 }, { min: 99 }).min).toBe(MAX_GROUP_SIZE)
   })
 })

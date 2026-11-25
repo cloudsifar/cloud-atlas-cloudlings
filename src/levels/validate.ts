@@ -6,6 +6,7 @@
 
 import {
   cidrContains,
+  crowdTimeline,
   surgeWindow,
   validateScene,
   type CrowdSurge,
@@ -13,7 +14,7 @@ import {
   type Scene,
 } from '../engine'
 import { textSegments } from './markup'
-import { PULSE_SECTIONS, REGION_CODES, type Level } from './schema'
+import { MAX_CROWD, PULSE_SECTIONS, REGION_CODES, type Level } from './schema'
 
 type JsonObject = Record<string, unknown>
 
@@ -344,14 +345,31 @@ function checkCrowdAndEvents(level: Level, errors: string[]): void {
       errors.push('crowd.ticks: expected a whole number from 1 to 120')
   }
 
+  let eventsValid = true
   level.events.forEach((event: unknown, index) => {
     const path = `events[${index}]`
-    if (!isObject(event) || event.kind !== 'crowd-surge') {
-      errors.push(`${path}.kind: expected "crowd-surge"`)
+    const kinds = ['crowd-surge', 'crowd-arrives', 'crowd-leaves']
+    if (!isObject(event) || !kinds.includes(String(event.kind))) {
+      errors.push(`${path}.kind: expected "crowd-surge", "crowd-arrives" or "crowd-leaves"`)
+      eventsValid = false
       return
     }
     if (crowd === undefined) {
-      errors.push(`${path}: a crowd surge needs the level to have a crowd`)
+      const what = event.kind === 'crowd-surge' ? 'surge' : 'wave'
+      errors.push(`${path}: a crowd ${what} needs the level to have a crowd`)
+      eventsValid = false
+      return
+    }
+    if (event.kind !== 'crowd-surge') {
+      // A wave of Cloudlings who arrive or leave.
+      if (!wholeNumber(event.atTick, 0) || Number(event.atTick) >= crowd.ticks) {
+        errors.push(`${path}.atTick: expected a tick from 0 to ${crowd.ticks - 1}`)
+        eventsValid = false
+      }
+      if (!wholeNumber(event.cloudlings, 1)) {
+        errors.push(`${path}.cloudlings: expected a whole number of at least 1`)
+        eventsValid = false
+      }
       return
     }
     for (const field of ['atTick', 'rampTicks'] as const) {
@@ -368,6 +386,29 @@ function checkCrowdAndEvents(level: Level, errors: string[]): void {
     }
   })
 
+  // Waves: nobody leaves who has not come, and the ground has room for everyone.
+  if (crowd !== undefined && isObject(crowd) && eventsValid && wholeNumber(crowd.ticks, 1)) {
+    for (let tick = 0; tick < crowd.ticks; tick++) {
+      let size = crowd.kitesPerTick
+      for (const event of level.events) {
+        if (event.kind === 'crowd-surge' || event.atTick > tick) continue
+        size += event.kind === 'crowd-arrives' ? event.cloudlings : -event.cloudlings
+      }
+      if (size < crowd.kitesPerTick) {
+        errors.push(
+          `events: at tick ${tick} more Cloudlings have left than arrived (the usual ${crowd.kitesPerTick} always stay)`,
+        )
+        break
+      }
+    }
+    const biggest = Math.max(...crowdTimeline(crowd, level.events).map((moment) => moment.kites))
+    if (biggest > MAX_CROWD) {
+      errors.push(
+        `events: the crowd reaches ${biggest} Cloudlings, but the ground has room for ${MAX_CROWD}`,
+      )
+    }
+  }
+
   const predicates = [
     ...level.objectives.map((objective) => objective.predicate),
     ...level.stars.wellArchitected.predicates,
@@ -383,6 +424,17 @@ function checkCrowdAndEvents(level: Level, errors: string[]): void {
     errors.push(
       'objectives: a predicate counts kites "during the surge", but the level has no crowd surge',
     )
+  }
+  const aboutQuietStart = crowdPredicates.some(
+    (predicate) => predicate.kind === 'crowd-quiet-cpu-at-least',
+  )
+  if (aboutQuietStart && crowd !== undefined && isObject(crowd) && eventsValid) {
+    const moments = crowdTimeline(crowd, level.events)
+    if (moments.length === 0 || moments[0]!.surge || !moments.some((moment) => moment.surge)) {
+      errors.push(
+        'objectives: a predicate about the quiet start needs a crowd that is usual at first and grows later',
+      )
+    }
   }
 }
 

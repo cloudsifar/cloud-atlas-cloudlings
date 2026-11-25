@@ -16,12 +16,14 @@ import {
   type SecurityGroup,
   type SecurityGroupPeer,
   type ServiceAction,
+  LAUNCH_TICKS,
   REQUESTS_PER_TICK,
   type Ec2Instance,
 } from '../engine'
 import {
   addRoleStatement,
   addSecurityGroupRule,
+  MAX_GROUP_SIZE,
   prefersReducedMotion,
   removeRoleStatement,
   removeRoute,
@@ -587,9 +589,44 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
       const sizes: Option<Ec2Instance['size']>[] = (['small', 'medium', 'large'] as const).map(
         (size) => ({
           value: size,
-          label: `${size[0]!.toUpperCase()}${size.slice(1)}: serves ${REQUESTS_PER_TICK[size]} kites per tick`,
+          label: `${size[0]!.toUpperCase()}${size.slice(1)}: room for ${REQUESTS_PER_TICK[size]} kites`,
         }),
       )
+      // A group that is not a load balancer target gets no kites, whatever its settings:
+      // say so at the top of its card (ADR 0012).
+      const attached = resourcesOfKind(scene, 'load-balancer').some((loadBalancer) =>
+        loadBalancer.targetIds.includes(resource.id),
+      )
+      if (!attached) {
+        body.append(
+          h('p', {
+            class: 'card-warning',
+            attrs: { role: 'status' },
+            textContent:
+              'No load balancer sends kites to this group yet, so its instances serve nobody. Click the load balancer and tick this group as a target.',
+          }),
+        )
+      }
+      const scalingField = dropdown(
+        'Scaling policy (target tracking)',
+        [
+          { value: '', label: 'None: stay at the minimum' },
+          ...[40, 50, 60, 70, 80].map((percent) => ({
+            value: String(percent),
+            label: `Keep average CPU near ${percent}%`,
+          })),
+        ],
+        resource.scaling ? String(resource.scaling.targetCpuPercent) : '',
+        (value) =>
+          actions.edit((current) =>
+            setGroupSettings(current, resource.id, {
+              scaling: value === '' ? null : { targetCpuPercent: Number(value) },
+            }),
+          ),
+        'scaling',
+        locked,
+      )
+      attention(scalingField.firstElementChild, actions, `group-scaling:${resource.id}`)
       body.append(
         h('p', {
           class: 'note',
@@ -603,32 +640,13 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
           'size',
           locked,
         ),
-        stepper('Minimum instances', 'min', resource.min, 1, 12),
+        stepper('Minimum instances', 'min', resource.min, 1, MAX_GROUP_SIZE),
         stepper('Desired (to start with)', 'desired', resource.desired, resource.min, resource.max),
-        stepper('Maximum instances', 'max', resource.max, 1, 12),
-        dropdown(
-          'Scaling policy (target tracking)',
-          [
-            { value: '', label: 'None: stay at the minimum' },
-            ...[40, 50, 60, 70, 80].map((percent) => ({
-              value: String(percent),
-              label: `Keep average CPU near ${percent}%`,
-            })),
-          ],
-          resource.scaling ? String(resource.scaling.targetCpuPercent) : '',
-          (value) =>
-            actions.edit((current) =>
-              setGroupSettings(current, resource.id, {
-                scaling: value === '' ? null : { targetCpuPercent: Number(value) },
-              }),
-            ),
-          'scaling',
-          locked,
-        ),
+        stepper('Maximum instances', 'max', resource.max, 1, MAX_GROUP_SIZE),
+        scalingField,
         h('p', {
           class: 'note',
-          textContent:
-            'With a policy, CloudWatch alarms watch the fleet’s CPU. Above the target the group launches instances (they take 2 ticks to start serving); below it, the group removes them one at a time.',
+          textContent: `With a policy, CloudWatch alarms watch the fleet’s CPU. When it rises above the target, the group launches enough instances to bring it back down; they take ${LAUNCH_TICKS} minutes to start serving. When it stays below the target, the group removes instances, at most half the fleet at a time.`,
         }),
       )
       break

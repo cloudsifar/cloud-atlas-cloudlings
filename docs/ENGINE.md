@@ -223,29 +223,37 @@ only the S3 access decision applies.
   1. instances that finished launching start serving;
   2. one representative kite is evaluated (`evaluateFlow`), to see whether the crowd
      gets through at all;
-  3. capacity is the sum, over the load balancer's healthy targets, of what each size
-     serves per tick; kites beyond capacity time out (outcome `dropped`);
-  4. CPU is the share of capacity in use, capped at 100%;
-  5. a target tracking policy decides: above the target, launch enough instances to
-     bring CPU back to it (in proportion); below it, remove one instance, but only if
-     the rest would still be at or under the target. New instances serve after
-     `LAUNCH_TICKS`.
+  3. capacity is the sum, over the load balancer's healthy targets, of the kites each
+     size has room for (each Cloudling keeps one kite up, so the crowd's size is the
+     load); kites beyond capacity time out (outcome `dropped`);
+  4. CPU is the share of capacity in use, capped at 100%. A group that no load
+     balancer targets serves nothing, so its own CPU is 0%;
+  5. a target tracking policy decides on the group's CPU: above the target, launch
+     enough instances to bring CPU back to it (in proportion), serving after
+     `LAUNCH_TICKS`; below it for `SCALE_IN_TICKS` ticks in a row, remove enough to
+     bring CPU back up to the target, never more than half the fleet at once and never
+     below the minimum (ADR 0012).
 
   Each tick's record keeps two journeys for playback and the trace inspector: `served`
   (a kite that got a target, or, if the crowd cannot get through, what stopped it) and
   `timedOut` (a kite beyond capacity: the same checks up to the load balancer, then a
   failing `capacity` step at the load balancer, HTTP 504). It also keeps each group's
-  own serving and launching instances (`fleets`), so the fleet's cloud can grow.
+  own serving and launching instances, and what it started and removed (`fleets`), so
+  the fleet can be drawn instance by instance; the room the targets have (`capacity`),
+  which clouds they are (`serving`), and how many Availability Zones they span
+  (`zonesInService`).
 
 - **AWS references.**
   [Target tracking scaling policies](https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-scaling-target-tracking.html),
+  [target tracking for Spot Fleet: "scales out proportionally to the metric as fast as it can, but scales in more gradually"](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-fleet-target-tracking.html),
   [dynamic scaling](https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-scale-based-on-demand.html),
   [Application Load Balancer troubleshooting: HTTP 504 when a target does not answer before the idle timeout; add targets if they are too busy](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-troubleshooting.html).
 - **Code.** `simulateCrowd`, `deliveredShare`; `healthyTargets` in `flow.ts`; the
   `capacity` check kind in `trace.ts`; predicates `crowd-delivered-at-least` (whole run,
-  or `during: 'surge'`) and `crowd-scaled-out-and-back-in`.
+  or `during: 'surge'`), `crowd-scaled-out-and-back-in`, `crowd-quiet-cpu-at-least` and
+  `crowd-zones-at-least`.
 - **Tests.** `tests/engine/auto-scaling.test.ts`: "capacity", "timed-out kites",
-  "target tracking scaling", "crowd predicates".
+  "target tracking scaling", "what each tick records", "crowd predicates".
 - **Not modelled yet.** Replacing unhealthy instances; scene events during a crowd (AZ
   failure, instance failure); the cost of instance-hours over the run; the load
   balancer's own capacity.
@@ -255,11 +263,14 @@ only the S3 access decision applies.
 - **Modelled.** Nothing from AWS: this is the level's story. A level states its usual
   crowd (`kitesPerTick`, and how many `ticks` the run lasts) and its scripted events.
   `crowdTimeline(crowd, events)` turns them into one `CrowdMoment` per tick: how many
-  kites fly, and whether a surge is under way. A crowd surge climbs in a straight line
-  from the usual crowd to its peak over `rampTicks`, holds for `holdTicks`, and falls
-  back the same way; where surges overlap the bigger crowd wins. Why the timeline is
+  kites fly, and whether the crowd is bigger than usual. Crowd waves (`crowd-arrives`,
+  `crowd-leaves`) add or take away a group of Cloudlings from a given tick, never below
+  the usual crowd (ADR 0012). A crowd surge climbs in a straight line from the usual
+  crowd to its peak over `rampTicks`, holds for `holdTicks`, and falls back the same
+  way; where surges overlap the bigger crowd wins, and a surge can lift a crowd that
+  waves have grown. Why the timeline is
   separate from the simulation: `docs/adr/0005-crowds-and-the-event-timeline.md`.
-- **Code.** `crowdTimeline`, `surgeKitesAt`, `surgeWindow`.
+- **Code.** `crowdTimeline`, `waveCrowdAt`, `surgeKitesAt`, `surgeWindow`.
 - **Tests.** `tests/engine/timeline.test.ts`; level-file checks in
   `tests/levels/levels.test.ts`, "crowds and events".
 

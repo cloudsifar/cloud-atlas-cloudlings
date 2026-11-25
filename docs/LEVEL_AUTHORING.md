@@ -30,7 +30,7 @@ reference, and this guide is the tour.
 | `gatewayEndpoints`               | Optional. `["s3"]` and/or `["dynamodb"]`: offers that gateway endpoint as a route on route cards. It is a route, not a palette cloud                                                                      |
 | `population`                     | The Cloudlings and their kites                                                                                                                                                                            |
 | `crowd`                          | Optional. The usual crowd: `{ loadBalancerId, ip, kitesPerTick, ticks }`. Simulated tick by tick, flown in the sky and shown on the weather station. The named kites in `population` are its regulars     |
-| `events`                         | Scripted events on the crowd's timeline. So far only crowd surges (see below); a surge needs a `crowd`. `[]` for levels without                                                                           |
+| `events`                         | Scripted events on the crowd's timeline: crowd waves and crowd surges (see below); both need a `crowd`. `[]` for levels without                                                                           |
 | `objectives`                     | Goals, each a machine-checkable predicate with player-facing text                                                                                                                                         |
 | `stars.wellArchitected`          | The third star: its text and the predicates that must all hold                                                                                                                                            |
 | `hints`                          | One entry per objective, three tiers each                                                                                                                                                                 |
@@ -89,20 +89,34 @@ carries a complete resource with a fixed id (for example the bucket `photos`).
 ## Crowds and events
 
 A crowd level states its usual crowd and its events; the engine builds one moment per
-tick from them (`src/engine/timeline.ts`). Level 5:
+tick from them (`src/engine/timeline.ts`). A tick is one CloudWatch minute, 1.25 s on
+screen. Each Cloudling keeps one kite up while it stays, so the crowd's size is the
+load. Level 5 (ADR 0012):
 
 ```json
-"crowd": { "loadBalancerId": "alb", "ip": "203.0.113.50", "kitesPerTick": 4, "ticks": 30 },
+"crowd": { "loadBalancerId": "alb", "ip": "203.0.113.50", "kitesPerTick": 4, "ticks": 26 },
 "events": [
-  { "kind": "crowd-surge", "atTick": 3, "rampTicks": 6, "holdTicks": 6, "peakKitesPerTick": 40 }
+  { "kind": "crowd-arrives", "atTick": 2, "cloudlings": 5 },
+  { "kind": "crowd-arrives", "atTick": 6, "cloudlings": 10 },
+  { "kind": "crowd-arrives", "atTick": 10, "cloudlings": 21 },
+  { "kind": "crowd-leaves", "atTick": 14, "cloudlings": 21 },
+  { "kind": "crowd-leaves", "atTick": 18, "cloudlings": 10 },
+  { "kind": "crowd-leaves", "atTick": 22, "cloudlings": 5 }
 ]
 ```
 
-The surge climbs in a straight line from 4 to 40 over 6 ticks, holds for 6, and falls
-over 6. The validator checks that the load balancer exists in the reference solution,
-the address is a documentation address, the peak is above the usual crowd, and the
-surge is over before the run ends. Leave quiet ticks after the surge if a star depends
-on capacity scaling back in.
+`kitesPerTick` is the usual crowd: the Cloudlings there all day. Waves add a group from
+their tick on and take it away when it leaves. Four ticks apart is 5 s on screen, which
+leaves time to see each group arrive, the alarm ring, new instances launch and the dial
+fall back. Newcomers walk on over the two ticks before their wave, so leave at least two
+ticks before the first. The validator checks that the load balancer exists in the
+reference solution and that the address is a documentation address. It also checks that
+every wave is inside the run, that nobody leaves who has not arrived, and that the crowd
+never exceeds `MAX_CROWD` (40), the places on the ground.
+
+A `crowd-surge` (`atTick`, `rampTicks`, `holdTicks`, `peakKitesPerTick`) is the other
+kind of event: a straight-line climb to a peak, a hold, and a fall. It must be over
+before the run ends, and its peak must be above the usual crowd.
 
 To tune a crowd level, simulate a few builds before choosing numbers: the reference
 solution should pass comfortably, the initial scene should fail clearly, and an
@@ -142,6 +156,11 @@ The predicates available today (`src/engine/predicates.ts`):
 | `cost-at-most`                            | The running cost is at most that many coins. Using it anywhere in a level makes the side panel show the running cost                        |
 | `crowd-delivered-at-least`                | At least `percent` of the crowd's kites were delivered: over the whole run, or with `"during": "surge"` only on surge ticks (needs `crowd`) |
 | `crowd-scaled-out-and-back-in`            | More targets were in service at the busiest tick than at the end (needs `crowd`)                                                            |
+| `crowd-quiet-cpu-at-least`                | Before the crowd first grows, CPU is at least `percent`: the fleet is not oversized for the usual crowd (needs a crowd that grows later)    |
+| `crowd-zones-at-least`                    | On every tick the healthy targets span at least `zones` Availability Zones (needs `crowd`)                                                  |
+| `targets-include`                         | The load balancer sends requests to that cloud (an instance, or a whole Auto Scaling group)                                                 |
+| `group-can-scale`                         | The Auto Scaling group has a scaling policy and a maximum above its minimum                                                                 |
+| `none-of`                                 | None of the listed `predicates` holds, e.g. neither fixed instance is a target any more                                                     |
 
 Select kites with `{ "intent": "legitimate" }`, `{ "intent": "hostile" }` or
 `{ "flowIds": ["green-1"] }`. Values for `by`: `route`, `nacl`, `security-group`,
@@ -193,8 +212,8 @@ security group).
 `pulse` is optional: card sections whose headings pulse while the step is current, to
 say "over here" (ADR 0008), e.g. `"pulse": ["security-group:sg-alb"]`. The sections are
 `security-group:<id>`, `route-table:<id>`, `listener:<load balancer id>`,
-`targets:<load balancer id>`, `role-statements:<role id>`, `role-wearers:<role id>` and
-`instance-role:<instance id>`. In Levels 1–3 every step that asks for a setting to
+`targets:<load balancer id>`, `role-statements:<role id>`, `role-wearers:<role id>`,
+`instance-role:<instance id>` and `group-scaling:<group id>`. In Levels 1–3 every step that asks for a setting to
 change must have one; the level tests check it.
 
 **Linking a phrase to a fact card.** A step's text may contain

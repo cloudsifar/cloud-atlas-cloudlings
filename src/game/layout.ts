@@ -154,10 +154,27 @@ export function layoutScene(scene: Scene): SceneLayout {
         )
         break
       }
-      case 'auto-scaling-group':
-        // A cluster across both Availability Zone columns, like the load balancer below it.
-        clouds[resource.id] = centred({ x: vpcCentreX, y: midCentreY + 4 }, resource.kind)
+      case 'auto-scaling-group': {
+        // A fleet across both Availability Zone columns, one half in each, with room to
+        // draw every instance (MAX_GROUP_SIZE). With fixed EC2 instances in its subnets
+        // it fits between them; without, it spreads across both private subnets.
+        const crowded = resourcesOfKind(scene, 'ec2-instance').some((instance) =>
+          resource.subnetIds.includes(instance.subnetId),
+        )
+        const columns = resource.subnetIds
+          .map((id) => subnets[id])
+          .filter((rect): rect is Rect => rect !== undefined)
+        const height = 92
+        const y = midCentreY + 4 - height / 2
+        if (crowded || columns.length === 0) {
+          clouds[resource.id] = { x: vpcCentreX - 105, y, width: 210, height }
+        } else {
+          const left = Math.min(...columns.map((rect) => rect.x)) + 14
+          const right = Math.max(...columns.map((rect) => rect.x + rect.width)) - 14
+          clouds[resource.id] = { x: left, y, width: right - left, height }
+        }
         break
+      }
       case 'ec2-instance':
       case 'nat-gateway':
         break // placed above

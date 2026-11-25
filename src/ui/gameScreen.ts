@@ -74,6 +74,8 @@ export function mountGameScreen(
    * after landing (ADR 0011). Everything counts as ticked until a run lands.
    */
   let objectivesTicked = Number.POSITIVE_INFINITY
+  /** In a crowd level, the minute the flying crowd has reached; null when not flying. */
+  let crowdMinute: number | null = null
   let tickTimers: number[] = []
   /** A cloud whose removal waits on the player confirming the level's warning. */
   let pendingRemoval: string | null = null
@@ -166,6 +168,10 @@ export function mountGameScreen(
     },
     onDriftedBack: explainPlacement,
     onMessage: showMessage,
+    onCrowdMinute(minute) {
+      crowdMinute = minute
+      drawSidePanel(store.getState())
+    },
   })
 
   function fly(): void {
@@ -182,6 +188,29 @@ export function mountGameScreen(
     explanation = null
     pendingRemoval = null
     store.applyEdit((scene) => removeResource(scene, resourceId))
+  }
+
+  /** The objectives, stars and weather station. Redrawn on its own as the crowd's minutes pass. */
+  function drawSidePanel(state: GameState): void {
+    redraw(
+      sidePanel,
+      ...renderObjectives(
+        state,
+        (objectiveId) => {
+          playSound('hint')
+          store.revealHint(objectiveId)
+        },
+        (choice) => {
+          openCard = null
+          selectedKiteId = null
+          selectedCrowdKite = choice
+          playSound('card-open')
+          draw()
+        },
+        objectivesTicked,
+        crowdMinute,
+      ),
+    )
   }
 
   function draw(): void {
@@ -256,24 +285,7 @@ export function mountGameScreen(
         },
       ),
     )
-    redraw(
-      sidePanel,
-      ...renderObjectives(
-        state,
-        (objectiveId) => {
-          playSound('hint')
-          store.revealHint(objectiveId)
-        },
-        (choice) => {
-          openCard = null
-          selectedKiteId = null
-          selectedCrowdKite = choice
-          playSound('card-open')
-          draw()
-        },
-        objectivesTicked,
-      ),
-    )
+    drawSidePanel(state)
     redraw(
       narrator,
       ...renderNarrator(
