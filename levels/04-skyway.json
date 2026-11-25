@@ -2,7 +2,7 @@
   "id": 4,
   "slug": "skyway",
   "title": "Skyway",
-  "concept": "How to reach S3 privately through a gateway endpoint, and why paying for a NAT Gateway you do not need is wasted money.",
+  "concept": "This shows you how to reach S3 privately through a gateway endpoint, and that paying for a NAT Gateway you do not need is not cost efficient. A NAT Gateway is not needed in this scenario: remove it and save money.",
   "guidance": "hints",
   "region": "eu-central-1",
   "azs": 2,

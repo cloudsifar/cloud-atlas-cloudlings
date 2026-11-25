@@ -57,8 +57,10 @@ transition (ADR 0010):
   (https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html).
   No level contains a bastion, and the card says so.
 - **Wording.** Level 3: "…where it becomes the S3 cloud: S3 stands outside your VPC and
-  spans every altitude." Level 4: "How to reach S3 privately through a gateway
-  endpoint, and why paying for a NAT Gateway you do not need is wasted money."
+  spans every altitude." Level 4, in Simon's words (25 November): "This shows you how to
+  reach S3 privately through a gateway endpoint, and that paying for a NAT Gateway you
+  do not need is not cost efficient. A NAT Gateway is not needed in this scenario:
+  remove it and save money."
 - **Long narrator steps scroll.** The narrator box is 84 px tall; Level 2's step 3 ran
   past the bottom of a 720 px window, hiding "Step 3 of 7". The text now scrolls inside
   the box.
