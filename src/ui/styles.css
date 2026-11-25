@@ -50,6 +50,11 @@ body {
   line-height: 1.35;
 }
 
+/* Zone and subnet letters are always bold: AZ a, Private subnet A (src/ui/dom.ts). */
+.place-letter {
+  font-weight: 700;
+}
+
 .stage {
   position: absolute;
   left: 50%;

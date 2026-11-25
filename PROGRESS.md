@@ -63,6 +63,19 @@ Running log. Newest state first; updated at the end of every milestone.
       8 and 16 and back down, with the log reading as expected minute by minute. The
       level was completed with three stars, and every narrator step advanced.
     - No console errors in any of these runs.
+  - Level 6 after the first-play changes (ADR 0015), on the esbuild bundle, 25 November
+    2026:
+    - The unsolved run ended on its own after minute 10 (17.7 s), the clock showing
+      minute 10. The narrator moved to step 2 with Next showing, and the weather
+      station said the run stopped early.
+    - Bold letters: in narration, the fleet card's subnet checkboxes ("Private subnet
+      **A** (Availability Zone **a**)", spacing unchanged), the stars and the sky's
+      captions.
+    - Fixed with the guided minimum of 2: both objectives, two stars, and the last step
+      in three lines with "Minimum instances" pulsing on the fleet card.
+    - The fleet drew one cloudlet per instance: 2, then 2 grey after the strike. In
+      Level 5, a fleet of 7 drew 4 and 3.
+    - No console errors in any of these runs.
   - Level 6, Storm Front (ADR 0014), on the esbuild bundle, 25 November 2026:
     - The unsolved run: 8 of 8 Cloudlings timed out from minute 8. The weather station
       said no healthy targets, that the fleet had nowhere to launch replacements, and
@@ -87,13 +100,16 @@ Running log. Newest state first; updated at the end of every milestone.
 ## Not verified — do these first
 
 1. **Vitest, the Vite build and lint on Windows, on everything since 18 November**
-   (ADRs 0007–0014). In that time the suite has run only on the offline runner
-   (308 tests), and ESLint, Prettier and the project `tsc` were run against the
+   (ADRs 0007–0015). In that time the suite has run only on the offline runner
+   (318 tests), and ESLint, Prettier and the project `tsc` were run against the
    installed packages from the cloud sandbox. On Windows, after `git pull`:
-   `npm ci --ignore-scripts`, then `npm test` (expect 21 test files and **308 passed**),
+   `npm ci --ignore-scripts`, then `npm test` (expect 21 test files and **318 passed**),
    `npm run build` (writes `dist/`, including `dist/sounds/README.md`) and
    `npm run lint`. Read each output, not only the exit code.
-2. **Level 6 played by a person** (ADR 0014): whether the storm's slow-motion minutes
+2. **Level 6 replayed by a person** after Simon's first-play changes (ADR 0015): the
+   unsolved run now ends on its own after minute 10; zone and subnet letters are bold
+   everywhere; the last step hints at the third star; a fleet draws one cloudlet per
+   instance. Still open from the first play: whether the storm's slow-motion minutes
    are slow enough to follow, whether the database's primary, standby and failover
    read clearly, whether the security group trap is fair, and how the new `thunder`
    and `failover` placeholder sounds land. Level 5 (ADR 0012) was played by Simon on
@@ -145,6 +161,9 @@ Running log. Newest state first; updated at the end of every milestone.
   right. The crowd's journeys (timed out, or got through at the busiest tick) are
   opened from the weather station's "Follow a kite…" links. The same holds in Level 6:
   a named Cloudling's own journey is flown before the storm.
+- A standalone EC2 instance (Levels 2–5) is still drawn as a patch of four cloudlets,
+  while each instance in a fleet is now one cloudlet (ADR 0015). Whether a standalone
+  instance should become one cloudlet too is Simon's call.
 - Level 6: the load balancer is one cloud across both zones, so in the storm only its
   left half is greyed; its node in AZ a is out of service, which the CloudWatch log and
   the trace say in words.
@@ -372,3 +391,9 @@ None found so far. Two places where the brief's wording was made more exact:
   that a level is not a race. Fact cards for RDS and static stability. ADR 0014;
   SIMPLIFICATIONS 30–37. 308 tests pass offline; played headlessly unsolved, half
   solved and solved to three stars, no console errors.
+- **Session 3, continued: Storm Front, first-play changes (ADR 0015).** A crowd run that
+  has settled with nothing answered ends two minutes later and the narrator moves on;
+  zone and subnet letters are bold everywhere (interface and sky), with zone letters
+  lower case throughout; Level 6's last step hints at the third star and pulses the
+  fleet's minimum; a fleet draws exactly one cloudlet per instance. 318 tests pass
+  offline.

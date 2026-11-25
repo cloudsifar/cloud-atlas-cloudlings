@@ -77,7 +77,8 @@
     },
     {
       "id": "wrap",
-      "text": "The storm took AZ a and the application stayed up: the fleet carried on from AZ b, the database failed over to its standby, and the database still knew the app tier by its security group. Kites failed while the failover ran, a minute or two that no architecture avoids. If some failed after it too, AZ b had too little room on its own until replacements arrived: that is the third star.",
+      "text": "AZ a went down and the application stayed up: the fleet carried on in AZ b, the database failed over, and its security group still knew the app tier. No third star yet? It is for being [statically stable](card:concept-static-stability): on the web fleet's card, raise the minimum to 4, two instances per zone, so AZ b alone can carry the crowd. Then fly again.",
+      "pulse": ["group-size:asg"],
       "advanceWhen": {
         "kind": "level-complete"
       }

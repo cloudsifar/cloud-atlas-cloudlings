@@ -28,6 +28,8 @@ export {
   fleetSizes,
   membersFailed,
   membersTimedOut,
+  playedTicks,
+  settledFrom,
   TICK_DURATION,
   type LogEntry,
 } from './crowdPlayback'

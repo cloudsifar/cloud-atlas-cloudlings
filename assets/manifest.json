@@ -67,6 +67,12 @@
       "height": 76,
       "anchor": [0.5, 0.5]
     },
+    "cloud.altocumulus.fleet-instance": {
+      "file": null,
+      "width": 64,
+      "height": 40,
+      "anchor": [0.5, 0.5]
+    },
     "cloud.altostratus.rds-database": {
       "file": null,
       "width": 124,

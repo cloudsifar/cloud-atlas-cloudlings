@@ -159,7 +159,7 @@ describe('an instance querying its RDS database', () => {
     const answer = result.trace.find(
       (step) => step.check === 'delivery' && step.at.kind === 'resource' && step.at.id === 'db',
     )
-    expect(answer?.explanation).toMatch('AZ B')
+    expect(answer?.explanation).toMatch('AZ b')
   })
 })
 

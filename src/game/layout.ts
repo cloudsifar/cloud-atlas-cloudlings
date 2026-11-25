@@ -82,6 +82,15 @@ export function spriteSize(kind: ResourceKind): { width: number; height: number 
   return { width: sprite.width, height: sprite.height }
 }
 
+/**
+ * One instance in an Auto Scaling group's fleet: a single cloudlet, drawn once per
+ * instance. This is its largest size; a crowded fleet draws it smaller to fit.
+ */
+export const FLEET_INSTANCE_SIZE = {
+  width: manifest.sprites['cloud.altocumulus.fleet-instance'].width,
+  height: manifest.sprites['cloud.altocumulus.fleet-instance'].height,
+}
+
 function centred(centre: Point, kind: ResourceKind): Rect {
   const { width, height } = spriteSize(kind)
   return { x: centre.x - width / 2, y: centre.y - height / 2, width, height }

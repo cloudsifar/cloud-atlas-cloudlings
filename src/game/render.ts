@@ -20,7 +20,7 @@ import {
   type ResourceKind,
   type Scene,
 } from '../engine'
-import type { Kite, Level, RegionCode } from '../levels'
+import { letterSegments, type Kite, type Level, type RegionCode } from '../levels'
 import { canStartConnection } from './edits'
 import { CHECK_LABELS } from './labels'
 import {
@@ -30,6 +30,7 @@ import {
   cloudlingPosition,
   databaseCaptionSide,
   databaseRect,
+  FLEET_INSTANCE_SIZE,
   GENUS_OF,
   handlePosition,
   SKY,
@@ -59,6 +60,7 @@ import {
   crowdStream,
   databaseViewAt,
   dialCpuAt,
+  fleetMembers,
   fleetViewAt,
   memberViewAt,
   outageAt,
@@ -232,16 +234,33 @@ function caption(
   colour = '#3d3a48',
 ): void {
   context.save()
-  context.font = `${size}px ${CAPTION_FONT}`
-  context.textAlign = align
+  const regular = `${size}px ${CAPTION_FONT}`
+  const bold = `bold ${size}px ${CAPTION_FONT}`
   context.textBaseline = 'middle'
   // A paper-coloured halo keeps hand-lettered captions legible over the sky.
   context.lineWidth = 3
   context.strokeStyle = 'rgba(246, 239, 220, 0.85)'
   context.lineJoin = 'round'
-  context.strokeText(text, x, y)
   context.fillStyle = colour
-  context.fillText(text, x, y)
+  // Zone and subnet letters are bold, as everywhere (letterSegments): laid out piece by
+  // piece from the left, halos first so none covers a neighbour's letters.
+  const pieces = letterSegments(text).map((segment) => {
+    context.font = segment.bold ? bold : regular
+    return { ...segment, width: context.measureText(segment.text).width }
+  })
+  const total = pieces.reduce((sum, piece) => sum + piece.width, 0)
+  const start =
+    align === 'center' ? x - total / 2 : align === 'right' || align === 'end' ? x - total : x
+  context.textAlign = 'left'
+  for (const pass of ['halo', 'ink'] as const) {
+    let cursor = start
+    for (const piece of pieces) {
+      context.font = piece.bold ? bold : regular
+      if (pass === 'halo') context.strokeText(piece.text, cursor, y)
+      else context.fillText(piece.text, cursor, y)
+      cursor += piece.width
+    }
+  }
   context.restore()
 }
 
@@ -604,30 +623,31 @@ function drawFleet(
   context.stroke()
   context.restore()
 
-  const perHalf = Math.max(1, slotsPerZone)
+  // Never fewer places than instances, so every instance is drawn.
+  const perHalf = Math.max(
+    1,
+    slotsPerZone,
+    fleetMembers(view.zones.a).length,
+    fleetMembers(view.zones.b).length,
+  )
   const halfWidth = rect.width / 2 - 8
+  const aspect = FLEET_INSTANCE_SIZE.height / FLEET_INSTANCE_SIZE.width
   let best = { columns: 1, rows: perHalf, width: 0, height: 0 }
   for (let columns = 1; columns <= perHalf; columns++) {
     const rows = Math.ceil(perHalf / columns)
-    const width = Math.floor(Math.min(64, (halfWidth - (columns - 1) * 6) / columns))
-    const height = Math.floor(Math.min(width * 0.62, (rect.height - 10 - (rows - 1) * 4) / rows))
-    if (Math.min(width, height / 0.62) > Math.min(best.width, best.height / 0.62))
+    const width = Math.floor(
+      Math.min(FLEET_INSTANCE_SIZE.width, (halfWidth - (columns - 1) * 6) / columns),
+    )
+    const height = Math.floor(Math.min(width * aspect, (rect.height - 10 - (rows - 1) * 4) / rows))
+    if (Math.min(width, height / aspect) > Math.min(best.width, best.height / aspect))
       best = { columns, rows, width, height }
   }
   const { columns, rows, width, height } = best
   const gridWidth = columns * width + (columns - 1) * 6
   const gridHeight = rows * height + (rows - 1) * 4
   for (const zone of ['a', 'b'] as const) {
-    const counts = view.zones[zone]
-    // Serving first (those scaling in last), then failed, then launching.
-    const kinds: ('serving' | 'leaving' | 'failed' | 'terminating' | 'launching')[] = [
-      ...Array<'serving'>(Math.max(0, counts.serving - counts.leaving)).fill('serving'),
-      ...Array<'leaving'>(counts.leaving).fill('leaving'),
-      ...Array<'failed'>(Math.max(0, counts.failed - counts.terminating)).fill('failed'),
-      ...Array<'terminating'>(counts.terminating).fill('terminating'),
-      ...Array<'launching'>(counts.launching).fill('launching'),
-    ]
-    kinds.slice(0, perHalf).forEach((kind, slot) => {
+    // One cloudlet per instance (fleetMembers): the picture counts what the group counts.
+    fleetMembers(view.zones[zone]).forEach((kind, slot) => {
       const halfLeft = zone === 'a' ? rect.x + 4 : rect.x + rect.width / 2 + 4
       const x = halfLeft + (halfWidth - gridWidth) / 2 + (slot % columns) * (width + 6)
       const y = rect.y + (rect.height - gridHeight) / 2 + Math.floor(slot / columns) * (height + 4)
@@ -639,20 +659,20 @@ function drawFleet(
         roundedRectPath(context, { x, y, width, height }, 8, 0)
         context.stroke()
         context.restore()
-        drawCloud(context, 'altocumulus', x, y, width, height, {
+        drawCloud(context, 'cloudlet', x, y, width, height, {
           ...look,
           opacity: look.opacity * (0.15 + 0.45 * view.launchProgress),
         })
       } else if (kind === 'failed' || kind === 'terminating') {
         // Unhealthy in a failed zone: grey and drooping, until the group replaces it.
         const droop = 4 + (time > 0 ? Math.sin(time / 700 + slot) : 0)
-        drawCloud(context, 'altocumulus', x, y + droop, width, height, {
+        drawCloud(context, 'cloudlet', x, y + droop, width, height, {
           ...look,
           tint: [GREY_TINT],
           opacity: look.opacity * (kind === 'terminating' ? 1 - view.leaveFade : 0.85),
         })
       } else {
-        drawCloud(context, 'altocumulus', x, y, width, height, {
+        drawCloud(context, 'cloudlet', x, y, width, height, {
           ...look,
           opacity: look.opacity * (kind === 'leaving' ? 1 - view.leaveFade : 1),
         })
@@ -721,13 +741,7 @@ function drawDatabase(
       ...look,
       tint: [GREY_TINT],
     })
-    databaseCaption(
-      context,
-      lost,
-      lostZone!,
-      ['lost with', `AZ ${lostZone!.toUpperCase()}`],
-      '#57536a',
-    )
+    databaseCaption(context, lost, lostZone!, ['lost with', `AZ ${lostZone!}`], '#57536a')
   }
 
   if (standby) {

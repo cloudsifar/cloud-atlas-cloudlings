@@ -574,7 +574,7 @@ function instanceToDatabaseChecks(
         ),
     ],
     answer: () => {
-      const zone = databaseSubnet.availabilityZone.toUpperCase()
+      const zone = databaseSubnet.availabilityZone
       switch (database.status) {
         case 'available':
           return makeStep(leg, atResource(database.id), 'delivery', {
@@ -734,7 +734,7 @@ function instanceToBucketChecks(
           request: [
             ...leaveInstance,
             ...routeFails(
-              `The route table of "${subnet.name}" sends this to "${nat.name}", but that NAT Gateway is in Availability Zone ${natSubnet.availabilityZone.toUpperCase()}, which is down. A NAT Gateway lives in one zone; a NAT Gateway in each zone avoids this.`,
+              `The route table of "${subnet.name}" sends this to "${nat.name}", but that NAT Gateway is in Availability Zone ${natSubnet.availabilityZone}, which is down. A NAT Gateway lives in one zone; a NAT Gateway in each zone avoids this.`,
             ),
           ],
           response: [],

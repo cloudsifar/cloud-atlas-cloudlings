@@ -4,7 +4,7 @@ import './ui/styles.css'
 import { STAGE, unlockAudio } from './game'
 import { LEVELS, type Level } from './levels'
 import { mountGameScreen, type GameScreen } from './ui/gameScreen'
-import { h } from './ui/dom'
+import { h, installPlaceLetters } from './ui/dom'
 import { mountMenu, mountStartScreen } from './ui/screens'
 import { playLevelChange } from './ui/transition'
 
@@ -13,6 +13,8 @@ if (!app) throw new Error('index.html is missing #app')
 
 const stage = h('div', { class: 'stage' })
 app.append(stage)
+// Zone and subnet letters in bold, everywhere in the interface (src/ui/dom.ts).
+installPlaceLetters(document.body)
 
 /** Desktop first: the stage is designed at 1280×720 and scaled to fit, never cropped. */
 function fitStage(): void {

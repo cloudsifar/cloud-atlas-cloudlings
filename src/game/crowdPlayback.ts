@@ -56,8 +56,60 @@ export const ALARM_AT = 0.55
 export type CrowdFate = 'delivered' | 'timed-out' | 'blocked'
 
 export function crowdRunDuration(record: CrowdRecord): number {
-  return record.ticks.length * TICK_DURATION + SETTLE_DURATION
+  return playedTicks(record) * TICK_DURATION + SETTLE_DURATION
 }
+
+/**
+ * Once the day has settled, the minutes still shown: the one it settled in, when the
+ * kites fall, and this many more, so they are seen to stay down.
+ */
+export const SETTLED_TICKS = 2
+/** A day is cut short only when that saves at least this many minutes. */
+const SHORTEST_CUT = 4
+
+/** A minute's state, without the journeys (which take turns between targets). */
+const stateOf = (tick: TickRecord): string =>
+  JSON.stringify({
+    ...tick,
+    tick: 0,
+    served: tick.served.outcome,
+    stopped: tick.stopped?.outcome ?? null,
+    timedOut: tick.timedOut !== null,
+  })
+
+/**
+ * The minute from which the day has settled: no kite is answered, and nothing changes
+ * from then to the end (no zone, database, fleet or crowd change, no new outcome).
+ * Null if the day never settles.
+ */
+export function settledFrom(record: CrowdRecord): number | null {
+  const last = record.ticks.at(-1)
+  if (!last || last.delivered > 0 || last.demand === 0) return null
+  const state = stateOf(last)
+  let from = record.ticks.length - 1
+  while (from > 0 && stateOf(record.ticks[from - 1]!) === state) from--
+  return from
+}
+
+/**
+ * How many minutes of the day are played on screen (Simon, 25 November 2026): "after
+ * the kites drop to the ground the simulation is over anyway". When the day settles
+ * with nothing answered (a storm took everything down and nothing can come back), the
+ * run ends SETTLED_TICKS after it settled, and the narrator moves on. The engine's
+ * record, and every objective judged on it, still covers the whole day; the weather
+ * station says that the rest of the day went the same way.
+ */
+export function playedTicks(record: CrowdRecord): number {
+  // Asked every frame by the clock; a record never changes, so remember the answer.
+  const known = playedCache.get(record)
+  if (known !== undefined) return known
+  const from = settledFrom(record)
+  const cut = from === null ? record.ticks.length : from + 1 + SETTLED_TICKS
+  const played = record.ticks.length - cut >= SHORTEST_CUT ? cut : record.ticks.length
+  playedCache.set(record, played)
+  return played
+}
+const playedCache = new WeakMap<CrowdRecord, number>()
 
 /**
  * How long an eventful minute lasts on screen. A storm's story (the zone fails, the
@@ -73,6 +125,7 @@ export const HELD_MINUTE_DURATION = 3 * TICK_DURATION
  * serving instances change. A day with no storm and no database has none.
  */
 export function heldMinutes(record: CrowdRecord): number[] {
+  const played = playedTicks(record)
   const serving = (tick: TickRecord) =>
     tick.fleets.map((fleet) => fleet.zones.a.serving + fleet.zones.b.serving).join(',')
   return record.ticks
@@ -88,7 +141,7 @@ export function heldMinutes(record: CrowdRecord): number[] {
       const replacing =
         storm &&
         (tick.fleets.some((fleet) => fleet.replaced > 0) || serving(tick) !== serving(previous))
-      return zonesChanged || databaseChanged || replacing
+      return (zonesChanged || databaseChanged || replacing) && tick.tick < played
     })
     .map((tick) => tick.tick)
 }
@@ -100,18 +153,19 @@ export function heldMinutes(record: CrowdRecord): number[] {
  */
 export function crowdClock(record: CrowdRecord, elapsed: number): number {
   const held = new Set(heldMinutes(record))
+  const played = playedTicks(record)
   let realStart = 0
-  for (let minute = 0; minute < record.ticks.length; minute++) {
+  for (let minute = 0; minute < played; minute++) {
     const length = held.has(minute) ? HELD_MINUTE_DURATION : TICK_DURATION
     if (elapsed < realStart + length) {
       return (minute + (elapsed - realStart) / length) * TICK_DURATION
     }
     realStart += length
   }
-  return record.ticks.length * TICK_DURATION + (elapsed - realStart)
+  return played * TICK_DURATION + (elapsed - realStart)
 }
 
-/** How long a crowd run takes on screen, held minutes included. */
+/** How long a crowd run takes on screen, held minutes included, a settled day cut short. */
 export function crowdRealDuration(record: CrowdRecord): number {
   return (
     crowdRunDuration(record) + heldMinutes(record).length * (HELD_MINUTE_DURATION - TICK_DURATION)
@@ -130,10 +184,12 @@ export type CrowdFrame = {
 
 /** Which minute is on show at `time` (milliseconds since the run began), and how far through it. */
 export function crowdFrameAt(record: CrowdRecord, time: number): CrowdFrame | null {
-  const last = record.ticks.length - 1
+  // A day cut short (playedTicks) ends on its last played minute: the clock shows that.
+  const played = playedTicks(record)
+  const last = played - 1
   if (last < 0) return null
   const index = Math.min(last, Math.max(0, Math.floor(time / TICK_DURATION)))
-  const progress = time >= record.ticks.length * TICK_DURATION ? 1 : (time / TICK_DURATION) % 1
+  const progress = time >= played * TICK_DURATION ? 1 : (time / TICK_DURATION) % 1
   return {
     index,
     tick: record.ticks[index]!,
@@ -486,6 +542,24 @@ export function alarmAt(record: CrowdRecord, time: number): TickRecord['alarm'] 
 // The storm: an Availability Zone failing, and a database failing over
 // ---------------------------------------------------------------------------
 
+/** What one instance in a fleet is doing, for drawing it (drawFleet in render.ts). */
+export type FleetMemberKind = 'serving' | 'leaving' | 'failed' | 'terminating' | 'launching'
+
+/**
+ * One entry per instance in a zone's half of the fleet, in the order they are drawn:
+ * serving (those scaling in last), then failed, then launching. Each is drawn as one
+ * cloudlet, so the picture counts what the group counts: four instances, four clouds.
+ */
+export function fleetMembers(counts: FleetView['zones'][AvailabilityZone]): FleetMemberKind[] {
+  return [
+    ...Array<FleetMemberKind>(Math.max(0, counts.serving - counts.leaving)).fill('serving'),
+    ...Array<FleetMemberKind>(counts.leaving).fill('leaving'),
+    ...Array<FleetMemberKind>(Math.max(0, counts.failed - counts.terminating)).fill('failed'),
+    ...Array<FleetMemberKind>(counts.terminating).fill('terminating'),
+    ...Array<FleetMemberKind>(counts.launching).fill('launching'),
+  ]
+}
+
 /**
  * The outage on show at `time`: which zones are down, and how bright the lightning over
  * a zone that has just failed is (0 to 1). The strike comes at the very start of the
@@ -721,7 +795,7 @@ export function crowdLog(
       entries.push({
         minute,
         kind: 'storm',
-        text: `AZ ${zone.toUpperCase()} fails: everything in it is down. The load balancer stops sending kites there`,
+        text: `AZ ${zone} fails: everything in it is down. The load balancer stops sending kites there`,
       })
     }
     for (const database of tick.databases) {
@@ -735,10 +809,10 @@ export function crowdLog(
         kind: 'database',
         text:
           database.status === 'failing-over'
-            ? `${name}: failing over to its standby in AZ ${database.standbyZone?.toUpperCase() ?? '?'}`
+            ? `${name}: failing over to its standby in AZ ${database.standbyZone ?? '?'}`
             : database.status === 'unavailable'
               ? `${name} is down: it ran in one zone, with no standby`
-              : `${name} answering again, from AZ ${database.primaryZone.toUpperCase()}`,
+              : `${name} answering again, from AZ ${database.primaryZone}`,
       })
     }
     const replaced = tick.fleets.reduce((sum, fleet) => sum + fleet.replaced, 0)

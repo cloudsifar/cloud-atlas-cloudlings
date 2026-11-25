@@ -24,6 +24,8 @@ import {
   membersFailed,
   membersTimedOut,
   OUTCOME_LABELS,
+  playedTicks,
+  settledFrom,
   type GameState,
   type LogEntry,
 } from '../game'
@@ -352,6 +354,16 @@ function renderWeatherStation(
               : `${failedMembers} of ${peak} Cloudlings had a kite fail`,
     }),
   )
+  const played = playedTicks(crowd)
+  if (played < crowd.ticks.length) {
+    // The day settled with nothing answered, so the run stopped early (playedTicks).
+    parts.push(
+      h('p', {
+        class: 'note',
+        textContent: `From minute ${settledFrom(crowd)} nothing changed and no kite was answered, so the run stopped after minute ${played - 1}. The rest of the day, to minute ${crowd.ticks.length - 1}, would have gone the same way.`,
+      }),
+    )
+  }
   if (!blocked && failedIn(worst) > 0) {
     // Why the worst minute's kites failed, in the order the engine judged them.
     const database = worst.databases.find((candidate) => candidate.status !== 'available')
@@ -380,7 +392,7 @@ function renderWeatherStation(
     h('p', {
       class: 'note',
       textContent: storm
-        ? `AZ ${storm.failedZones.map((zone) => zone.toUpperCase()).join(' and ')} failed at minute ${storm.tick}. Healthy instances: ${fleetSizes(crowd).join(' → ')}.`
+        ? `AZ ${storm.failedZones.join(' and ')} failed at minute ${storm.tick}. Healthy instances: ${fleetSizes(crowd).join(' → ')}.`
         : `Instances serving: ${fleetSizes(crowd).join(' → ')}. Before the crowd, CPU was ${crowd.ticks[0]?.cpuPercent ?? 0}%.`,
     }),
   )
@@ -427,8 +439,8 @@ function renderWeatherStation(
           lastDatabase.status === 'unavailable'
             ? `${name} went down with its zone: it had no standby.`
             : failoverMinutes > 0
-              ? `${name} failed over to AZ ${lastDatabase.primaryZone.toUpperCase()} in ${failoverMinutes} minutes.`
-              : `${name} answered all day, from AZ ${lastDatabase.primaryZone.toUpperCase()}.`,
+              ? `${name} failed over to AZ ${lastDatabase.primaryZone} in ${failoverMinutes} minutes.`
+              : `${name} answered all day, from AZ ${lastDatabase.primaryZone}.`,
       }),
     )
   }

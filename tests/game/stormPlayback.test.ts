@@ -16,13 +16,18 @@ import {
   crowdSpots,
   crowdStream,
   databaseViewAt,
+  fleetMembers,
   fleetViewAt,
   heldMinutes,
   HELD_MINUTE_DURATION,
   outageAt,
+  playedTicks,
+  SETTLED_TICKS,
+  settledFrom,
   TICK_DURATION,
 } from '../../src/game/crowdPlayback'
 import { layoutScene } from '../../src/game/layout'
+import { SILHOUETTES } from '../../src/game/placeholderArt'
 import { LEVELS, runLevel } from '../../src/levels'
 
 const level = LEVELS.find((candidate) => candidate.id === 6)!
@@ -67,6 +72,47 @@ describe('the pace of Storm Front', () => {
     const strike = STRIKE * TICK_DURATION
     expect(crowdClock(solved, strike)).toBeCloseTo(strike, 6)
     expect(crowdClock(solved, strike + HELD_MINUTE_DURATION)).toBeCloseTo(strike + TICK_DURATION, 6)
+  })
+})
+
+describe('a day that has settled ends early', () => {
+  // Simon, 25 November 2026: "after the kites drop to the ground the simulation is over
+  // anyway and the next button should appear".
+
+  it('stops the unsolved storm a couple of minutes after the kites fall', () => {
+    const from = settledFrom(unsolved)!
+    expect(from).toBe(STRIKE)
+    expect(playedTicks(unsolved)).toBe(STRIKE + 1 + SETTLED_TICKS)
+    expect(crowdRunDuration(unsolved)).toBeLessThan(unsolved.ticks.length * TICK_DURATION)
+    expect(crowdClock(unsolved, crowdRealDuration(unsolved))).toBeCloseTo(
+      crowdRunDuration(unsolved),
+      6,
+    )
+  })
+
+  it('cuts only minutes in which nothing is answered and nothing changes', () => {
+    const tail = unsolved.ticks.slice(settledFrom(unsolved)!)
+    expect(tail.every((tick) => tick.delivered === 0 && tick.demand > 0)).toBe(true)
+    const states = new Set(
+      tail.map((tick) =>
+        JSON.stringify({ ...tick, tick: 0, served: null, stopped: null, timedOut: null }),
+      ),
+    )
+    expect(states.size).toBe(1)
+  })
+
+  it('plays the whole day when anything is still answered or still changing', () => {
+    expect(settledFrom(solved)).toBeNull()
+    expect(playedTicks(solved)).toBe(solved.ticks.length)
+    for (const scene of [crowdDay.initialScene, crowdDay.referenceSolution]) {
+      const crowd = runLevel(crowdDay, scene).crowd!
+      expect(playedTicks(crowd)).toBe(crowd.ticks.length)
+    }
+  })
+
+  it('still judges the objectives on the whole day', () => {
+    const run = runLevel(level, level.initialScene)
+    expect(run.crowd!.ticks).toHaveLength(level.crowd!.ticks)
   })
 })
 
@@ -126,6 +172,23 @@ describe('the sky in the storm', () => {
     const replaced = fleetViewAt(solved, 'asg', at(STRIKE + 4))!
     expect(replaced.zones.a.serving + replaced.zones.a.failed).toBe(0)
     expect(replaced.zones.b.serving).toBe(4)
+  })
+
+  it('draws one cloudlet per instance: four instances, four clouds', () => {
+    // Simon, 25 November 2026: "It should be a direct correlation visually 4=4 objects".
+    expect(SILHOUETTES.cloudlet).toHaveLength(1) // one outlined shape per instance
+    for (let minute = 0; minute < solved.ticks.length; minute += 0.5) {
+      const view = fleetViewAt(solved, 'asg', at(minute))!
+      for (const zone of ['a', 'b'] as const) {
+        const counts = view.zones[zone]
+        expect(fleetMembers(counts)).toHaveLength(counts.serving + counts.failed + counts.launching)
+      }
+    }
+    const calm = fleetViewAt(solved, 'asg', at(STRIKE - 2))!
+    expect(fleetMembers(calm.zones.a)).toEqual(['serving', 'serving'])
+    expect(fleetMembers(calm.zones.b)).toEqual(['serving', 'serving'])
+    const struck = fleetViewAt(solved, 'asg', at(STRIKE + 1, 0.9))!
+    expect(fleetMembers(struck.zones.b)).toEqual(['serving', 'serving', 'launching', 'launching'])
   })
 
   it('marks where the storm’s kites go unanswered when nothing healthy is left', () => {

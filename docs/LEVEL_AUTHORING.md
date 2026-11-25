@@ -39,6 +39,13 @@ In practice:
   player who missed it or wants to check.
 - **Invite reading.** The first narrator step can say the cards are worth opening before
   the first run. The results card waits until the run has played out (ADR 0009).
+- **Do not make the player wait for nothing.** Once a crowd run has settled with nothing
+  answered and nothing left to change (a storm took everything down), it ends two
+  minutes later, on its own, and the narrator moves on (`playedTicks`, ADR 0015). Simon,
+  25 November 2026: "after the kites drop to the ground the simulation is over anyway".
+- **Fit the narrator's box.** It shows three lines of text and the step count, about 340
+  characters; a longer step scrolls, and a player may never see its end. A last step
+  that tells the player how to earn a missing star must fit.
 
 ## Fields
 
@@ -286,8 +293,8 @@ security group).
 say "over here" (ADR 0008), e.g. `"pulse": ["security-group:sg-alb"]`. The sections are
 `security-group:<id>`, `route-table:<id>`, `listener:<load balancer id>`,
 `targets:<load balancer id>`, `role-statements:<role id>`, `role-wearers:<role id>`,
-`instance-role:<instance id>`, `group-scaling:<group id>`, `group-subnets:<group id>` and
-`database-multi-az:<database id>`. In Levels 1–3 every step that asks for a setting to
+`instance-role:<instance id>`, `group-scaling:<group id>`, `group-subnets:<group id>`,
+`group-size:<group id>` (the minimum) and `database-multi-az:<database id>`. In Levels 1–3 every step that asks for a setting to
 change must have one; the level tests check it.
 
 **Linking a phrase to a fact card.** A step's text may contain
@@ -318,6 +325,19 @@ and a `nearAnswer`. They are revealed one at a time and carry no penalty.
 - the initial scene fails at least one objective;
 - the reference solution meets every objective and earns all three stars;
 - the narrator's steps can all be completed by the reference solution.
+
+## Zone and subnet letters
+
+Zone and subnet letters are always shown in bold, everywhere: in narration, hints, cards,
+the weather station, traces and the sky's captions (Simon, 25 November 2026). Write them
+as plain text; the game finds and bolds them (`letterSegments` in `src/levels/markup.ts`):
+
+- Availability Zones are lower case, as in eu-central-1a: "AZ a", "Availability Zone b",
+  "AZs a and b". A level test rejects "AZ A" in any level or fact card.
+- Subnets are upper case: "Private subnet A", "Public subnet B", "subnets A and B".
+
+Only those phrases count, so the article in "each zone a cloud of its own" stays as it
+is. Text inside a dropdown option cannot be bold and is left plain.
 
 ## Player-facing text elsewhere
 

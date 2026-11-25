@@ -21,10 +21,16 @@ export const CAPTION_FONT =
 type Ellipse = [number, number, number, number]
 
 /**
+ * What a sprite can be drawn as: a genus, or a `cloudlet`, one instance in an Auto
+ * Scaling group's fleet.
+ */
+export type SpriteShape = CloudGenus | 'cloudlet'
+
+/**
  * Each genus is a list of puff groups. A group is outlined as one shape;
  * separate groups stay separate (altocumulus is a patch of small cloudlets).
  */
-const SILHOUETTES: Record<Exclude<CloudGenus, 'cirrus'>, Ellipse[][]> = {
+export const SILHOUETTES: Record<Exclude<SpriteShape, 'cirrus'>, Ellipse[][]> = {
   // The classic puffy cloud with a flat base.
   cumulus: [
     [
@@ -60,6 +66,15 @@ const SILHOUETTES: Record<Exclude<CloudGenus, 'cirrus'>, Ellipse[][]> = {
       [0.24, 0.74, 0.11, 0.15],
     ],
     [[0.78, 0.72, 0.16, 0.19]],
+  ],
+  // One cloudlet of an altocumulus patch: one instance in a fleet, one shape, so a
+  // fleet of four instances is four cloudlets (Simon, 25 November 2026).
+  cloudlet: [
+    [
+      [0.5, 0.66, 0.42, 0.26],
+      [0.3, 0.52, 0.2, 0.28],
+      [0.58, 0.4, 0.27, 0.34],
+    ],
   ],
   // Flat, layered and steady: structured, persistent data. Two long, low sheets.
   altostratus: [
@@ -173,7 +188,7 @@ export type CloudSprite = {
 const PADDING = 4
 const spriteCache = new Map<string, CloudSprite>()
 
-export function cloudSprite(genus: CloudGenus, width: number, height: number): CloudSprite {
+export function cloudSprite(genus: SpriteShape, width: number, height: number): CloudSprite {
   const key = `${genus}:${width}x${height}`
   const cached = spriteCache.get(key)
   if (cached) return cached
@@ -251,7 +266,7 @@ export type CloudLook = {
 
 export function drawCloud(
   context: CanvasRenderingContext2D,
-  genus: CloudGenus,
+  genus: SpriteShape,
   x: number,
   y: number,
   width: number,

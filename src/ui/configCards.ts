@@ -657,7 +657,7 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
           'label',
           { class: 'check' },
           box,
-          `${subnet.name} (Availability Zone ${subnet.availabilityZone.toUpperCase()})`,
+          `${subnet.name} (Availability Zone ${subnet.availabilityZone})`,
         )
       })
       const zones = new Set(
@@ -687,7 +687,13 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
           'size',
           locked,
         ),
-        stepper('Minimum instances', 'min', resource.min, 1, MAX_GROUP_SIZE),
+        // The minimum is what the group keeps whatever happens: in Level 6, room for the
+        // whole crowd in one zone (static stability).
+        (() => {
+          const minimum = stepper('Minimum instances', 'min', resource.min, 1, MAX_GROUP_SIZE)
+          attention(minimum.firstElementChild, actions, `group-size:${resource.id}`)
+          return minimum
+        })(),
         stepper('Desired (to start with)', 'desired', resource.desired, resource.min, resource.max),
         stepper('Maximum instances', 'max', resource.max, 1, MAX_GROUP_SIZE),
         scalingField,
@@ -701,7 +707,7 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
     case 'rds-database': {
       // An RDS database: where it runs, its standby, and who may connect (ADR 0014).
       const zoneOf = (id: string) =>
-        scene.subnets.find((subnet) => subnet.id === id)?.availabilityZone.toUpperCase() ?? '?'
+        scene.subnets.find((subnet) => subnet.id === id)?.availabilityZone ?? '?'
       const primaryZone = zoneOf(resource.primarySubnetId)
       const standbySubnet = resource.subnetIds.find((id) => zoneOf(id) !== primaryZone)
       const multiAzBox = h('input', {
