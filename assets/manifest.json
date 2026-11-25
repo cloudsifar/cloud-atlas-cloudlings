@@ -1,83 +1,920 @@
 {
-  "note": "Maps each sprite id to its file, size and anchor. `file: null` means the game draws a placeholder in code (src/game/placeholderArt.ts) at exactly this size. To swap in final art: add the WebP under assets/final/, set `file`, keep or adjust the size and anchor. No code changes.",
+  "note": "Maps each sprite id to its picture, size and anchor. `file: null` means the game draws a placeholder in code (src/game/placeholderArt.ts and src/game/render.ts) at this size. To swap in final art: put the WebP in public/art/, set `file` to its name (and `highlight` for a cloud's highlight layer), keep or adjust the size and anchor. No code changes. `frames`: a strip of frames side by side, played at `fps`. `points`: named places on the sprite as fractions (a Cloudling's hand). `repeat`: stretched or tiled between two points. Entries with `status: planned` are not drawn yet. docs/ASSET_LIST.md is generated from this file: `npm run assets:list`.",
   "sprites": {
     "cloud.stratocumulus.internet-gateway": {
       "file": null,
       "width": 120,
       "height": 46,
-      "anchor": [0.5, 0.5]
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "highlight": null,
+      "group": "Clouds",
+      "priority": 1,
+      "description": "Internet Gateway: a low stratocumulus on the VPC's lower edge, where kites come in from the ground."
     },
     "cloud.stratocumulus.nat-gateway": {
       "file": null,
       "width": 104,
       "height": 50,
-      "anchor": [0.5, 0.5]
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "highlight": null,
+      "group": "Clouds",
+      "priority": 1,
+      "description": "NAT Gateway: a smaller stratocumulus in a public subnet; private clouds reach the internet through it."
     },
     "cloud.cumulus.load-balancer": {
       "file": null,
       "width": 300,
       "height": 78,
-      "anchor": [0.5, 0.5]
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "highlight": null,
+      "group": "Clouds",
+      "priority": 1,
+      "description": "Application Load Balancer: a broad cumulus across both public subnets; every kite string meets it."
     },
     "cloud.altocumulus.ec2-instance": {
       "file": null,
       "width": 110,
       "height": 66,
-      "anchor": [0.5, 0.5]
-    },
-    "cloud.cumulonimbus.s3-bucket": {
-      "file": null,
-      "width": 150,
-      "height": 380,
-      "anchor": [0.5, 0.5]
-    },
-    "cloud.cirrus.iam-role": {
-      "file": null,
-      "width": 130,
-      "height": 50,
-      "anchor": [0.5, 0.5]
-    },
-    "cloudling.friendly": {
-      "file": null,
-      "width": 34,
-      "height": 58,
-      "anchor": [0.5, 1]
-    },
-    "cloudling.hostile": {
-      "file": null,
-      "width": 34,
-      "height": 58,
-      "anchor": [0.5, 1]
-    },
-    "kite.friendly": {
-      "file": null,
-      "width": 30,
-      "height": 38,
-      "anchor": [0.5, 0.5]
-    },
-    "kite.hostile": {
-      "file": null,
-      "width": 44,
-      "height": 26,
-      "anchor": [0.5, 0.5]
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "highlight": null,
+      "group": "Clouds",
+      "priority": 1,
+      "description": "One EC2 instance: a patch of altocumulus. One instance is one graphic."
     },
     "cloud.altocumulus.auto-scaling-group": {
       "file": null,
       "width": 150,
       "height": 76,
-      "anchor": [0.5, 0.5]
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "highlight": null,
+      "group": "Clouds",
+      "priority": 1,
+      "description": "An Auto Scaling group, as its palette icon and while it is dragged into place. In the sky, a group is drawn as one fleet-instance cloudlet per instance."
     },
     "cloud.altocumulus.fleet-instance": {
       "file": null,
       "width": 64,
       "height": 40,
-      "anchor": [0.5, 0.5]
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "highlight": null,
+      "group": "Clouds",
+      "priority": 1,
+      "description": "One instance in an Auto Scaling group's fleet: a single small cloudlet, drawn once per instance, so 4 instances are 4 cloudlets and 8 are 8. This is its largest size; a crowded fleet draws it smaller."
+    },
+    "cloud.cumulonimbus.s3-bucket": {
+      "file": null,
+      "width": 150,
+      "height": 380,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "highlight": null,
+      "group": "Clouds",
+      "priority": 1,
+      "description": "S3 bucket: a tall cumulonimbus with an anvil top, spanning every band of sky."
+    },
+    "cloud.cirrus.iam-role": {
+      "file": null,
+      "width": 130,
+      "height": 50,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "highlight": null,
+      "group": "Clouds",
+      "priority": 1,
+      "description": "IAM role: wispy cirrus in the high band; a thread runs down from it to the clouds that wear it."
     },
     "cloud.altostratus.rds-database": {
       "file": null,
       "width": 124,
       "height": 34,
-      "anchor": [0.5, 0.5]
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "highlight": null,
+      "group": "Clouds",
+      "priority": 1,
+      "description": "RDS database: a flat, layered altostratus in a private subnet. A Multi-AZ standby is the same graphic, drawn faint in the other zone."
+    },
+    "construct.waf-net": {
+      "file": null,
+      "width": 300,
+      "height": 30,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "highlight": null,
+      "states": "Idle and changed (golden sunlight), tinted in code like a cloud.",
+      "group": "Clouds",
+      "priority": 1,
+      "description": "AWS WAF web ACL: a woven net slung just beneath the load balancer. Red kites it blocks are caught in it, then fall."
+    },
+    "construct.nacl-ribbon": {
+      "file": null,
+      "width": 48,
+      "height": 8,
+      "anchor": [
+        0,
+        0.5
+      ],
+      "repeat": "tile",
+      "group": "Sky constructs and effects",
+      "priority": 2,
+      "description": "Network ACL: a ribbon fence along a subnet's boundary. Repeated along each edge; a custom ACL's ribbon is drawn stronger than the default ACL's. Kites a NACL blocks tangle in it."
+    },
+    "construct.wisp-bridge": {
+      "file": null,
+      "width": 120,
+      "height": 16,
+      "anchor": [
+        0,
+        0.5
+      ],
+      "repeat": "stretch",
+      "group": "Sky constructs and effects",
+      "priority": 2,
+      "description": "Connected: a wisp bridge grown between two clouds (a Multi-AZ database's primary and standby). Stretched between them."
+    },
+    "construct.skyway": {
+      "file": null,
+      "width": 120,
+      "height": 14,
+      "anchor": [
+        0,
+        0.5
+      ],
+      "repeat": "stretch",
+      "group": "Sky constructs and effects",
+      "priority": 2,
+      "description": "Skyway: the private path from a subnet to S3 through a gateway endpoint. Stretched between them."
+    },
+    "construct.cirrus-thread": {
+      "file": null,
+      "width": 120,
+      "height": 6,
+      "anchor": [
+        0,
+        0.5
+      ],
+      "repeat": "stretch",
+      "group": "Sky constructs and effects",
+      "priority": 2,
+      "description": "Cirrus thread: from an IAM role down to each cloud that wears it. Stretched between them."
+    },
+    "construct.bucket-shell": {
+      "file": null,
+      "width": 150,
+      "height": 380,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "group": "Sky constructs and effects",
+      "priority": 2,
+      "description": "S3 Block Public Access: a pale protective shell that closes over the bucket; kites slide off it."
+    },
+    "overlay.compromised-smoke": {
+      "file": null,
+      "width": 160,
+      "height": 90,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "group": "Sky constructs and effects",
+      "priority": 2,
+      "description": "Compromised: dark, smoky edges laid over a cloud a hostile kite got into, so the state never depends on the red tint alone. Stretched to the cloud."
+    },
+    "effect.lightning.ground": {
+      "file": null,
+      "width": 40,
+      "height": 220,
+      "anchor": [
+        0.5,
+        0
+      ],
+      "repeat": "stretch",
+      "group": "Sky constructs and effects",
+      "priority": 2,
+      "description": "Availability Zone failure: lightning from the sky to the ground over the failed zone. Stretched from top to ground."
+    },
+    "effect.lightning.cloud": {
+      "file": null,
+      "width": 120,
+      "height": 30,
+      "anchor": [
+        0,
+        0.5
+      ],
+      "repeat": "stretch",
+      "group": "Sky constructs and effects",
+      "priority": 2,
+      "description": "Failover: lightning arcing from cloud to cloud (primary to standby). Stretched between them."
+    },
+    "effect.rain": {
+      "file": null,
+      "width": 24,
+      "height": 60,
+      "anchor": [
+        0.5,
+        0
+      ],
+      "frames": 4,
+      "fps": 10,
+      "group": "Sky constructs and effects",
+      "priority": 2,
+      "description": "Response returned: a short column of rain falling from a cloud onto the Cloudling below."
+    },
+    "ui.padlock": {
+      "file": null,
+      "width": 14,
+      "height": 16,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "group": "Sky constructs and effects",
+      "priority": 3,
+      "description": "Locked: this cloud cannot be changed in this level."
+    },
+    "cloudling.friendly.idle": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "frames": 1,
+      "fps": 8,
+      "points": {
+        "hand": [
+          0.85,
+          0.52
+        ]
+      },
+      "group": "Cloudlings",
+      "priority": 1,
+      "description": "A friendly Cloudling, standing, holding the string. The costume is a separate overlay per region."
+    },
+    "cloudling.friendly.cheer": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "frames": 4,
+      "fps": 8,
+      "points": {
+        "hand": [
+          0.85,
+          0.52
+        ]
+      },
+      "group": "Cloudlings",
+      "priority": 1,
+      "description": "A friendly Cloudling, jumping and cheering: its kite was answered. The costume is a separate overlay per region."
+    },
+    "cloudling.friendly.droop": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "frames": 1,
+      "fps": 8,
+      "points": {
+        "hand": [
+          0.85,
+          0.52
+        ]
+      },
+      "group": "Cloudlings",
+      "priority": 1,
+      "description": "A friendly Cloudling, drooping sadly: its kite was stopped or timed out. The costume is a separate overlay per region."
+    },
+    "cloudling.hostile.idle": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "frames": 1,
+      "fps": 10,
+      "points": {
+        "hand": [
+          0.85,
+          0.52
+        ]
+      },
+      "group": "Cloudlings",
+      "priority": 1,
+      "description": "A hostile Cloudling, in a black hoodie, hood up, only eyes visible, holding the string."
+    },
+    "cloudling.hostile.stamp": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "frames": 4,
+      "fps": 10,
+      "points": {
+        "hand": [
+          0.85,
+          0.52
+        ]
+      },
+      "group": "Cloudlings",
+      "priority": 1,
+      "description": "A hostile Cloudling, stamping and huffing: its kite was stopped."
+    },
+    "cloudling.hostile.snicker": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "frames": 4,
+      "fps": 10,
+      "points": {
+        "hand": [
+          0.85,
+          0.52
+        ]
+      },
+      "group": "Cloudlings",
+      "priority": 1,
+      "description": "A hostile Cloudling, snickering: its kite got in (a breach)."
+    },
+    "cloudling.costume.us-east-1": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "group": "Cloudlings",
+      "priority": 2,
+      "description": "N. Virginia costume overlay (raincoat yellow), drawn over every friendly Cloudling in Levels set in N. Virginia."
+    },
+    "cloudling.costume.eu-central-1": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "group": "Cloudlings",
+      "priority": 2,
+      "description": "Frankfurt costume overlay (brick red), drawn over every friendly Cloudling in Levels set in Frankfurt."
+    },
+    "cloudling.costume.sa-east-1": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "group": "Cloudlings",
+      "priority": 2,
+      "description": "São Paulo costume overlay (teal), drawn over every friendly Cloudling in Levels set in São Paulo."
+    },
+    "cloudling.costume.ap-northeast-1": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "group": "Cloudlings",
+      "priority": 2,
+      "description": "Tokyo costume overlay (indigo), drawn over every friendly Cloudling in Levels set in Tokyo."
+    },
+    "kite.friendly.flying": {
+      "file": null,
+      "width": 30,
+      "height": 38,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "frames": 1,
+      "fps": 8,
+      "group": "Kites",
+      "priority": 1,
+      "description": "A green diamond kite, flying on its string."
+    },
+    "kite.friendly.tangled": {
+      "file": null,
+      "width": 30,
+      "height": 38,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "frames": 3,
+      "fps": 8,
+      "group": "Kites",
+      "priority": 1,
+      "description": "A green diamond kite, tangled in a network ACL's ribbon."
+    },
+    "kite.friendly.netted": {
+      "file": null,
+      "width": 30,
+      "height": 38,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "frames": 3,
+      "fps": 8,
+      "group": "Kites",
+      "priority": 1,
+      "description": "A green diamond kite, caught in WAF's net beneath the load balancer."
+    },
+    "kite.friendly.crumpled": {
+      "file": null,
+      "width": 30,
+      "height": 38,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "frames": 1,
+      "fps": 8,
+      "group": "Kites",
+      "priority": 1,
+      "description": "A green diamond kite, crumpled, falling to the ground."
+    },
+    "kite.hostile.flying": {
+      "file": null,
+      "width": 44,
+      "height": 26,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "frames": 1,
+      "fps": 8,
+      "group": "Kites",
+      "priority": 1,
+      "description": "A red kite shaped like a bird, flying on its string."
+    },
+    "kite.hostile.tangled": {
+      "file": null,
+      "width": 44,
+      "height": 26,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "frames": 3,
+      "fps": 8,
+      "group": "Kites",
+      "priority": 1,
+      "description": "A red kite shaped like a bird, tangled in a network ACL's ribbon."
+    },
+    "kite.hostile.netted": {
+      "file": null,
+      "width": 44,
+      "height": 26,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "frames": 3,
+      "fps": 8,
+      "group": "Kites",
+      "priority": 1,
+      "description": "A red kite shaped like a bird, caught in WAF's net beneath the load balancer."
+    },
+    "kite.hostile.crumpled": {
+      "file": null,
+      "width": 44,
+      "height": 26,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "frames": 1,
+      "fps": 8,
+      "group": "Kites",
+      "priority": 1,
+      "description": "A red kite shaped like a bird, crumpled, falling to the ground."
+    },
+    "station.body": {
+      "file": null,
+      "width": 60,
+      "height": 130,
+      "anchor": [
+        0.5,
+        1
+      ],
+      "group": "Weather station (CloudWatch)",
+      "priority": 2,
+      "description": "The weather station's post, tripod feet and the arm the bell hangs from. Static."
+    },
+    "station.anemometer": {
+      "file": null,
+      "width": 36,
+      "height": 14,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "frames": 6,
+      "group": "Weather station (CloudWatch)",
+      "priority": 2,
+      "description": "Three cups at the top of the post, spinning faster with more kites in the air. Frames show one turn."
+    },
+    "station.dial": {
+      "file": null,
+      "width": 52,
+      "height": 52,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "group": "Weather station (CloudWatch)",
+      "priority": 2,
+      "description": "The CPU dial's face, 0% at lower left round to 100% at lower right. The coloured bands and the scaling target's tick are drawn over it in code."
+    },
+    "station.needle": {
+      "file": null,
+      "width": 24,
+      "height": 6,
+      "anchor": [
+        0.12,
+        0.5
+      ],
+      "group": "Weather station (CloudWatch)",
+      "priority": 2,
+      "description": "The dial's hand. Turned about its anchor (the pivot) to show CPU; it swings up during a CPU spike."
+    },
+    "station.bell": {
+      "file": null,
+      "width": 16,
+      "height": 16,
+      "anchor": [
+        0.5,
+        0.06
+      ],
+      "group": "Weather station (CloudWatch)",
+      "priority": 2,
+      "description": "The alarm bell, hanging from its anchor; it swings while CloudWatch's alarm rings."
+    },
+    "ui.paper": {
+      "file": null,
+      "width": 1280,
+      "height": 720,
+      "anchor": [
+        0,
+        0
+      ],
+      "group": "Regional scenes",
+      "priority": 3,
+      "description": "The paper background behind everything."
+    },
+    "scene.us-east-1.skyline": {
+      "file": null,
+      "width": 1280,
+      "height": 120,
+      "anchor": [
+        0,
+        1
+      ],
+      "group": "Regional scenes",
+      "priority": 2,
+      "description": "N. Virginia: a faint, low-contrast skyline on the horizon: a low row of data-centre buildings, with the Washington Monument and Capitol dome faint in the far distance. Its bottom sits on the horizon."
+    },
+    "scene.us-east-1.ground": {
+      "file": null,
+      "width": 1280,
+      "height": 164,
+      "anchor": [
+        0,
+        0
+      ],
+      "group": "Regional scenes",
+      "priority": 2,
+      "description": "N. Virginia: the grassy ground strip, fresh green, from the horizon to the bottom of the stage."
+    },
+    "scene.eu-central-1.skyline": {
+      "file": null,
+      "width": 1280,
+      "height": 120,
+      "anchor": [
+        0,
+        1
+      ],
+      "group": "Regional scenes",
+      "priority": 2,
+      "description": "Frankfurt: a faint, low-contrast skyline on the horizon: the banking-district towers and the cathedral spire. Its bottom sits on the horizon."
+    },
+    "scene.eu-central-1.ground": {
+      "file": null,
+      "width": 1280,
+      "height": 164,
+      "anchor": [
+        0,
+        0
+      ],
+      "group": "Regional scenes",
+      "priority": 2,
+      "description": "Frankfurt: the grassy ground strip, deeper green, from the horizon to the bottom of the stage."
+    },
+    "scene.sa-east-1.skyline": {
+      "file": null,
+      "width": 1280,
+      "height": 120,
+      "anchor": [
+        0,
+        1
+      ],
+      "group": "Regional scenes",
+      "priority": 2,
+      "description": "São Paulo: a faint, low-contrast skyline on the horizon: a dense, wide high-rise skyline. Its bottom sits on the horizon."
+    },
+    "scene.sa-east-1.ground": {
+      "file": null,
+      "width": 1280,
+      "height": 164,
+      "anchor": [
+        0,
+        0
+      ],
+      "group": "Regional scenes",
+      "priority": 2,
+      "description": "São Paulo: the grassy ground strip, olive and ochre, from the horizon to the bottom of the stage."
+    },
+    "scene.ap-northeast-1.skyline": {
+      "file": null,
+      "width": 1280,
+      "height": 120,
+      "anchor": [
+        0,
+        1
+      ],
+      "group": "Regional scenes",
+      "priority": 2,
+      "description": "Tokyo: a faint, low-contrast skyline on the horizon: Tokyo Skytree and the high-rise skyline. Its bottom sits on the horizon."
+    },
+    "scene.ap-northeast-1.ground": {
+      "file": null,
+      "width": 1280,
+      "height": 164,
+      "anchor": [
+        0,
+        0
+      ],
+      "group": "Regional scenes",
+      "priority": 2,
+      "description": "Tokyo: the grassy ground strip, muted sage, from the horizon to the bottom of the stage."
+    },
+    "ui.narrator.idle": {
+      "file": null,
+      "width": 56,
+      "height": 56,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "group": "Narrator and interface",
+      "priority": 2,
+      "description": "The narrator in the bottom box, idling."
+    },
+    "cloudling.operator.idle": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "The operator Cloudling (Level 9): a distinct hat, holding a box-shaped kite."
+    },
+    "kite.operator.flying": {
+      "file": null,
+      "width": 30,
+      "height": 30,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "The operator's box-shaped kite (Level 9)."
+    },
+    "kite.hostile.stolen": {
+      "file": null,
+      "width": 44,
+      "height": 40,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "A hostile kite carrying stolen raindrops down its string after a breach."
+    },
+    "construct.kms-halo": {
+      "file": null,
+      "width": 160,
+      "height": 90,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "KMS: a halo around a cloud whose data is encrypted (Level 8)."
+    },
+    "construct.efs-mist": {
+      "file": null,
+      "width": 300,
+      "height": 60,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "EFS: a shared mist between instances in both zones (Level 10)."
+    },
+    "construct.ebs-wisp": {
+      "file": null,
+      "width": 40,
+      "height": 30,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "EBS: a small wisp tied beneath one instance (Level 10)."
+    },
+    "effect.wind-lines": {
+      "file": null,
+      "width": 120,
+      "height": 20,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "Forwarded: a breeze along visible wind lines to the next cloud."
+    },
+    "construct.vpc-border": {
+      "file": null,
+      "width": 660,
+      "height": 320,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "The VPC's atlas-style dashed border (drawn in code for now)."
+    },
+    "construct.az-divider": {
+      "file": null,
+      "width": 4,
+      "height": 300,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "The faint dotted line between Availability Zones (drawn in code for now)."
+    },
+    "ui.narrator.pointing": {
+      "file": null,
+      "width": 56,
+      "height": 56,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "The narrator pointing at something in the sky."
+    },
+    "ui.narrator.pleased": {
+      "file": null,
+      "width": 56,
+      "height": 56,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "The narrator pleased, for a finished level."
+    },
+    "ui.title-logo": {
+      "file": null,
+      "width": 640,
+      "height": 160,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "The title logo for the start screen."
+    },
+    "ui.start-key-art": {
+      "file": null,
+      "width": 1280,
+      "height": 720,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "The start screen's key art."
+    },
+    "ui.link-preview": {
+      "file": null,
+      "width": 1200,
+      "height": 630,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "The link-preview crop of the key art."
+    },
+    "ui.field-guide-book": {
+      "file": null,
+      "width": 48,
+      "height": 48,
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "status": "planned",
+      "group": "Planned: not drawn yet",
+      "priority": 3,
+      "description": "The Field Guide to the Sky's book icon."
     }
   }
 }

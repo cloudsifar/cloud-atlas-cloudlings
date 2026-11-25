@@ -64,6 +64,12 @@ export type NetworkAclRule = {
 export type NetworkAcl = {
   id: string
   name: string
+  /**
+   * The VPC's default network ACL: it allows everything both ways until changed, and a
+   * subnet uses it until another is associated. A custom one denies everything it has no
+   * rule for (AWS: "a new custom NACL denies everything until rules are added").
+   */
+  isDefault?: boolean
   inbound: NetworkAclRule[]
   outbound: NetworkAclRule[]
 }
@@ -218,6 +224,41 @@ export type RdsDatabase = {
   status: 'available' | 'failing-over' | 'unavailable'
 }
 
+/**
+ * A rule an AWS WAF web ACL can hold (brief, Section 7). A web ACL runs its rules in
+ * this order, and the first that blocks decides: an IP set, a rate-based rule, then the
+ * AWS managed Core rule set (waf.ts).
+ */
+export type WafRule =
+  /** Block requests from these address ranges. */
+  | { kind: 'ip-set'; cidrs: string[] }
+  /**
+   * Block an address while it sends more than `limit` requests in five minutes (the
+   * span AWS counts over by default; AWS accepts limits from 10).
+   */
+  | { kind: 'rate-based'; limit: number }
+  /**
+   * The AWS managed Core rule set (AWSManagedRulesCommonRuleSet): blocks requests
+   * carrying common exploits, such as cross-site scripting and file inclusion.
+   */
+  | { kind: 'core-rule-set' }
+
+/**
+ * An AWS WAF web ACL, associated with a load balancer: it inspects each web request the
+ * load balancer accepts and blocks it, or lets it on, before a target is chosen. Drawn
+ * as a net slung beneath the load balancer.
+ */
+export type WafWebAcl = {
+  kind: 'waf-web-acl'
+  id: string
+  name: string
+  /** The load balancer it protects; null while it is not associated with one. */
+  loadBalancerId: string | null
+  /** What happens to a request no rule blocks. */
+  defaultAction: 'allow' | 'block'
+  rules: WafRule[]
+}
+
 export type Resource =
   | InternetGateway
   | NatGateway
@@ -227,6 +268,7 @@ export type Resource =
   | S3Bucket
   | IamRole
   | RdsDatabase
+  | WafWebAcl
 
 export type ResourceKind = Resource['kind']
 
@@ -302,4 +344,12 @@ export function requireSecurityGroup(scene: Scene, id: string): SecurityGroup {
   const group = scene.securityGroups.find((candidate) => candidate.id === id)
   if (!group) throw new Error(`Scene has no security group "${id}"`)
   return group
+}
+
+/** The web ACL associated with a load balancer, if any (AWS allows one per resource). */
+export function webAclFor(scene: Scene, loadBalancerId: string): WafWebAcl | undefined {
+  return scene.resources.find(
+    (resource): resource is WafWebAcl =>
+      resource.kind === 'waf-web-acl' && resource.loadBalancerId === loadBalancerId,
+  )
 }

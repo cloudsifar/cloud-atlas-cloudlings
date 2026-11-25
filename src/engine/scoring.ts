@@ -11,7 +11,7 @@ import type { FlowRun } from './predicates'
 import type { RuleMatch } from './trace'
 
 export type Finding = {
-  /** The security group, role or bucket the finding is about. */
+  /** The security group, network ACL, role or bucket the finding is about. */
   subjectId: string
   message: string
 }
@@ -68,6 +68,37 @@ export function scoreScene(scene: Scene, runs: FlowRun[], lockedIds: string[]): 
         })
       }
     })
+  }
+
+  // Network ACLs the player may edit (not the VPC's default one): every allow rule
+  // should be one a visitor's kite relied on, and none should open all traffic. Deny
+  // rules only ever narrow, so they are never a finding.
+  for (const acl of scene.networkAcls.filter(
+    (candidate) => editable(candidate.id) && !candidate.isDefault,
+  )) {
+    for (const direction of ['inbound', 'outbound'] as const) {
+      for (const rule of acl[direction]) {
+        if (rule.action !== 'allow') continue
+        const relied = used.some(
+          (match) =>
+            match.kind === 'nacl-rule' &&
+            match.networkAclId === acl.id &&
+            match.direction === direction &&
+            match.number === rule.number,
+        )
+        if (!relied) {
+          findings.push({
+            subjectId: acl.id,
+            message: `Network ACL "${acl.name}" has an ${direction} allow rule (${rule.number}) that no visitor's kite needs.`,
+          })
+        } else if (rule.ports === 'all') {
+          findings.push({
+            subjectId: acl.id,
+            message: `Network ACL "${acl.name}" allows all traffic ${direction === 'inbound' ? 'in' : 'out'} (rule ${rule.number}) where one port range would do.`,
+          })
+        }
+      }
+    }
   }
 
   for (const role of resourcesOfKind(scene, 'iam-role').filter((candidate) =>

@@ -2,7 +2,7 @@
   "name": "cloud-atlas-cloudlings",
   "version": "0.1.0",
   "private": true,
-  "description": "Cloud Atlas: Cloudlings — a browser game that teaches core AWS architecture at Cloud Practitioner level.",
+  "description": "Cloud Atlas: Cloudlings \u2014 a browser game that teaches core AWS architecture at Cloud Practitioner level.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,8 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "offline:test": "node tools/offline/run-tests.mjs",
-    "offline:build": "node tools/offline/build.mjs"
+    "offline:build": "node tools/offline/build.mjs",
+    "assets:list": "node tools/asset-list.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

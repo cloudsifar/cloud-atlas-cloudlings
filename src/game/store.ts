@@ -78,7 +78,18 @@ export function createStore(level: Level): Store {
           state.lastRun?.crowd ?? null,
         )
       case 'run-finished':
-        return state.phase !== 'flying' && state.runCount > state.narrationRunBaseline
+        return (
+          state.phase !== 'flying' &&
+          state.runCount > state.narrationRunBaseline &&
+          (trigger.predicate === undefined ||
+            (state.lastRunIsCurrent &&
+              evaluatePredicate(
+                state.scene,
+                state.lastRun?.kiteRuns ?? [],
+                trigger.predicate,
+                state.lastRun?.crowd ?? null,
+              )))
+        )
       case 'level-complete':
         return (
           state.phase !== 'flying' &&

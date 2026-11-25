@@ -14,6 +14,7 @@ import {
   requireNetworkAcl,
   requireSubnet,
   subnetIsDown,
+  webAclFor,
   type Ec2Instance,
   type LoadBalancer,
   type RdsDatabase,
@@ -23,6 +24,7 @@ import {
   type Subnet,
 } from './model'
 import { evaluateNetworkAcl } from './networkAcls'
+import { evaluateWebAcl, ORDINARY_RATE } from './waf'
 import {
   describePort,
   HTTP_PORT,
@@ -162,7 +164,9 @@ function evaluateInternetToLoadBalancer(
   }
 
   // Request path, in AWS order: route in via the Internet Gateway -> NACL of the
-  // load balancer's subnet -> the load balancer's security group -> its listener.
+  // load balancer's subnet -> the load balancer's security group -> its listener ->
+  // the web ACL associated with it, if any, which reads the accepted request (waf.ts).
+  const webAcl = webAclFor(scene, loadBalancer.id)
   const reachedLoadBalancer = runChecks(trace, [
     () => internetRouteStep(scene, loadBalancer, nodeSubnet),
     () => naclStep(scene, nodeSubnet, 'inbound', clientIp, flow.port, 'request'),
@@ -174,6 +178,17 @@ function evaluateInternetToLoadBalancer(
         evaluateSecurityGroups(scene, loadBalancer.securityGroupIds, 'inbound', client, flow.port),
       ),
     () => listenerStep(loadBalancer, flow.port),
+    ...(webAcl
+      ? [
+          () =>
+            makeStep(
+              'request',
+              atResource(webAcl.id),
+              'waf',
+              evaluateWebAcl(webAcl, flow, clientIp),
+            ),
+        ]
+      : []),
   ])
   if (!reachedLoadBalancer) return { outcome: 'blocked', trace }
 
@@ -203,13 +218,19 @@ function evaluateInternetToLoadBalancer(
     )
     return { outcome: 'dropped', trace }
   }
-  const breached = flow.intent === 'hostile' && flow.payload === 'malicious'
+  // A hostile kite that reaches the application has done what it came for: a breach.
+  const breached = flow.intent === 'hostile'
+  const rate = flow.rate ?? ORDINARY_RATE
   trace.push(
     makeStep('request', atResource(target.id), 'delivery', {
       result: 'pass',
-      explanation: breached
-        ? `A malicious request reached "${target.name}". Nothing on the way inspected what the kite was carrying.`
-        : `The request reaches "${target.name}" on ${describePort(TARGET_PORT)}.`,
+      explanation: !breached
+        ? `The request reaches "${target.name}" on ${describePort(TARGET_PORT)}.`
+        : flow.payload === 'malicious'
+          ? `A malicious request reached "${target.name}". Nothing on the way inspected what the kite was carrying.`
+          : rate > ORDINARY_RATE * 10
+            ? `A flood of ${rate.toLocaleString('en-GB')} requests in five minutes from one address reached "${target.name}". Nothing on the way counted them.`
+            : `A hostile request reached "${target.name}". Its address and port look like anyone's, and nothing on the way turned it away.`,
     }),
   )
   if (breached) return { outcome: 'breach', trace }

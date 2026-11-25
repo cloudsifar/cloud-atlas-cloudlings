@@ -63,6 +63,7 @@ const BLOCK_SOUND: Record<CheckKind, SoundId> = {
   'bucket-policy': 'blocked-iam',
   'block-public-access': 'blocked-public-access',
   listener: 'timed-out',
+  waf: 'blocked-waf',
   'target-selection': 'timed-out',
   delivery: 'timed-out',
   capacity: 'timed-out',

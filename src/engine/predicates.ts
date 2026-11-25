@@ -11,6 +11,7 @@ import {
   findResourceOfKind,
   requireSubnet,
   resourcesOfKind,
+  type CidrPeer,
   type LoadBalancer,
   type PortOption,
   type RouteDestination,
@@ -18,6 +19,7 @@ import {
   type Scene,
   type SecurityGroupPeer,
   type ServiceAction,
+  type WafRule,
 } from './model'
 import { resolveRoute } from './routing'
 import { hasPublicStatement } from './s3'
@@ -71,6 +73,24 @@ export type Predicate =
       ports: PortOption
       fromSecurityGroupId: string
     }
+  /** Each of these subnets is associated with this network ACL. */
+  | { kind: 'network-acl-on-subnets'; networkAclId: string; subnetIds: string[] }
+  /** The network ACL has an allow rule, whatever its number, for these ports and this peer. */
+  | {
+      kind: 'network-acl-allows'
+      networkAclId: string
+      direction: 'inbound' | 'outbound'
+      ports: PortOption
+      peer: CidrPeer
+    }
+  /**
+   * The network ACL's rule numbers leave room: in each direction the first is at least
+   * `gap` and each is at least `gap` above the one before, so a rule can be slotted in
+   * anywhere without renumbering (AWS recommends 100, 110, 120, not 101, 102, 103).
+   */
+  | { kind: 'network-acl-rules-spaced'; networkAclId: string; gap: number }
+  /** A web ACL is associated with the load balancer and holds each of these kinds of rule. */
+  | { kind: 'web-acl-protects'; loadBalancerId: string; rules: WafRule['kind'][] }
   /** Every inbound rule on every target names the load balancer's security group and nothing wider. */
   | { kind: 'targets-accept-only-load-balancer'; loadBalancerId: string }
   | { kind: 'role-attached'; instanceIds: string[] }
@@ -224,6 +244,46 @@ export function evaluatePredicate(
               rule.peer.securityGroupId === predicate.fromSecurityGroupId,
           ) ?? false
       )
+    case 'network-acl-on-subnets':
+      return predicate.subnetIds.every(
+        (id) =>
+          authoredScene.subnets.find((subnet) => subnet.id === id)?.networkAclId ===
+          predicate.networkAclId,
+      )
+    case 'network-acl-allows':
+      return (
+        authoredScene.networkAcls
+          .find((acl) => acl.id === predicate.networkAclId)
+          ?.[predicate.direction].some(
+            (rule) =>
+              rule.action === 'allow' &&
+              rule.ports === predicate.ports &&
+              rule.peer.kind === predicate.peer.kind &&
+              (rule.peer.kind === 'anywhere' ||
+                (predicate.peer.kind === 'cidr' && rule.peer.cidr === predicate.peer.cidr)),
+          ) ?? false
+      )
+    case 'network-acl-rules-spaced': {
+      const acl = authoredScene.networkAcls.find((each) => each.id === predicate.networkAclId)
+      if (!acl) return false
+      return (['inbound', 'outbound'] as const).every((direction) => {
+        const numbers = acl[direction].map((rule) => rule.number).sort((a, b) => a - b)
+        return numbers.every(
+          (number, index) =>
+            number - (index === 0 ? 0 : numbers[index - 1]!) >= predicate.gap,
+        )
+      })
+    }
+    case 'web-acl-protects': {
+      const acl = authoredScene.resources.find(
+        (resource) =>
+          resource.kind === 'waf-web-acl' && resource.loadBalancerId === predicate.loadBalancerId,
+      )
+      return (
+        acl?.kind === 'waf-web-acl' &&
+        predicate.rules.every((kind) => acl.rules.some((rule) => rule.kind === kind))
+      )
+    }
     case 'crowd-answered-at-end': {
       const last = crowd?.ticks.at(-1)
       return last !== undefined && last.demand > 0 && last.delivered === last.demand

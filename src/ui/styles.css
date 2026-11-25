@@ -373,7 +373,10 @@ canvas.sky {
   height: 44px;
   border-radius: 50%;
   border: 1.5px solid var(--ink-soft);
-  background: radial-gradient(circle at 50% 42%, #bdb6d0 0 34%, #5b5470 35% 46%, #e8e0cb 47%);
+  /* The final art (ui.narrator.idle in assets/manifest.json) once it has loaded. */
+  background:
+    var(--art-ui-narrator-idle, none) center / cover no-repeat,
+    radial-gradient(circle at 50% 42%, #bdb6d0 0 34%, #5b5470 35% 46%, #e8e0cb 47%);
 }
 .narrator-text {
   flex: 1;

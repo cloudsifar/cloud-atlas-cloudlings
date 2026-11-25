@@ -35,15 +35,18 @@
   "security-group": {
     "title": "Security group",
     "body": "A firewall worn by a resource: the pencilled outline around a cloud. It holds allow rules only; anything not allowed is refused. It is stateful: the reply to an allowed request is always let through. A rule's source can be another security group, meaning \"anything wearing that group\".",
-    "simplifications": ["Ports are picked from a short list of named choices."],
+    "simplifications": [
+      "Ports are picked from a short list of named choices."
+    ],
     "atlasPage": "TODO(Simon)"
   },
   "network-acl": {
     "title": "Network ACL",
-    "body": "A fence on a subnet's boundary. Rules are numbered and read lowest first; the first match decides, and it can allow or deny. It is stateless: replies need their own rule, usually for ephemeral ports 1024–65535.",
+    "body": "A fence on a subnet's boundary. Rules are numbered and read lowest first; the first match decides, and it can allow or deny, so a deny must be numbered before the allow it is an exception to. It is stateless: a reply needs its own rule, usually for ephemeral ports 1024–65535. The VPC's default ACL allows everything; a new custom ACL denies everything until you add rules. Leave room between rule numbers (100, 110, 120) so a rule can be added between two others later without renumbering.",
     "simplifications": [
       "Sources are \"anywhere\" or one of a few named address ranges.",
-      "Replies are checked against one representative ephemeral port."
+      "Replies are checked against one representative ephemeral port.",
+      "There is no limit on rules per ACL (AWS allows 20 each way unless you ask for more)."
     ],
     "atlasPage": "TODO(Simon)"
   },
@@ -221,6 +224,23 @@
     "simplifications": [
       "Here a zone fails all at once and stays down until the end of the run. Real outages are often partial and end; when a zone recovers, Auto Scaling spreads the group across the zones again."
     ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "waf-web-acl": {
+    "title": "AWS WAF web ACL",
+    "body": "A web application firewall in front of the load balancer. A web ACL reads each request the load balancer accepts and blocks it, or lets it on, before a target is chosen. Its rules can block address ranges (IP sets), an address sending too many requests (rate-based rules) and attacks carried in the request (AWS managed rules such as the Core rule set, which covers cross-site scripting and file inclusion). A blocked request gets 403 Forbidden. Security groups and network ACLs see only addresses and ports; WAF sees what a request carries. In the newer AWS console a web ACL is called a protection pack.",
+    "simplifications": [
+      "Rules run in a fixed order: IP set, rate-based rule, then the Core rule set. In AWS you set each rule's priority.",
+      "A flood's rate is given for each Cloudling, and once it is over the limit every request it sends is blocked. A real rate-based rule checks about every 10 seconds and blocks only the requests over the limit, while the rate lasts.",
+      "Every malicious payload in the game is one the Core rule set recognises. SQL injection needs AWS's separate SQL database rule group.",
+      "No logging, Bot Control, CAPTCHA or custom responses."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "concept-defence-in-depth": {
+    "title": "Security at every layer",
+    "body": "One of the Well-Architected security principles: apply security at all layers, because no single control sees everything. A network ACL turns addresses away at a subnet's edge, a security group decides which ports a cloud accepts and from whom, and AWS WAF reads the requests themselves. Each stops what the others cannot: here, the block-listed range at the edge, and the hidden script and the flood in WAF.",
+    "simplifications": [],
     "atlasPage": "TODO(Simon)"
   }
 }

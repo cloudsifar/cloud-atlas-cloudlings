@@ -1,7 +1,7 @@
 // Entry point: fits the 1280×720 stage to the window and moves between screens.
 
 import './ui/styles.css'
-import { STAGE, unlockAudio } from './game'
+import { loadArt, STAGE, unlockAudio } from './game'
 import { LEVELS, type Level } from './levels'
 import { mountGameScreen, type GameScreen } from './ui/gameScreen'
 import { h, installPlaceLetters } from './ui/dom'
@@ -15,6 +15,8 @@ const stage = h('div', { class: 'stage' })
 app.append(stage)
 // Zone and subnet letters in bold, everywhere in the interface (src/ui/dom.ts).
 installPlaceLetters(document.body)
+// Final art, wherever assets/manifest.json names a picture; placeholders until then.
+loadArt()
 
 /** Desktop first: the stage is designed at 1280×720 and scaled to fit, never cropped. */
 function fitStage(): void {

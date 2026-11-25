@@ -7,6 +7,12 @@ import {
   isPublicSubnet,
   PORT_OPTIONS,
   resourcesOfKind,
+  type CidrPeer,
+  type NetworkAcl,
+  type WafRule,
+  LOWEST_RATE_LIMIT,
+  ORDINARY_RATE,
+  RATE_WINDOW_MINUTES,
   type PolicyStatement,
   type PortOption,
   type Resource,
@@ -23,8 +29,13 @@ import {
   type Ec2Instance,
 } from '../engine'
 import {
+  addNetworkAclRule,
   addRoleStatement,
   addSecurityGroupRule,
+  networkAclRuleProblem,
+  removeNetworkAclRule,
+  setSubnetNetworkAcl,
+  setWebAclRule,
   MAX_GROUP_SIZE,
   prefersReducedMotion,
   removeRoleStatement,
@@ -350,39 +361,7 @@ function subnetCard(state: GameState, subnetId: string, actions: CardActions): H
           ),
   )
 
-  const aclRules = (direction: 'inbound' | 'outbound') =>
-    ruleList(
-      [
-        ...[...acl[direction]]
-          .sort((first, second) => first.number - second.number)
-          .map((rule) => ({
-            text: `${rule.number}: ${rule.action} ${PORT_OPTIONS[rule.ports].label} ${direction === 'inbound' ? 'from' : 'to'} ${rule.peer.kind === 'anywhere' ? 'anywhere' : rule.peer.cidr}`,
-            key: `${acl.id}-${direction}-${rule.number}`,
-          })),
-        { text: '*: deny everything else', key: `${acl.id}-${direction}-star` },
-      ],
-      '',
-    )
-  const nacl = h(
-    'section',
-    { class: 'card-section' },
-    h('h4', { textContent: `Network ACL "${acl.name}"` }),
-    h('p', {
-      class: 'note',
-      textContent:
-        'Read lowest number first; the first match decides. Stateless: replies need their own rule.',
-    }),
-    h('h5', { textContent: 'Inbound' }),
-    aclRules('inbound'),
-    h('h5', { textContent: 'Outbound' }),
-    aclRules('outbound'),
-    button(
-      'What is a network ACL?',
-      () => actions.openFactCard('network-acl'),
-      'fact-nacl',
-      'link',
-    ),
-  )
+  const nacl = networkAclSection(state, subnet.id, acl, actions)
 
   // The header carries the same tint as the subnet in the sky: public or private, by its routes.
   const header = cardHeader(
@@ -393,6 +372,177 @@ function subnetCard(state: GameState, subnetId: string, actions: CardActions): H
   )
   header.classList.add(isPublicSubnet(scene, subnet) ? 'subnet-public' : 'subnet-private')
   return [header, routes, nacl]
+}
+
+/**
+ * A subnet's network ACL: which one it uses (a dropdown when the VPC has more than one),
+ * its numbered rules in the order they are read, and, for an ACL the player may change,
+ * a row to add a rule in each direction (ADR 0016).
+ */
+function networkAclSection(
+  state: GameState,
+  subnetId: string,
+  acl: NetworkAcl,
+  actions: CardActions,
+): HTMLElement {
+  const { scene, level } = state
+  const aclLocked = level.lockedIds.includes(acl.id)
+  const usedBy = scene.subnets
+    .filter((other) => other.networkAclId === acl.id)
+    .map((other) => other.name)
+  const section = h(
+    'section',
+    { class: 'card-section' },
+    attention(
+      h('h4', { textContent: `Network ACL "${acl.name}"` }),
+      actions,
+      `network-acl:${acl.id}`,
+    ),
+  )
+  if (scene.networkAcls.length > 1 && !level.lockedIds.includes(subnetId)) {
+    section.append(
+      attention(
+        dropdown(
+          'This subnet uses',
+          scene.networkAcls.map((each) => ({
+            value: each.id,
+            label: each.isDefault ? `${each.name} (the default: allows everything)` : each.name,
+          })),
+          acl.id,
+          (value) => actions.edit((current) => setSubnetNetworkAcl(current, subnetId, value)),
+          `${subnetId}-network-acl`,
+        ),
+        actions,
+        `subnet-network-acl:${subnetId}`,
+      ),
+    )
+  }
+  section.append(
+    h('p', { class: 'note', textContent: `Used by: ${usedBy.join(', ')}.` }),
+    h('p', {
+      class: 'note',
+      textContent: acl.isDefault
+        ? 'The VPC’s default ACL allows everything, both ways. Read lowest number first; the first match decides.'
+        : 'Read lowest number first; the first match decides, so a deny must come before the allow it is an exception to. Stateless: replies need their own rule. A custom ACL denies everything it has no rule for.',
+    }),
+  )
+  if (aclLocked) section.append(h('p', { class: 'locked-note', textContent: 'Locked in this level.' }))
+
+  for (const direction of ['inbound', 'outbound'] as const) {
+    const preposition = direction === 'inbound' ? 'from' : 'to'
+    section.append(
+      h('h5', { textContent: direction === 'inbound' ? 'Inbound' : 'Outbound' }),
+      ruleList(
+        [
+          ...[...acl[direction]]
+            .sort((first, second) => first.number - second.number)
+            .map((rule) => ({
+              text: `${rule.number}: ${rule.action} ${PORT_OPTIONS[rule.ports].label} ${preposition} ${rule.peer.kind === 'anywhere' ? 'anywhere' : rule.peer.cidr}`,
+              key: `${acl.id}-${direction}-remove-${rule.number}`,
+              onRemove: aclLocked
+                ? undefined
+                : () =>
+                    actions.edit((current) =>
+                      removeNetworkAclRule(current, acl.id, direction, rule.number),
+                    ),
+            })),
+          { text: '*: deny everything else', key: `${acl.id}-${direction}-star` },
+        ],
+        '',
+      ),
+    )
+    if (aclLocked) continue
+
+    // A new rule: its number (the player chooses it: the order is the lesson), allow or
+    // deny, the ports, and where from or to.
+    const key = (part: string) => `${acl.id}-${direction}-${part}`
+    const numberInput = h('input', {
+      type: 'number',
+      min: '1',
+      max: '32766',
+      step: '1',
+      value: pick(key('number'), ''),
+      placeholder: 'e.g. 100',
+      attrs: { 'data-focus-key': key('number'), 'aria-label': `New ${direction} rule number` },
+    })
+    const problem = h('p', { class: 'note rule-problem', attrs: { role: 'status' } })
+    const add = button(
+      'Add rule',
+      () => {
+        actions.edit((current) =>
+          addNetworkAclRule(current, acl.id, direction, {
+            number: Number(numberInput.value),
+            action: pick<'allow' | 'deny'>(key('action'), 'allow'),
+            ports: pick<PortOption>(key('port'), 'https'),
+            peer: cidrPeerOf(pick(key('peer'), 'anywhere')),
+          }),
+        )
+        draft[key('number')] = ''
+      },
+      key('add'),
+    )
+    const check = () => {
+      const issue =
+        numberInput.value === ''
+          ? 'Give the rule a number first.'
+          : networkAclRuleProblem(scene, acl.id, direction, Number(numberInput.value))
+      problem.textContent = numberInput.value === '' ? '' : (issue ?? '')
+      add.disabled = issue !== null
+    }
+    numberInput.oninput = () => {
+      draft[key('number')] = numberInput.value
+      check()
+    }
+    check()
+    section.append(
+      h(
+        'div',
+        { class: 'add-row' },
+        h('label', { class: 'field' }, h('span', { textContent: 'Rule number' }), numberInput),
+        dropdown<'allow' | 'deny'>(
+          'Action',
+          [
+            { value: 'allow', label: 'Allow' },
+            { value: 'deny', label: 'Deny' },
+          ],
+          pick<'allow' | 'deny'>(key('action'), 'allow'),
+          (value) => (draft[key('action')] = value),
+          key('action'),
+        ),
+        dropdown(
+          'Port',
+          (Object.keys(PORT_OPTIONS) as PortOption[]).map((option) => ({
+            value: option,
+            label: PORT_OPTIONS[option].label,
+          })),
+          pick<PortOption>(key('port'), 'https'),
+          (value) => (draft[key('port')] = value),
+          key('port'),
+        ),
+        dropdown(
+          direction === 'inbound' ? 'Source' : 'Destination',
+          [
+            { value: 'anywhere', label: 'Anywhere (0.0.0.0/0)' },
+            ...NAMED_RANGES.map((range) => ({ value: `cidr:${range.value}`, label: range.label })),
+          ],
+          pick(key('peer'), 'anywhere'),
+          (value) => (draft[key('peer')] = value),
+          key('peer'),
+        ),
+        add,
+      ),
+      problem,
+    )
+  }
+  section.append(
+    button('What is a network ACL?', () => actions.openFactCard('network-acl'), 'fact-nacl', 'link'),
+  )
+  return section
+}
+
+/** A network ACL rule's source or destination from a dropdown value: anywhere, or a range. */
+function cidrPeerOf(value: string): CidrPeer {
+  return value.startsWith('cidr:') ? { kind: 'cidr', cidr: value.slice(5) } : { kind: 'anywhere' }
 }
 
 function cardHeader(
@@ -430,6 +580,7 @@ const KIND_SUBTITLE: Record<Resource['kind'], string> = {
   's3-bucket': 'Object storage, outside the VPC',
   'iam-role': 'Permissions a resource can wear',
   'rds-database': 'A managed relational database',
+  'waf-web-acl': 'A web application firewall: it reads each request',
 }
 
 function resourceCard(state: GameState, resource: Resource, actions: CardActions): HTMLElement[] {
@@ -700,6 +851,96 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
         h('p', {
           class: 'note',
           textContent: `With a policy, CloudWatch alarms watch the fleet’s CPU. When it rises above the target, the group launches enough instances to bring it back down; they take ${LAUNCH_TICKS} minutes to start serving. When it stays below the target, the group removes instances, at most half the fleet at a time.`,
+        }),
+      )
+      break
+    }
+    case 'waf-web-acl': {
+      // An AWS WAF web ACL: what it protects, and the rules it reads each request with.
+      const protectedOne = scene.resources.find((each) => each.id === resource.loadBalancerId)
+      const rule = <K extends WafRule['kind']>(kind: K) =>
+        resource.rules.find((each): each is Extract<WafRule, { kind: K }> => each.kind === kind)
+      const core = h('input', {
+        type: 'checkbox',
+        checked: rule('core-rule-set') !== undefined,
+        disabled: locked,
+        attrs: { 'data-focus-key': 'waf-core' },
+      })
+      core.onchange = () =>
+        actions.edit((current) =>
+          setWebAclRule(
+            current,
+            resource.id,
+            'core-rule-set',
+            core.checked ? { kind: 'core-rule-set' } : null,
+          ),
+        )
+      const rate = rule('rate-based')
+      const limitKey = `${resource.id}-rate-limit`
+      const limit = () => Number(pick(limitKey, String(rate?.limit ?? 100)))
+      const rateBox = h('input', {
+        type: 'checkbox',
+        checked: rate !== undefined,
+        disabled: locked,
+        attrs: { 'data-focus-key': 'waf-rate' },
+      })
+      rateBox.onchange = () =>
+        actions.edit((current) =>
+          setWebAclRule(
+            current,
+            resource.id,
+            'rate-based',
+            rateBox.checked ? { kind: 'rate-based', limit: limit() } : null,
+          ),
+        )
+      body.append(
+        h('p', {
+          class: 'note',
+          textContent: protectedOne
+            ? `Protects "${protectedOne.name}". It reads every request the load balancer accepts, after the listener and before a target is chosen. A security group or network ACL sees only addresses and ports; WAF sees what a request carries.`
+            : 'Not associated with a load balancer yet: it protects nothing.',
+        }),
+        h('p', {
+          class: 'note',
+          textContent:
+            'Default action: Allow. Each rule below blocks what it recognises, and anything no rule blocks goes on. A blocked request gets 403 Forbidden.',
+        }),
+        attention(h('h5', { textContent: 'Rules' }), actions, `web-acl-rules:${resource.id}`),
+        h(
+          'label',
+          { class: 'check' },
+          core,
+          'AWS managed rules: Core rule set (cross-site scripting, file inclusion and other common attacks)',
+        ),
+        h(
+          'label',
+          { class: 'check' },
+          rateBox,
+          `Rate-based rule: block an address sending more than ${limit().toLocaleString('en-GB')} requests in ${RATE_WINDOW_MINUTES} minutes`,
+        ),
+        dropdown(
+          'Rate limit, per address',
+          [100, 500, 2000, 10000].map((value) => ({
+            value: String(value),
+            label: `${value.toLocaleString('en-GB')} requests in ${RATE_WINDOW_MINUTES} minutes`,
+          })),
+          String(limit()),
+          (value) => {
+            draft[limitKey] = value
+            if (rate)
+              actions.edit((current) =>
+                setWebAclRule(current, resource.id, 'rate-based', {
+                  kind: 'rate-based',
+                  limit: Number(value),
+                }),
+              )
+          },
+          limitKey,
+          locked,
+        ),
+        h('p', {
+          class: 'note',
+          textContent: `An ordinary visitor sends a few requests a minute, about ${ORDINARY_RATE} in ${RATE_WINDOW_MINUTES} minutes. AWS accepts limits from ${LOWEST_RATE_LIMIT}; set it well above your busiest real visitor.`,
         }),
       )
       break

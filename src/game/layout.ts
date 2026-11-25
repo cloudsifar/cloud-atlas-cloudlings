@@ -23,7 +23,14 @@ export const STAGE = { width: 1280, height: 720 }
 
 /** The ten cloud genera are the internal vocabulary for service families (brief, Section 6). */
 export type CloudGenus =
-  'stratocumulus' | 'cumulus' | 'altocumulus' | 'altostratus' | 'cumulonimbus' | 'cirrus'
+  | 'stratocumulus'
+  | 'cumulus'
+  | 'altocumulus'
+  | 'altostratus'
+  | 'cumulonimbus'
+  | 'cirrus'
+  /** Not a cloud: AWS WAF is a woven net slung beneath the load balancer (brief, Section 6). */
+  | 'net'
 
 export const GENUS_OF: Record<ResourceKind, CloudGenus> = {
   'internet-gateway': 'stratocumulus',
@@ -35,6 +42,7 @@ export const GENUS_OF: Record<ResourceKind, CloudGenus> = {
   'iam-role': 'cirrus',
   // Flat, layered, steady: structured, persistent data (brief, Section 6).
   'rds-database': 'altostratus',
+  'waf-web-acl': 'net',
 }
 
 /** Which band of sky each kind of cloud belongs to. 'vertical' spans every band. */
@@ -49,6 +57,7 @@ export const BAND_OF: Record<ResourceKind, SkyBand> = {
   's3-bucket': 'vertical',
   'iam-role': 'high',
   'rds-database': 'mid',
+  'waf-web-acl': 'low',
 }
 
 // The fixed geometry of the sky. Altitude means distance from the internet:
@@ -76,9 +85,14 @@ function subnetRect(subnet: Subnet): Rect {
   return { x, y: band.top, width: columnWidth, height: band.bottom - band.top }
 }
 
+/** The final-art entry (assets/manifest.json) a resource is drawn with. */
+export function spriteIdOf(kind: ResourceKind): keyof typeof manifest.sprites {
+  if (kind === 'waf-web-acl') return 'construct.waf-net'
+  return `cloud.${GENUS_OF[kind]}.${kind}` as keyof typeof manifest.sprites
+}
+
 export function spriteSize(kind: ResourceKind): { width: number; height: number } {
-  const id = `cloud.${GENUS_OF[kind]}.${kind}` as keyof typeof manifest.sprites
-  const sprite = manifest.sprites[id]
+  const sprite = manifest.sprites[spriteIdOf(kind)]
   return { width: sprite.width, height: sprite.height }
 }
 
@@ -197,6 +211,21 @@ export function layoutScene(scene: Scene): SceneLayout {
         const subnet = scene.subnets.find((each) => each.id === resource.primarySubnetId)
         const rect = subnets[resource.primarySubnetId]
         if (rect && subnet) clouds[resource.id] = databaseSpot(rect, subnet.availabilityZone)
+        break
+      }
+      case 'waf-web-acl': {
+        // A net slung beneath the load balancer it protects, over the cloud's lower
+        // edge and clear of its caption (brief, Section 6).
+        const protectedOne = resourcesOfKind(scene, 'load-balancer').find(
+          (loadBalancer) => loadBalancer.id === resource.loadBalancerId,
+        )
+        const above = protectedOne
+          ? centred({ x: vpcCentreX, y: lowCentreY + 4 }, 'load-balancer')
+          : null
+        const { width, height } = spriteSize('waf-web-acl')
+        clouds[resource.id] = above
+          ? { x: above.x, y: above.y + above.height - height + 4, width, height }
+          : centred({ x: vpcCentreX, y: lowCentreY + 30 }, resource.kind)
         break
       }
       case 'ec2-instance':

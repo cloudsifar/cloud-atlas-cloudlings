@@ -1,0 +1,801 @@
+{
+  "id": 7,
+  "slug": "the-wrong-kite",
+  "title": "The Wrong Kite",
+  "concept": "Layers of defence at the edge: a custom network ACL that denies a block-listed range before it allows HTTPS, with replies allowed out because network ACLs are stateless, and AWS WAF in front of the load balancer reading each request, to catch an attack hidden in it and a flood from one address.",
+  "guidance": "hints",
+  "region": "sa-east-1",
+  "azs": 2,
+  "lockedIds": [
+    "igw",
+    "alb",
+    "rt-public",
+    "rt-private",
+    "nacl-default",
+    "sg-alb",
+    "sg-app",
+    "app-a",
+    "app-b",
+    "private-a",
+    "private-b"
+  ],
+  "palette": [
+    {
+      "resource": {
+        "kind": "waf-web-acl",
+        "id": "shop-waf",
+        "name": "shop-web-acl",
+        "loadBalancerId": null,
+        "defaultAction": "allow",
+        "rules": []
+      }
+    }
+  ],
+  "removableIds": [],
+  "narration": [
+    {
+      "id": "brief",
+      "text": "The Wrong Kite, in São Paulo. The hat shop works: three visitors browse, log in and buy. Three red Cloudlings have come too: one from an address range on a block list, one hiding a script in a review, one flooding the shop. Click the clouds and read their cards, then fly the kites.",
+      "highlight": "button:fly",
+      "advanceWhen": {
+        "kind": "run-finished"
+      }
+    },
+    {
+      "id": "what-happened",
+      "text": "All three got in. A security group can only allow, never deny, and neither it nor a network ACL can see inside a request. Two defences will fix that: a [network ACL](card:network-acl) at the subnet edge to turn away the block-listed range, and [AWS WAF](card:waf-web-acl) to read each request and count how many arrive.",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    },
+    {
+      "id": "associate",
+      "text": "First, the edge. The VPC has a second network ACL, edge-acl, made for the public subnets. Click Public subnet A and switch it to edge-acl, then Public subnet B. Then fly the kites and watch what a custom ACL does with traffic it has no rule for.",
+      "highlight": [
+        "subnet:public-a",
+        "subnet:public-b"
+      ],
+      "pulse": [
+        "subnet-network-acl:public-a",
+        "subnet-network-acl:public-b"
+      ],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "network-acl-on-subnets",
+          "networkAclId": "edge-acl",
+          "subnetIds": [
+            "public-a",
+            "public-b"
+          ]
+        }
+      }
+    },
+    {
+      "id": "allow-https",
+      "text": "Every kite tangled in the ribbon: edge-acl has no rule for HTTPS from the internet, so its final * rule denied them all. A custom ACL denies whatever it is not told to allow. Add an inbound rule: number 100, allow HTTPS 443 from anywhere. Then fly again.",
+      "highlight": "subnet:public-a",
+      "pulse": [
+        "network-acl:edge-acl"
+      ],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "network-acl-allows",
+          "networkAclId": "edge-acl",
+          "direction": "inbound",
+          "ports": "https",
+          "peer": {
+            "kind": "anywhere"
+          }
+        }
+      }
+    },
+    {
+      "id": "stateless",
+      "text": "The requests got in, but every reply was dropped on its way out: follow a green kite to see where. A network ACL is stateless, so a reply needs its own rule. Add an outbound rule allowing Ephemeral 1024–65535 to anywhere. The two rules numbered 200 are the same pair, for the web servers.",
+      "highlight": "subnet:public-a",
+      "pulse": [
+        "network-acl:edge-acl"
+      ],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "flows-delivered",
+          "flows": {
+            "intent": "legitimate"
+          }
+        }
+      }
+    },
+    {
+      "id": "deny-range",
+      "text": "Visitors get in and out, and so does the block-listed range. Add an inbound rule denying All traffic from 198.51.100.0/24, numbered below 100: rules are read lowest first and the first match decides, so a deny after the allow is never read. Then fly.",
+      "highlight": "subnet:public-a",
+      "pulse": [
+        "network-acl:edge-acl"
+      ],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "flows-stopped",
+          "flows": {
+            "flowIds": [
+              "red-range"
+            ]
+          },
+          "by": "nacl"
+        }
+      }
+    },
+    {
+      "id": "waf",
+      "text": "The other two arrive like any visitor: HTTPS 443, ordinary addresses. Only AWS WAF reads the requests themselves. Drag a WAF web ACL from the tray onto the load balancer, then switch on the Core rule set and a rate-based rule.",
+      "highlight": "palette:shop-waf",
+      "pulse": [
+        "web-acl-rules:shop-waf"
+      ],
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "web-acl-protects",
+          "loadBalancerId": "alb",
+          "rules": [
+            "core-rule-set",
+            "rate-based"
+          ]
+        }
+      }
+    },
+    {
+      "id": "second-run",
+      "text": "Fly the kites and watch the net beneath the load balancer: the Core rule set catches the hidden script, and the rate-based rule catches the flood. Click any kite to follow it through the edge, the security group, the listener and WAF.",
+      "highlight": "button:fly",
+      "advanceWhen": {
+        "kind": "run-finished"
+      }
+    },
+    {
+      "id": "wrap",
+      "text": "Each attack stopped at the [layer that can see it](card:concept-defence-in-depth): the range at the subnet edge, the script and the flood in WAF. No third star yet? Leave room between rule numbers, at least 10 apart like 90, 100, 110, so a rule can go between any two later without renumbering.",
+      "pulse": [
+        "network-acl:edge-acl"
+      ],
+      "advanceWhen": {
+        "kind": "level-complete"
+      }
+    }
+  ],
+  "initialScene": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": []
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "isDefault": true,
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      },
+      {
+        "id": "edge-acl",
+        "name": "edge-acl",
+        "inbound": [
+          {
+            "number": 200,
+            "action": "allow",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "10.0.0.0/16"
+            },
+            "ports": "ephemeral"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 200,
+            "action": "allow",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "10.0.0.0/16"
+            },
+            "ports": "http"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "ec2-app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": [
+          "public-a",
+          "public-b"
+        ],
+        "securityGroupIds": [
+          "sg-alb"
+        ],
+        "listener": "https",
+        "targetIds": [
+          "app-a",
+          "app-b"
+        ]
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-a",
+        "name": "Web server A",
+        "subnetId": "private-a",
+        "securityGroupIds": [
+          "sg-app"
+        ],
+        "roleId": null,
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-b",
+        "name": "Web server B",
+        "subnetId": "private-b",
+        "securityGroupIds": [
+          "sg-app"
+        ],
+        "roleId": null,
+        "size": "small",
+        "healthy": true
+      }
+    ]
+  },
+  "population": [
+    {
+      "id": "green-1",
+      "kind": "friendly",
+      "groundPosition": 0,
+      "ip": "203.0.113.10",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "browses the hats",
+      "says": "Ooh, new hats this week!"
+    },
+    {
+      "id": "red-range",
+      "kind": "hostile",
+      "groundPosition": 1,
+      "ip": "198.51.100.66",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "tries stolen passwords on the login page, from an address range on a block list",
+      "says": "I have a thousand stolen passwords. One of them will work…"
+    },
+    {
+      "id": "green-2",
+      "kind": "friendly",
+      "groundPosition": 2,
+      "ip": "192.0.2.20",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "logs in to check an order",
+      "says": "Has my hat been posted yet?"
+    },
+    {
+      "id": "red-script",
+      "kind": "hostile",
+      "groundPosition": 3,
+      "ip": "203.0.113.99",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "malicious",
+      "label": "hides a script in a product review (cross-site scripting)",
+      "says": "My “review” has a little script in it. Everyone who reads it runs my code."
+    },
+    {
+      "id": "red-flood",
+      "kind": "hostile",
+      "groundPosition": 4,
+      "ip": "192.0.2.66",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "rate": 3000,
+      "label": "floods the shop: 3,000 requests in five minutes",
+      "says": "Three thousand requests! Let's see the shop keep up with that."
+    },
+    {
+      "id": "green-3",
+      "kind": "friendly",
+      "groundPosition": 5,
+      "ip": "203.0.113.30",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "buys a hat",
+      "says": "This one, please!"
+    }
+  ],
+  "events": [],
+  "objectives": [
+    {
+      "id": "range-at-edge",
+      "text": "The kite from the block-listed range is turned away by a network ACL at the subnet edge",
+      "predicate": {
+        "kind": "flows-stopped",
+        "flows": {
+          "flowIds": [
+            "red-range"
+          ]
+        },
+        "by": "nacl"
+      }
+    },
+    {
+      "id": "script-caught",
+      "text": "The hidden script is caught by WAF's Core rule set",
+      "predicate": {
+        "kind": "flows-stopped",
+        "flows": {
+          "flowIds": [
+            "red-script"
+          ]
+        },
+        "by": "waf"
+      }
+    },
+    {
+      "id": "flood-caught",
+      "text": "The flood is caught by WAF's rate-based rule",
+      "predicate": {
+        "kind": "flows-stopped",
+        "flows": {
+          "flowIds": [
+            "red-flood"
+          ]
+        },
+        "by": "waf"
+      }
+    },
+    {
+      "id": "visitors-answered",
+      "text": "Every visitor's kite is answered, reply included",
+      "predicate": {
+        "kind": "flows-delivered",
+        "flows": {
+          "intent": "legitimate"
+        }
+      }
+    }
+  ],
+  "stars": {
+    "wellArchitected": {
+      "text": "Room to grow: edge-acl's rule numbers leave gaps of at least 10 (like 90, 100, 110), so a rule can go between any two without renumbering",
+      "predicates": [
+        {
+          "kind": "network-acl-rules-spaced",
+          "networkAclId": "edge-acl",
+          "gap": 10
+        }
+      ]
+    }
+  },
+  "hints": [
+    {
+      "objectiveId": "range-at-edge",
+      "nudge": "Follow the red kite from 198.51.100.66. Which rule of the public subnet's network ACL decides it, and is that the rule you meant?",
+      "pointer": {
+        "text": "A network ACL is read lowest number first, and the first rule that matches decides. A deny has to come before the allow it is an exception to.",
+        "highlight": "subnet:public-a"
+      },
+      "nearAnswer": "Put both public subnets on edge-acl, and add an inbound rule there: number 90, deny All traffic from 198.51.100.0/24."
+    },
+    {
+      "objectiveId": "script-caught",
+      "nudge": "The script arrives on HTTPS 443 from an ordinary address. Which control can see what a request carries?",
+      "pointer": {
+        "text": "AWS WAF reads each request the load balancer accepts. Its Core rule set recognises cross-site scripting.",
+        "highlight": "palette:shop-waf"
+      },
+      "nearAnswer": "Drag the WAF web ACL onto the load balancer and tick the Core rule set."
+    },
+    {
+      "objectiveId": "flood-caught",
+      "nudge": "Each of the flood's requests looks ordinary. What gives the flood away?",
+      "pointer": {
+        "text": "One address sending thousands of requests in five minutes. A WAF rate-based rule counts requests per address.",
+        "highlight": "resource:shop-waf"
+      },
+      "nearAnswer": "On the web ACL's card, tick the rate-based rule, with a limit of 100 requests in 5 minutes."
+    },
+    {
+      "objectiveId": "visitors-answered",
+      "nudge": "Follow a green kite all the way, reply included. Where does it stop?",
+      "pointer": {
+        "text": "A network ACL is stateless: a request and its reply are checked separately, each against its own direction's rules.",
+        "highlight": "subnet:public-a"
+      },
+      "nearAnswer": "On edge-acl: inbound, allow HTTPS 443 from anywhere; outbound, allow Ephemeral 1024–65535 to anywhere. Keep the two rules numbered 200 for the web servers."
+    }
+  ],
+  "factCards": [
+    "network-acl",
+    "waf-web-acl",
+    "concept-defence-in-depth",
+    "security-group"
+  ],
+  "referenceSolution": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "edge-acl"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "edge-acl"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": []
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "isDefault": true,
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      },
+      {
+        "id": "edge-acl",
+        "name": "edge-acl",
+        "inbound": [
+          {
+            "number": 90,
+            "action": "deny",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "198.51.100.0/24"
+            },
+            "ports": "all"
+          },
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "https"
+          },
+          {
+            "number": 200,
+            "action": "allow",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "10.0.0.0/16"
+            },
+            "ports": "ephemeral"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "ephemeral"
+          },
+          {
+            "number": 200,
+            "action": "allow",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "10.0.0.0/16"
+            },
+            "ports": "http"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "ec2-app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": [
+          "public-a",
+          "public-b"
+        ],
+        "securityGroupIds": [
+          "sg-alb"
+        ],
+        "listener": "https",
+        "targetIds": [
+          "app-a",
+          "app-b"
+        ]
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-a",
+        "name": "Web server A",
+        "subnetId": "private-a",
+        "securityGroupIds": [
+          "sg-app"
+        ],
+        "roleId": null,
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-b",
+        "name": "Web server B",
+        "subnetId": "private-b",
+        "securityGroupIds": [
+          "sg-app"
+        ],
+        "roleId": null,
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "waf-web-acl",
+        "id": "shop-waf",
+        "name": "shop-web-acl",
+        "loadBalancerId": "alb",
+        "defaultAction": "allow",
+        "rules": [
+          {
+            "kind": "core-rule-set"
+          },
+          {
+            "kind": "rate-based",
+            "limit": 100
+          }
+        ]
+      }
+    ]
+  }
+}

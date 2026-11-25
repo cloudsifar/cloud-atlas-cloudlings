@@ -38,6 +38,7 @@ const RESOURCE_FIELDS: Record<ResourceKind, Record<string, 'string' | 'boolean' 
     size: 'string',
     scaling: 'object',
   },
+  'waf-web-acl': { defaultAction: 'string', rules: 'object' },
   'rds-database': {
     engine: 'string',
     subnetIds: 'object',
@@ -227,6 +228,8 @@ export function validateLevel(value: unknown, knownFactCardIds: string[]): strin
       errors.push(`${path}.kind: expected "friendly" or "hostile"`)
     if (typeof kite.says !== 'string' || kite.says.trim() === '')
       errors.push(`${path}.says: expected the words in the Cloudling's speech bubble`)
+    if (kite.rate !== undefined && !(Number.isInteger(kite.rate) && kite.rate > 0))
+      errors.push(`${path}.rate: expected the requests sent in five minutes, a whole number`)
     if (
       !Number.isInteger(kite.groundPosition) ||
       kite.groundPosition < 0 ||
@@ -294,7 +297,13 @@ export function validateLevel(value: unknown, knownFactCardIds: string[]): strin
   const known = new Set<string>()
   const scenes = [level.initialScene, level.referenceSolution]
   for (const scene of scenes) {
-    for (const item of [...scene.resources, ...scene.securityGroups, ...scene.routeTables])
+    for (const item of [
+      ...scene.resources,
+      ...scene.securityGroups,
+      ...scene.routeTables,
+      ...scene.networkAcls,
+      ...scene.subnets,
+    ])
       known.add(item.id)
   }
   for (const entry of level.palette) {

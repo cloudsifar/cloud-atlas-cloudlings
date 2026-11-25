@@ -34,8 +34,14 @@ describe('shipped levels', () => {
         // Every "scene" trigger must be true in the finished scene, or the narrator would stick.
         const run = runLevel(level, level.referenceSolution)
         for (const step of level.narration) {
-          if (step.advanceWhen.kind !== 'scene') continue
-          const [result] = [step.advanceWhen.predicate].map(
+          // A flight that must show something ("add this rule and fly") must show it in
+          // the reference solution too.
+          const predicate =
+            step.advanceWhen.kind === 'scene' || step.advanceWhen.kind === 'run-finished'
+              ? step.advanceWhen.predicate
+              : undefined
+          if (!predicate) continue
+          const [result] = [predicate].map(
             (predicate) =>
               runLevel(
                 { ...level, objectives: [{ id: step.id, text: step.id, predicate }] },

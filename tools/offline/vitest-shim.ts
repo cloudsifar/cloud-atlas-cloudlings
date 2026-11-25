@@ -21,6 +21,7 @@ type Matchers = {
   toBeGreaterThan(expected: number): void
   toBeGreaterThanOrEqual(expected: number): void
   toBeLessThan(expected: number): void
+  toBeLessThanOrEqual(expected: number): void
   toBeCloseTo(expected: number, digits?: number): void
   toMatchObject(expected: Record<string, unknown>): void
   toThrow(expected?: RegExp | string): void
@@ -66,6 +67,8 @@ function buildMatchers(actual: unknown, negate: boolean, message?: string): Matc
     toBeGreaterThanOrEqual: (expected) =>
       check((actual as number) >= expected, `to be >= ${expected}`),
     toBeLessThan: (expected) => check((actual as number) < expected, `to be < ${expected}`),
+    toBeLessThanOrEqual: (expected) =>
+      check((actual as number) <= expected, `to be <= ${expected}`),
     // Vitest's toBeCloseTo: |actual - expected| < 10^-digits / 2, digits defaulting to 2.
     toBeCloseTo: (expected, digits = 2) =>
       check(

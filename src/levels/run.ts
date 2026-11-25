@@ -51,6 +51,7 @@ export function kiteToFlow(kite: Kite, sequence: number): Flow {
     intent: kite.kind === 'hostile' ? 'hostile' : 'legitimate',
     action: kite.action,
     backendCall: kite.backendCall,
+    rate: kite.rate,
     sequence,
   }
 }

@@ -1,7 +1,9 @@
 // validateScene: structural problems in a scene, found without flying any kites.
 
+import { cidrContains } from './address'
 import { resourcesOfKind, type Scene, type SecurityGroupRule } from './model'
 import { isPublicSubnet } from './routing'
+import { LOWEST_RATE_LIMIT } from './waf'
 
 export type SceneProblem = {
   /**
@@ -90,6 +92,13 @@ export function validateScene(scene: Scene): SceneProblem[] {
   for (const acl of scene.networkAcls) {
     for (const direction of ['inbound', 'outbound'] as const) {
       const numbers = acl[direction].map((rule) => rule.number)
+      // AWS behaviour modelled: rule numbers are whole numbers from 1 to 32766.
+      if (numbers.some((number) => !Number.isInteger(number) || number < 1 || number > 32766)) {
+        misconfigured(
+          acl.id,
+          `Network ACL "${acl.name}" has a ${direction} rule numbered outside 1 to 32766.`,
+        )
+      }
       if (new Set(numbers).size !== numbers.length) {
         misconfigured(
           acl.id,
@@ -221,6 +230,45 @@ export function validateScene(scene: Scene): SceneProblem[] {
             `The primary of "${resource.name}" must run in a subnet of its DB subnet group.`,
           )
         }
+        break
+      }
+      case 'waf-web-acl': {
+        // AWS behaviour modelled: a web ACL protects a load balancer here, a resource
+        // has at most one web ACL, and a rate-based rule's limit is at least 10.
+        if (resource.loadBalancerId !== null) {
+          const protectedOne = scene.resources.find(
+            (candidate) => candidate.id === resource.loadBalancerId,
+          )
+          if (protectedOne?.kind !== 'load-balancer')
+            broken(resource.id, `"${resource.name}" protects a load balancer that does not exist.`)
+          const sharing = scene.resources.filter(
+            (candidate) =>
+              candidate.kind === 'waf-web-acl' &&
+              candidate.loadBalancerId === resource.loadBalancerId,
+          )
+          if (sharing.length > 1)
+            misconfigured(
+              resource.id,
+              `A load balancer can have only one web ACL; "${resource.name}" is one of ${sharing.length}.`,
+            )
+        }
+        for (const rule of resource.rules) {
+          if (rule.kind === 'rate-based' && !(Number.isInteger(rule.limit) && rule.limit >= LOWEST_RATE_LIMIT))
+            misconfigured(
+              resource.id,
+              `A rate-based rule's limit must be a whole number of at least ${LOWEST_RATE_LIMIT}.`,
+            )
+          if (rule.kind === 'ip-set')
+            for (const cidr of rule.cidrs) {
+              try {
+                cidrContains(cidr, '0.0.0.0')
+              } catch {
+                broken(resource.id, `The IP set of "${resource.name}" has "${cidr}", which is not an address range.`)
+              }
+            }
+        }
+        if (new Set(resource.rules.map((rule) => rule.kind)).size !== resource.rules.length)
+          misconfigured(resource.id, `"${resource.name}" has the same kind of rule twice.`)
         break
       }
       case 'internet-gateway':

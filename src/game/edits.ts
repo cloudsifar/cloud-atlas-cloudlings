@@ -6,6 +6,7 @@
 
 import type {
   LoadBalancer,
+  NetworkAclRule,
   PolicyStatement,
   Resource,
   ResourceKind,
@@ -15,6 +16,7 @@ import type {
   SecurityGroupRule,
   Subnet,
   AutoScalingGroup,
+  WafRule,
 } from '../engine'
 import type { PaletteEntry } from '../levels'
 
@@ -56,6 +58,11 @@ export function placeFromPalette(scene: Scene, entry: PaletteEntry, subnetId?: s
     if (resource.kind === 'nat-gateway' || resource.kind === 'ec2-instance') {
       resource.subnetId = subnetId ?? validSubnetsFor(draft, resource.kind)[0]?.id ?? ''
     }
+    if (resource.kind === 'waf-web-acl') {
+      // Dropped in the low band, a web ACL is associated with the load balancer there.
+      resource.loadBalancerId =
+        draft.resources.find((candidate) => candidate.kind === 'load-balancer')?.id ?? null
+    }
     draft.resources.push(resource)
     for (const group of entry.securityGroups ?? []) {
       if (!draft.securityGroups.some((existing) => existing.id === group.id)) {
@@ -84,6 +91,8 @@ export function removeResource(scene: Scene, id: string): Scene {
       if (resource.kind === 'load-balancer')
         resource.targetIds = resource.targetIds.filter((target) => target !== id)
       if (resource.kind === 'ec2-instance' && resource.roleId === id) resource.roleId = null
+      if (resource.kind === 'waf-web-acl' && resource.loadBalancerId === id)
+        resource.loadBalancerId = null
       if (resource.kind === 'iam-role') {
         resource.statements = resource.statements.filter((statement) => statement.resource !== id)
       }
@@ -232,6 +241,69 @@ export function setGroupSubnets(scene: Scene, groupId: string, subnetIds: string
 export function setDatabaseMultiAz(scene: Scene, databaseId: string, on: boolean): Scene {
   return changeResource(scene, 'rds-database', databaseId, (database) => {
     database.multiAz = on
+  })
+}
+
+/** Associates a subnet with a network ACL. A subnet has exactly one at a time. */
+export function setSubnetNetworkAcl(scene: Scene, subnetId: string, networkAclId: string): Scene {
+  return edit(scene, (draft) => {
+    const subnet = draft.subnets.find((candidate) => candidate.id === subnetId)
+    if (subnet && draft.networkAcls.some((acl) => acl.id === networkAclId))
+      subnet.networkAclId = networkAclId
+  })
+}
+
+/** Why a network ACL rule cannot be added, or null if it can (AWS: numbers 1–32766, unique). */
+export function networkAclRuleProblem(
+  scene: Scene,
+  networkAclId: string,
+  direction: 'inbound' | 'outbound',
+  number: number,
+): string | null {
+  const acl = scene.networkAcls.find((candidate) => candidate.id === networkAclId)
+  if (!acl) return 'That network ACL does not exist.'
+  if (!Number.isInteger(number) || number < 1 || number > 32766)
+    return 'A rule number is a whole number from 1 to 32766.'
+  if (acl[direction].some((rule) => rule.number === number))
+    return `There is already a ${direction} rule ${number}. Each number is used once.`
+  return null
+}
+
+/** Adds a numbered rule to a network ACL; nothing changes if the number is not free. */
+export function addNetworkAclRule(
+  scene: Scene,
+  networkAclId: string,
+  direction: 'inbound' | 'outbound',
+  rule: NetworkAclRule,
+): Scene {
+  if (networkAclRuleProblem(scene, networkAclId, direction, rule.number)) return scene
+  return edit(scene, (draft) => {
+    const acl = draft.networkAcls.find((candidate) => candidate.id === networkAclId)
+    acl?.[direction].push(structuredClone(rule))
+  })
+}
+
+export function removeNetworkAclRule(
+  scene: Scene,
+  networkAclId: string,
+  direction: 'inbound' | 'outbound',
+  number: number,
+): Scene {
+  return edit(scene, (draft) => {
+    const acl = draft.networkAcls.find((candidate) => candidate.id === networkAclId)
+    if (acl) acl[direction] = acl[direction].filter((rule) => rule.number !== number)
+  })
+}
+
+/** Switches one kind of rule on a web ACL on (with these settings) or off. */
+export function setWebAclRule(
+  scene: Scene,
+  webAclId: string,
+  kind: WafRule['kind'],
+  rule: WafRule | null,
+): Scene {
+  return changeResource(scene, 'waf-web-acl', webAclId, (acl) => {
+    acl.rules = [...acl.rules.filter((existing) => existing.kind !== kind), ...(rule ? [rule] : [])]
   })
 }
 

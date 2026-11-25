@@ -7,6 +7,7 @@
 
 import {
   isPublicSubnet,
+  ORDINARY_RATE,
   resolveRoute,
   resourcesOfKind,
   groupInstances,
@@ -21,6 +22,7 @@ import {
   type Scene,
 } from '../engine'
 import { letterSegments, type Kite, type Level, type RegionCode } from '../levels'
+import { drawArt, drawArtAt, drawArtBetween, regionArtId } from './art'
 import { canStartConnection } from './edits'
 import { CHECK_LABELS } from './labels'
 import {
@@ -34,6 +36,7 @@ import {
   GENUS_OF,
   handlePosition,
   SKY,
+  spriteIdOf,
   spriteSize,
   STAGE,
   zoneAt,
@@ -49,6 +52,7 @@ import {
   drawKite,
   drawString,
   PENCIL,
+  type KiteState,
   type Mood,
 } from './placeholderArt'
 import {
@@ -304,9 +308,16 @@ function roundedRectPath(
 // Backdrop: paper, sky, horizon, ground
 // ---------------------------------------------------------------------------
 
-function drawBackdrop(context: CanvasRenderingContext2D, theme: RegionTheme): void {
-  context.fillStyle = PAPER
-  context.fillRect(0, 0, STAGE.width, STAGE.height)
+function drawBackdrop(
+  context: CanvasRenderingContext2D,
+  theme: RegionTheme,
+  region: RegionCode,
+): void {
+  // Paper, then the sky, which is a gradient in code in the final art too (brief, Section 11).
+  if (!drawArt(context, 'ui.paper', { x: 0, y: 0, ...STAGE })) {
+    context.fillStyle = PAPER
+    context.fillRect(0, 0, STAGE.width, STAGE.height)
+  }
 
   const sky = context.createLinearGradient(0, 0, 0, SKY.horizonY)
   sky.addColorStop(0, theme.skyTop)
@@ -315,8 +326,13 @@ function drawBackdrop(context: CanvasRenderingContext2D, theme: RegionTheme): vo
   context.fillRect(0, 0, STAGE.width, SKY.horizonY)
 
   // The skyline is distant scenery: low contrast, never competing with the game.
-  context.fillStyle = 'rgba(96, 108, 138, 0.2)'
-  theme.skyline(context, SKY.horizonY)
+  const skyline = regionArtId(region, 'skyline')
+  if (!skyline || !drawArtAt(context, skyline, { x: 0, y: SKY.horizonY })) {
+    context.fillStyle = 'rgba(96, 108, 138, 0.2)'
+    theme.skyline(context, SKY.horizonY)
+  }
+  const groundArt = regionArtId(region, 'ground')
+  if (groundArt && drawArtAt(context, groundArt, { x: 0, y: SKY.horizonY })) return
 
   const ground = context.createLinearGradient(0, SKY.horizonY, 0, STAGE.height)
   ground.addColorStop(0, theme.groundTop)
@@ -432,12 +448,38 @@ function drawContainers(context: CanvasRenderingContext2D, model: SkyViewModel):
     context.fillStyle = isPublic ? SUBNET_TINT.public : SUBNET_TINT.private
     roundedRectPath(context, rect, 9)
     context.fill()
-    // The NACL: a ribbon on the boundary of the subnet cell it guards.
-    context.strokeStyle = 'rgba(166, 112, 44, 0.55)'
-    context.lineWidth = 2
-    context.setLineDash([12, 3, 2, 3])
-    context.stroke()
+    // The NACL: a ribbon on the boundary of the subnet cell it guards. A custom ACL's
+    // ribbon is drawn stronger than the default ACL's, so its subnets can be seen.
+    const acl = scene.networkAcls.find((candidate) => candidate.id === subnet.networkAclId)
+    const custom = acl !== undefined && !acl.isDefault
+    const corners: Point[] = [
+      { x: rect.x, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y + rect.height },
+      { x: rect.x, y: rect.y + rect.height },
+    ]
+    const ribbon = corners.every((corner, index) =>
+      drawArtBetween(context, 'construct.nacl-ribbon', corner, corners[(index + 1) % 4]!, {
+        alpha: custom ? 1 : 0.55,
+      }),
+    )
+    if (!ribbon) {
+      context.strokeStyle = custom ? 'rgba(176, 96, 24, 0.95)' : 'rgba(166, 112, 44, 0.55)'
+      context.lineWidth = custom ? 3 : 2
+      context.setLineDash(custom ? [14, 3, 3, 3] : [12, 3, 2, 3])
+      context.stroke()
+    }
     context.restore()
+    if (custom && acl)
+      caption(
+        context,
+        `network ACL: ${acl.name}`,
+        rect.x + rect.width - 8,
+        rect.y + 10,
+        10,
+        'right',
+        '#8a4b12',
+      )
 
     caption(context, subnet.name, rect.x + 8, rect.y + 10, 11, 'left', '#57536a')
     if (subnet.band === 'low') {
@@ -504,7 +546,8 @@ function drawConnections(context: CanvasRenderingContext2D, model: SkyViewModel)
     const y = rects[0].y + rects[0].height * 0.3
     const endX = bucketRect.x + bucketRect.width * 0.3
     context.save()
-    for (const [width, colour, dash] of [
+    const road = drawArtBetween(context, 'construct.skyway', { x: startX, y }, { x: endX, y })
+    for (const [width, colour, dash] of road ? [] : [
       [12, 'rgba(255,244,205,0.95)', []],
       [1.4, 'rgba(70,90,150,0.85)', [7, 5]],
     ] as const) {
@@ -532,6 +575,7 @@ function drawConnections(context: CanvasRenderingContext2D, model: SkyViewModel)
     if (!role || !to) continue
     const start = { x: centreOf(role).x, y: role.y + role.height - 6 }
     const end = { x: centreOf(to).x, y: to.y + 6 }
+    if (drawArtBetween(context, 'construct.cirrus-thread', start, end)) continue
     context.beginPath()
     context.moveTo(start.x, start.y)
     context.bezierCurveTo(start.x + 10, start.y + 30, end.x - 20, end.y - 30, end.x, end.y)
@@ -560,6 +604,7 @@ function tintFor(resource: Resource, compromised: boolean): string[] {
 }
 
 function drawPadlock(context: CanvasRenderingContext2D, x: number, y: number): void {
+  if (drawArtAt(context, 'ui.padlock', { x, y })) return
   context.save()
   context.strokeStyle = PENCIL
   context.fillStyle = '#e9e2cf'
@@ -661,6 +706,7 @@ function drawFleet(
         context.restore()
         drawCloud(context, 'cloudlet', x, y, width, height, {
           ...look,
+          art: 'cloud.altocumulus.fleet-instance',
           opacity: look.opacity * (0.15 + 0.45 * view.launchProgress),
         })
       } else if (kind === 'failed' || kind === 'terminating') {
@@ -668,12 +714,14 @@ function drawFleet(
         const droop = 4 + (time > 0 ? Math.sin(time / 700 + slot) : 0)
         drawCloud(context, 'cloudlet', x, y + droop, width, height, {
           ...look,
+          art: 'cloud.altocumulus.fleet-instance',
           tint: [GREY_TINT],
           opacity: look.opacity * (kind === 'terminating' ? 1 - view.leaveFade : 0.85),
         })
       } else {
         drawCloud(context, 'cloudlet', x, y, width, height, {
           ...look,
+          art: 'cloud.altocumulus.fleet-instance',
           opacity: look.opacity * (kind === 'leaving' ? 1 - view.leaveFade : 1),
         })
       }
@@ -722,7 +770,13 @@ function drawDatabase(
   const lostZone = view?.lostZone ?? null
   const down = outageZones(model)
   const bob = model.reducedMotion ? 0 : Math.sin(model.time / 900 + 3) * 1.5
-  const look = { tint: [BAND_TINT.mid], sunlight: 0, burst: 0, opacity: locked ? 0.62 : 1 }
+  const look = {
+    tint: [BAND_TINT.mid],
+    sunlight: 0,
+    burst: 0,
+    opacity: locked ? 0.62 : 1,
+    art: 'cloud.altostratus.rds-database' as const,
+  }
   const primary = databaseRect(scene, layout, database, primaryZone)
   const standby = standbyZone ? databaseRect(scene, layout, database, standbyZone) : null
   const lost =
@@ -803,7 +857,8 @@ function drawDatabase(
   // Failover: lightning arcs between the clouds, from the failed primary to the standby.
   if (failingOver && primary && standby && !model.reducedMotion) {
     const flicker = Math.sin(model.time / 37) > -0.2
-    if (flicker) drawLightning(context, centreOf(primary), centreOf(standby), model.time, 0.9)
+    if (flicker)
+      drawLightning(context, centreOf(primary), centreOf(standby), model.time, 0.9, 'cloud')
   }
 }
 
@@ -815,6 +870,7 @@ function drawWispBridge(
   time: number,
   still: boolean,
 ): void {
+  if (drawArtBetween(context, 'construct.wisp-bridge', from, to, { time: still ? 0 : time })) return
   context.save()
   context.strokeStyle = 'rgba(255, 255, 255, 0.75)'
   context.lineCap = 'round'
@@ -841,7 +897,11 @@ function drawLightning(
   to: Point,
   time: number,
   strength: number,
+  /** Sky to ground (an Availability Zone failing) or cloud to cloud (a failover). */
+  kind: 'ground' | 'cloud',
 ): void {
+  const art = kind === 'ground' ? 'effect.lightning.ground' : 'effect.lightning.cloud'
+  if (drawArtBetween(context, art, from, to, { time, alpha: strength })) return
   const steps = 9
   const points: Point[] = [from]
   const seed = Math.floor(time / 90)
@@ -923,6 +983,7 @@ function drawOutage(context: CanvasRenderingContext2D, model: SkyViewModel): voi
         { x: x + 20, y: SKY.groundY - 40 },
         model.time,
         strike,
+        'ground',
       )
       drawLightning(
         context,
@@ -930,6 +991,7 @@ function drawOutage(context: CanvasRenderingContext2D, model: SkyViewModel): voi
         { x: x - 50, y: SKY.groundY - 60 },
         model.time + 300,
         strike * 0.7,
+        'ground',
       )
       context.save()
       context.fillStyle = `rgba(255, 255, 240, ${0.22 * strike})`
@@ -966,8 +1028,10 @@ function drawClouds(
       drawSunRays(context, centreOf(rect), Math.max(rect.width, rect.height) * 0.62, sunlight)
 
     context.save()
-    if (compromised) {
-      // Dark, smoky edges, so "compromised" does not depend on the red tint alone.
+    // Dark, smoky edges, so "compromised" does not depend on the red tint alone: the
+    // final art's smoke overlay once it exists, a dark blur until then.
+    const smoke = compromised && drawArt(context, 'overlay.compromised-smoke', { ...rect, y })
+    if (compromised && !smoke) {
       context.shadowColor = 'rgba(40, 18, 18, 0.9)'
       context.shadowBlur = 16
     }
@@ -976,6 +1040,7 @@ function drawClouds(
       sunlight,
       burst: burstFor[resource.id] ?? 0,
       opacity: locked ? 0.62 : 1,
+      art: spriteIdOf(resource.kind),
     }
     if (resource.kind === 'auto-scaling-group') {
       // A fleet is a patch of clouds, one per instance, that grows and shrinks. During a
@@ -1048,6 +1113,17 @@ function drawClouds(
           '#8a4b12',
         )
       }
+    } else if (resource.kind === 'waf-web-acl') {
+      // Beside the net's end, clear of the load balancer's own caption below it.
+      caption(
+        context,
+        `AWS WAF · ${resource.name}`,
+        rect.x + rect.width + 8,
+        y + rect.height / 2,
+        11,
+        'left',
+        '#3c4a78',
+      )
     } else {
       caption(context, resource.name, centreOf(rect).x, labelY, 12)
     }
@@ -1162,6 +1238,7 @@ function marker(
 }
 
 function drawRain(context: CanvasRenderingContext2D, at: Point, time: number, fade = 1): void {
+  if (drawArtAt(context, 'effect.rain', at, { time, alpha: fade })) return
   context.save()
   context.strokeStyle = `rgba(62, 110, 178, ${0.9 * fade})`
   context.lineWidth = 2
@@ -1178,6 +1255,21 @@ function drawRain(context: CanvasRenderingContext2D, at: Point, time: number, fa
 }
 
 /** The block animations: each control stops a kite with its own object. */
+/** Above this many requests in five minutes, a kite is a flood (as the engine says). */
+const FLOOD_RATE = ORDINARY_RATE * 10
+/** Where the rest of a flood's flock flies, around the kite on the string. */
+const FLOCK: [number, number][] = [
+  [-24, 12],
+  [22, 14],
+  [-14, -18],
+  [18, -16],
+]
+
+/** How a stopped kite looks while it is held: tangled in a NACL's ribbon, netted by WAF. */
+function caughtState(stoppedBy: CheckKind | undefined): KiteState {
+  return stoppedBy === 'nacl' ? 'tangled' : stoppedBy === 'waf' ? 'netted' : 'flying'
+}
+
 function blockOffset(stoppedBy: CheckKind | undefined, progress: number): Point {
   const early = Math.min(1, progress / 0.45)
   switch (stoppedBy) {
@@ -1189,6 +1281,8 @@ function blockOffset(stoppedBy: CheckKind | undefined, progress: number): Point 
       return { x: -early * 26, y: early * 30 }
     case 'nacl': // tangled in the ribbon (the kite itself wobbles)
       return { x: Math.sin(early * Math.PI * 6) * 4, y: 0 }
+    case 'waf': // caught in the net beneath the load balancer: it sags into the mesh
+      return { x: Math.sin(early * Math.PI * 4) * 2, y: early * 8 }
     default: // timed out: the string goes slack and the kite drifts down
       return { x: 0, y: early * 18 }
   }
@@ -1202,6 +1296,15 @@ function drawKiteAndCloudling(
   costume: string,
 ): void {
   const hostile = kite.kind === 'hostile'
+  // A flood is a flock of kites from one Cloudling (brief, Section 6): one on the string,
+  // the rest flying with it, so a flood looks like many requests, not one.
+  const flock = (kite.rate ?? 0) > FLOOD_RATE
+  const kites = (x: number, y: number, state: KiteState, time: number, scale = 1) => {
+    drawKite(context, x, y, hostile, state, time, scale)
+    if (!flock) return
+    for (const [dx, dy] of FLOCK)
+      drawKite(context, x + dx * scale, y + dy * scale, hostile, state, time + dx * 37, scale * 0.75)
+  }
   const frame: KiteFrame | undefined = script ? frameAt(script, model.runTime) : undefined
   const finished = frame?.phase === 'ending' || frame?.phase === 'done'
   const ending = finished ? script?.ending : undefined
@@ -1221,11 +1324,12 @@ function drawKiteAndCloudling(
     model.reducedMotion && mood === 'cheer' ? 'idle' : mood,
     costume,
     model.time,
+    model.level.region,
   )
   const rest = script?.rest ?? { x: feet.x + 22, y: feet.y - 92 }
   if (!frame || !script || frame.phase === 'waiting') {
     drawString(context, hand, rest, 0, model.time)
-    drawKite(context, rest.x, rest.y, hostile, 'flying', model.reducedMotion ? 0 : model.time)
+    kites(rest.x, rest.y, 'flying', model.reducedMotion ? 0 : model.time)
     return
   }
 
@@ -1263,7 +1367,7 @@ function drawKiteAndCloudling(
   if (frame.phase === 'flying') {
     drawString(context, hand, frame.kitePosition, 0, model.time)
     if (frame.carrier === 'kite')
-      drawKite(context, frame.position.x, frame.position.y, hostile, 'flying', model.time)
+      kites(frame.position.x, frame.position.y, 'flying', model.time)
     else drawRain(context, frame.position, model.time)
     return
   }
@@ -1320,7 +1424,10 @@ function drawKiteAndCloudling(
       if (script.stoppedBy === 'block-public-access' && progress < 0.9) {
         // A pale shell closes over the bucket.
         const bucket = model.layout.clouds[kite.destinationId]
-        if (bucket) {
+        const shell =
+          bucket &&
+          drawArt(context, 'construct.bucket-shell', bucket, { alpha: 1 - progress })
+        if (bucket && !shell) {
           context.save()
           context.fillStyle = `rgba(250, 250, 240, ${0.5 * (1 - progress)})`
           context.strokeStyle = `rgba(120, 116, 130, ${1 - progress})`
@@ -1345,24 +1452,16 @@ function drawKiteAndCloudling(
         const ground = { x: feet.x + 30, y: feet.y - 6 }
         const position = lerp(bumped, ground, late)
         if (late < 1) drawString(context, hand, position, late, model.time)
-        drawKite(
-          context,
-          position.x,
-          position.y,
-          hostile,
-          late > 0.15 ? 'crumpled' : script.stoppedBy === 'nacl' ? 'tangled' : 'flying',
+        kites(position.x,
+          position.y, late > 0.15 ? 'crumpled' : caughtState(script.stoppedBy),
           model.time,
         )
       } else {
         // A stopped friendly kite is the player's misconfiguration: it sags back to its Cloudling.
         const position = lerp(bumped, { x: rest.x, y: rest.y + 26 }, late)
         drawString(context, hand, position, 0.4 + late * 0.4, model.time)
-        drawKite(
-          context,
-          position.x,
-          position.y,
-          hostile,
-          script.stoppedBy === 'nacl' && late === 0 ? 'tangled' : 'flying',
+        kites(position.x,
+          position.y, late === 0 ? caughtState(script.stoppedBy) : 'flying',
           model.reducedMotion ? 0 : model.time,
           1 - late * 0.1,
         )
@@ -1442,7 +1541,16 @@ function drawCrowd(context: CanvasRenderingContext2D, model: SkyViewModel, costu
     context.save()
     context.globalAlpha = view.opacity
     const mood: Mood = view.sag > 0.5 ? 'droop' : 'idle'
-    const hand = drawCloudling(context, view.feet.x, view.feet.y, false, mood, costume, model.time)
+    const hand = drawCloudling(
+      context,
+      view.feet.x,
+      view.feet.y,
+      false,
+      mood,
+      costume,
+      model.time,
+      model.level.region,
+    )
     // A long string, taut while the kite is attached, slack once it has fallen.
     drawString(context, hand, at, view.sag * 0.6, model.reducedMotion ? 0 : model.time)
     // Attached kites rain data back on their Cloudlings now and then, each in its turn.
@@ -1579,14 +1687,19 @@ function drawWeatherStation(
   context.lineCap = 'round'
   context.lineWidth = 2
 
-  // Post and tripod feet.
-  context.beginPath()
-  context.moveTo(x, y)
-  context.lineTo(x, y - 116)
-  context.moveTo(x - 12, y)
-  context.lineTo(x, y - 16)
-  context.lineTo(x + 12, y)
-  context.stroke()
+  // Post, tripod feet and the bell's arm: the final art's body, or pencil lines.
+  const body = drawArtAt(context, 'station.body', { x, y })
+  if (!body) {
+    context.beginPath()
+    context.moveTo(x, y)
+    context.lineTo(x, y - 116)
+    context.moveTo(x - 12, y)
+    context.lineTo(x, y - 16)
+    context.lineTo(x + 12, y)
+    context.moveTo(x, y - 104)
+    context.lineTo(x + 18, y - 104)
+    context.stroke()
+  }
 
   // Anemometer at the top: three cups, spinning with the number of kites in the air.
   const spin =
@@ -1594,7 +1707,18 @@ function drawWeatherStation(
       ? 0.4
       : (model.time / 1000) * (0.6 + tick.demand / 10)
   context.lineWidth = 1.4
-  for (let arm = 0; arm < 3; arm++) {
+  const cupFrames = 6 // assets/manifest.json: station.anemometer, one turn
+  const cups = drawArtAt(
+    context,
+    'station.anemometer',
+    { x, y: y - 120 },
+    {
+      frame: Math.floor(
+        ((((spin / (Math.PI * 2)) % 1) + 1) % 1) * cupFrames,
+      ),
+    },
+  )
+  for (let arm = 0; arm < (cups ? 0 : 3); arm++) {
     const angle = spin + (arm * Math.PI * 2) / 3
     const cup = { x: x + Math.cos(angle) * 14, y: y - 120 + Math.sin(angle) * 4 }
     context.beginPath()
@@ -1611,12 +1735,14 @@ function drawWeatherStation(
   // The dial: CPU from 0% (lower left) round to 100% (lower right).
   const dial = { x, y: y - 70, r: 24 }
   const angleOf = (percent: number) => Math.PI * 0.75 + (percent / 100) * Math.PI * 1.5
-  context.beginPath()
-  context.arc(dial.x, dial.y, dial.r, 0, Math.PI * 2)
-  context.fillStyle = '#fffdf5'
-  context.fill()
-  context.lineWidth = 2
-  context.stroke()
+  if (!drawArtAt(context, 'station.dial', dial)) {
+    context.beginPath()
+    context.arc(dial.x, dial.y, dial.r, 0, Math.PI * 2)
+    context.fillStyle = '#fffdf5'
+    context.fill()
+    context.lineWidth = 2
+    context.stroke()
+  }
   // Scale: green while there is headroom, amber above the target, red near full.
   const band = (from: number, to: number, colour: string) => {
     context.beginPath()
@@ -1641,38 +1767,42 @@ function drawWeatherStation(
   const cpu = record && frame ? dialCpuAt(record, model.runTime) : 0
   const alarm = record && frame ? alarmAt(record, model.runTime) : 'ok'
   const needle = angleOf(cpu)
-  context.beginPath()
-  context.moveTo(dial.x, dial.y)
-  context.lineTo(dial.x + Math.cos(needle) * (dial.r - 6), dial.y + Math.sin(needle) * (dial.r - 6))
-  context.strokeStyle = alarm !== 'ok' ? '#9b2c22' : PENCIL
-  context.lineWidth = 2.2
-  context.stroke()
-  context.beginPath()
-  context.arc(dial.x, dial.y, 2.5, 0, Math.PI * 2)
-  context.fillStyle = PENCIL
-  context.fill()
+  // The hand turns about its pivot: the final art's needle, or a pencil line.
+  if (!drawArtAt(context, 'station.needle', dial, { angle: needle })) {
+    context.beginPath()
+    context.moveTo(dial.x, dial.y)
+    context.lineTo(
+      dial.x + Math.cos(needle) * (dial.r - 6),
+      dial.y + Math.sin(needle) * (dial.r - 6),
+    )
+    context.strokeStyle = alarm !== 'ok' ? '#9b2c22' : PENCIL
+    context.lineWidth = 2.2
+    context.stroke()
+    context.beginPath()
+    context.arc(dial.x, dial.y, 2.5, 0, Math.PI * 2)
+    context.fillStyle = PENCIL
+    context.fill()
+  }
 
   // The bell, which swings while it rings.
   const ringing = record !== null && bellRingingAt(record, model.runTime)
   const swing = ringing && !model.reducedMotion ? Math.sin(model.time / 55) * 0.55 : 0
   context.strokeStyle = PENCIL
   context.lineWidth = 2
-  context.beginPath()
-  context.moveTo(x, y - 104)
-  context.lineTo(x + 18, y - 104)
-  context.stroke()
-  context.save()
-  context.translate(x + 18, y - 104)
-  context.rotate(swing)
-  context.beginPath()
-  context.moveTo(-7, 13)
-  context.quadraticCurveTo(-6, 1, 0, 1)
-  context.quadraticCurveTo(6, 1, 7, 13)
-  context.closePath()
-  context.fillStyle = '#d9b44a'
-  context.fill()
-  context.stroke()
-  context.restore()
+  if (!drawArtAt(context, 'station.bell', { x: x + 18, y: y - 104 }, { angle: swing })) {
+    context.save()
+    context.translate(x + 18, y - 104)
+    context.rotate(swing)
+    context.beginPath()
+    context.moveTo(-7, 13)
+    context.quadraticCurveTo(-6, 1, 0, 1)
+    context.quadraticCurveTo(6, 1, 7, 13)
+    context.closePath()
+    context.fillStyle = '#d9b44a'
+    context.fill()
+    context.stroke()
+    context.restore()
+  }
   context.restore()
   if (ringing) caption(context, 'ding!', x + 30, y - 112, 12, 'left', '#7a5a12')
 
@@ -1846,7 +1976,7 @@ function drawDrag(context: CanvasRenderingContext2D, model: SkyViewModel): void 
 
 export function drawSky(context: CanvasRenderingContext2D, model: SkyViewModel): void {
   const theme = REGION_THEMES[model.level.region]
-  drawBackdrop(context, theme)
+  drawBackdrop(context, theme, model.level.region)
   drawContainers(context, model)
   drawConnections(context, model)
 

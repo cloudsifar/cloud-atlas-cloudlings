@@ -6,6 +6,18 @@
 // Tinting is done by multiplying the base with a colour, so the pencil texture survives.
 // Each genus has its own silhouette so service families can be told apart by shape alone.
 
+import {
+  ART,
+  artGeneration,
+  artHighlight,
+  artPicture,
+  artPoint,
+  cloudlingArtId,
+  drawArtAt,
+  kiteArtId,
+  regionArtId,
+  type ArtId,
+} from './art'
 import type { CloudGenus } from './layout'
 
 export const PENCIL = '#55525f'
@@ -30,7 +42,7 @@ export type SpriteShape = CloudGenus | 'cloudlet'
  * Each genus is a list of puff groups. A group is outlined as one shape;
  * separate groups stay separate (altocumulus is a patch of small cloudlets).
  */
-export const SILHOUETTES: Record<Exclude<SpriteShape, 'cirrus'>, Ellipse[][]> = {
+export const SILHOUETTES: Record<Exclude<SpriteShape, 'cirrus' | 'net'>, Ellipse[][]> = {
   // The classic puffy cloud with a flat base.
   cumulus: [
     [
@@ -144,6 +156,41 @@ function drawCirrusBase(context: CanvasRenderingContext2D, width: number, height
   }
 }
 
+/**
+ * AWS WAF's net: a shallow hammock of woven mesh, slung from both ends, pale enough to
+ * tint like a cloud. Drawn on the base and the highlight layer alike.
+ */
+function drawNetBase(context: CanvasRenderingContext2D, width: number, height: number): void {
+  const sag = (x: number) => height * 0.18 + Math.sin((x / width) * Math.PI) * height * 0.55
+  context.strokeStyle = '#8f8c99'
+  context.lineCap = 'round'
+  // The rim and the lower edge.
+  for (const [lineWidth, offset] of [
+    [2.4, 0],
+    [1.6, height * 0.24],
+  ] as const) {
+    context.lineWidth = lineWidth
+    context.beginPath()
+    for (let x = 0; x <= width; x += 4) {
+      const y = sag(x) + offset * Math.sin((x / width) * Math.PI)
+      if (x === 0) context.moveTo(x, y)
+      else context.lineTo(x, y)
+    }
+    context.stroke()
+  }
+  // The mesh: diagonals between the rim and the lower edge.
+  context.lineWidth = 1
+  context.beginPath()
+  for (let x = 0; x < width; x += 12) {
+    const depth = height * 0.24 * Math.sin(((x + 6) / width) * Math.PI)
+    context.moveTo(x, sag(x))
+    context.lineTo(x + 12, sag(x + 12) + depth)
+    context.moveTo(x + 12, sag(x + 12))
+    context.lineTo(x, sag(x) + depth)
+  }
+  context.stroke()
+}
+
 function drawPuffBase(
   context: CanvasRenderingContext2D,
   groups: Ellipse[][],
@@ -188,8 +235,24 @@ export type CloudSprite = {
 const PADDING = 4
 const spriteCache = new Map<string, CloudSprite>()
 
-export function cloudSprite(genus: SpriteShape, width: number, height: number): CloudSprite {
-  const key = `${genus}:${width}x${height}`
+/** The cache key of a sprite: its shape and size, and its final art once that has arrived. */
+function spriteKey(genus: SpriteShape, width: number, height: number, art?: ArtId): string {
+  const picture = art ? artPicture(art) : null
+  return `${genus}:${width}x${height}${picture ? `:${art}:${artGeneration()}` : ''}`
+}
+
+/**
+ * A cloud's two layers. With final art (`art`, once its picture has loaded) the base is
+ * the picture and the highlight its own highlight picture, or else a glow cut to the
+ * picture's shape; otherwise both are drawn from the genus's placeholder silhouette.
+ */
+export function cloudSprite(
+  genus: SpriteShape,
+  width: number,
+  height: number,
+  art?: ArtId,
+): CloudSprite {
+  const key = spriteKey(genus, width, height, art)
   const cached = spriteCache.get(key)
   if (cached) return cached
 
@@ -198,7 +261,31 @@ export function cloudSprite(genus: SpriteShape, width: number, height: number): 
   const highlight = newCanvas(width + PADDING * 2, height + PADDING * 2)
   highlight.context.translate(PADDING, PADDING)
 
-  if (genus === 'cirrus') {
+  const picture = art ? artPicture(art) : null
+  if (art && picture) {
+    base.context.drawImage(picture, 0, 0, width, height)
+    const own = artHighlight(art)
+    if (own) highlight.context.drawImage(own, 0, 0, width, height)
+    else {
+      const glow = highlight.context.createRadialGradient(
+        width / 2,
+        height / 2,
+        0,
+        width / 2,
+        height / 2,
+        Math.max(width, height) / 2,
+      )
+      glow.addColorStop(0, 'rgba(255,255,255,1)')
+      glow.addColorStop(1, 'rgba(255,255,255,0.25)')
+      highlight.context.fillStyle = glow
+      highlight.context.fillRect(0, 0, width, height)
+      highlight.context.globalCompositeOperation = 'destination-in'
+      highlight.context.drawImage(picture, 0, 0, width, height)
+    }
+  } else if (genus === 'net') {
+    drawNetBase(base.context, width, height)
+    drawNetBase(highlight.context, width, height)
+  } else if (genus === 'cirrus') {
     drawCirrusBase(base.context, width, height)
     drawCirrusBase(highlight.context, width, height)
   } else {
@@ -262,6 +349,8 @@ export type CloudLook = {
   /** 0 to 1: the white burst when a kite is delivered. */
   burst: number
   opacity: number
+  /** The final art to draw, once it has arrived (assets/manifest.json); else the placeholder. */
+  art?: ArtId
 }
 
 export function drawCloud(
@@ -273,8 +362,8 @@ export function drawCloud(
   height: number,
   look: CloudLook,
 ): void {
-  const sprite = cloudSprite(genus, width, height)
-  const key = `${genus}:${width}x${height}`
+  const sprite = cloudSprite(genus, width, height, look.art)
+  const key = spriteKey(genus, width, height, look.art)
   context.save()
   context.globalAlpha = look.opacity
   context.drawImage(tinted(sprite.base, key, look.tint, 'multiply'), x - PADDING, y - PADDING)
@@ -314,7 +403,22 @@ export function drawCloudling(
   mood: Mood,
   costume: string,
   time: number,
+  /** The level's region, for the final art's costume overlay. */
+  region?: string,
 ): { x: number; y: number } {
+  // Final art first: the mood's picture, the region's costume over a friendly one, and
+  // the hand where the picture says it is.
+  const art = cloudlingArtId(hostile ? 'hostile' : 'friendly', mood)
+  if (drawArtAt(context, art, { x, y }, { time })) {
+    const overlay = !hostile && region ? regionArtId(region, 'costume') : null
+    if (overlay) drawArtAt(context, overlay, { x, y }, { time })
+    return (
+      artPoint(art, 'hand', { x, y }) ?? {
+        x: x + ART[art].width * 0.35,
+        y: y - ART[art].height * 0.48,
+      }
+    )
+  }
   const jump = mood === 'cheer' ? Math.abs(Math.sin(time / 110)) * 9 : 0
   const shake = mood === 'stamp' ? Math.sin(time / 35) * 2.5 : 0
   const sag = mood === 'droop' ? 4 : 0
@@ -407,7 +511,7 @@ export function drawCloudling(
   return hand
 }
 
-export type KiteState = 'flying' | 'crumpled' | 'tangled'
+export type KiteState = 'flying' | 'crumpled' | 'tangled' | 'netted'
 
 /**
  * Friendly kites are green diamonds; hostile kites are red and shaped like a bird
@@ -422,9 +526,12 @@ export function drawKite(
   time: number,
   scale = 1,
 ): void {
+  const sway = state === 'flying' ? Math.sin(time / 420 + x) * 0.12 : 0
+  // Final art first: the state's picture, swaying while it flies.
+  const art = kiteArtId(hostile ? 'hostile' : 'friendly', state)
+  if (drawArtAt(context, art, { x, y }, { time, scale, angle: sway })) return
   context.save()
   context.translate(x, y)
-  const sway = state === 'flying' ? Math.sin(time / 420 + x) * 0.12 : 0
   const tangle = state === 'tangled' ? Math.sin(time / 45) * 0.5 : 0
   context.rotate(sway + tangle + (state === 'crumpled' ? 1.2 : 0))
   context.scale(scale * (state === 'crumpled' ? 0.7 : 1), scale * (state === 'crumpled' ? 0.45 : 1))
@@ -478,6 +585,19 @@ export function drawKite(
     context.lineTo(13, -2)
     context.moveTo(0, 19)
     context.quadraticCurveTo(7, 27, 0, 34)
+    context.stroke()
+  }
+  if (state === 'netted') {
+    // Caught in WAF's net: a few strands of mesh across the kite.
+    context.strokeStyle = 'rgba(70, 64, 90, 0.85)'
+    context.lineWidth = 1
+    context.beginPath()
+    for (let offset = -18; offset <= 18; offset += 6) {
+      context.moveTo(offset - 6, -14)
+      context.lineTo(offset + 6, 14)
+      context.moveTo(offset + 6, -14)
+      context.lineTo(offset - 6, 14)
+    }
     context.stroke()
   }
   context.restore()

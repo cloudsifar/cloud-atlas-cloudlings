@@ -10,6 +10,7 @@ export {
   STAGE,
   BAND_OF,
   GENUS_OF,
+  spriteIdOf,
   type DropZone,
   type Rect,
   type Point,
@@ -34,3 +35,4 @@ export {
   type LogEntry,
 } from './crowdPlayback'
 export { CAPTION_FONT, drawCloud, drawCloudling, drawKite, drawString } from './placeholderArt'
+export { loadArt, type ArtId } from './art'

@@ -142,6 +142,7 @@
       {
         "id": "nacl-default",
         "name": "Default NACL",
+        "isDefault": true,
         "inbound": [
           {
             "number": 100,
@@ -430,6 +431,7 @@
       {
         "id": "nacl-default",
         "name": "Default NACL",
+        "isDefault": true,
         "inbound": [
           {
             "number": 100,

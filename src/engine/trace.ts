@@ -33,6 +33,12 @@ export type Flow = {
    * so the same scene and the same flow always pick the same node and target.
    */
   sequence?: number
+  /**
+   * How many requests this address sends in five minutes, the span a WAF rate-based
+   * rule counts over. Absent for an ordinary visitor (ORDINARY_RATE in waf.ts); a flood is
+   * thousands.
+   */
+  rate?: number
 }
 
 export type FlowOutcome = 'delivered' | 'blocked' | 'dropped' | 'breach'
@@ -51,6 +57,8 @@ export type CheckKind =
   | 'nacl'
   | 'security-group'
   | 'listener'
+  /** An AWS WAF web ACL inspecting the request (waf.ts). */
+  | 'waf'
   | 'target-selection'
   | 'iam'
   | 'block-public-access'

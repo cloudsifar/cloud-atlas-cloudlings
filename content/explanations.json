@@ -26,5 +26,9 @@
   "auto-scaling-group": {
     "label": "Auto Scaling group",
     "placement": "A fleet of instances lives where instances live: the mid band, in private subnets, spread across both Availability Zones."
+  },
+  "waf-web-acl": {
+    "label": "WAF web ACL",
+    "placement": "A web ACL hangs beneath the load balancer it protects, like a net: drop it in the low band, and it is associated with the load balancer there."
   }
 }

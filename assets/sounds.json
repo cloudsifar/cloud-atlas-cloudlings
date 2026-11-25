@@ -119,6 +119,27 @@
         }
       ]
     },
+    "blocked-waf": {
+      "file": null,
+      "placeholder": [
+        {
+          "wave": "noise",
+          "from": 1800,
+          "to": 600,
+          "start": 0,
+          "duration": 0.18,
+          "gain": 0.22
+        },
+        {
+          "wave": "triangle",
+          "from": 520,
+          "to": 300,
+          "start": 0.02,
+          "duration": 0.16,
+          "gain": 0.2
+        }
+      ]
+    },
     "no-route": {
       "file": null,
       "placeholder": [

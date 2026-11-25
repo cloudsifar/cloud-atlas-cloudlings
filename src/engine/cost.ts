@@ -11,6 +11,8 @@
 // - An Internet Gateway and an IAM role have no charge.
 // - A larger instance costs more whether or not the extra capacity is used.
 // - A Multi-AZ database costs about twice a single-AZ one: you pay for the standby too.
+// - An AWS WAF web ACL is charged by the month, plus a little per rule and per million
+//   requests: much less than the load balancer it protects.
 
 import { runningCount } from './autoScaling'
 import type { Resource, Scene } from './model'
@@ -33,6 +35,8 @@ export function coinsFor(resource: Resource): number {
       return 1
     case 'rds-database':
       return resource.multiAz ? 12 : 6
+    case 'waf-web-acl':
+      return 1 + Math.ceil(resource.rules.length / 2)
     case 'internet-gateway':
     case 'iam-role':
       return 0

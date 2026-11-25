@@ -70,6 +70,7 @@ export function workingScene(): Scene {
       {
         id: 'nacl-default',
         name: 'Default NACL',
+        isDefault: true,
         inbound: [{ ...allowAllRule }],
         outbound: [{ ...allowAllRule }],
       },

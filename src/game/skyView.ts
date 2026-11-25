@@ -199,7 +199,17 @@ export function createSkyView(
       showRun && state.phase !== 'flying'
         ? (state.lastRun?.kiteRuns ?? [])
             .filter((kiteRun) => kiteRun.result.outcome === 'breach')
-            .map((kiteRun) => kiteRun.kite.destinationId)
+            .map((kiteRun) => {
+              // What the attack got into: the cloud it was delivered to (a web server
+              // behind the load balancer, say), else the cloud it aimed at.
+              const delivered = [...kiteRun.result.trace]
+                .reverse()
+                .find((step) => step.check === 'delivery' && step.at.kind === 'resource')
+              const id = delivered?.at.kind === 'resource' ? delivered.at.id : undefined
+              return id && state.scene.resources.some((resource) => resource.id === id)
+                ? id
+                : kiteRun.kite.destinationId
+            })
         : []
 
     drawSky(context!, {

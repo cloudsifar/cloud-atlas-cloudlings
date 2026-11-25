@@ -42,6 +42,11 @@ export type Kite = {
   action?: ServiceAction
   /** Work the application does when the request arrives, e.g. storing an upload. */
   backendCall?: BackendCall
+  /**
+   * Requests this Cloudling sends in five minutes, for a WAF rate-based rule. Leave it
+   * out for an ordinary visitor; a flood is thousands, and is drawn as a flock of kites.
+   */
+  rate?: number
   /** A few words naming what the kite does, e.g. "uploads a photo"; used in the trace inspector. */
   label: string
   /** What the Cloudling says in its speech bubble when clicked, in its own voice. */
@@ -67,8 +72,12 @@ export type NarrationTrigger =
   | { kind: 'card-opened'; subjectId: string }
   /** The scene satisfies a predicate (e.g. a cloud was placed, a rule was added). */
   | { kind: 'scene'; predicate: Predicate }
-  /** The kites have flown, whatever happened to them. */
-  | { kind: 'run-finished' }
+  /**
+   * The kites have flown since this step began, whatever happened to them; with a
+   * `predicate`, a flight of the scene as it is now, in which the predicate held. So a
+   * step can say "add this rule and fly", and the next one explain what the flight showed.
+   */
+  | { kind: 'run-finished'; predicate?: Predicate }
   /** The kites have flown and every objective was met. Use this before a step that congratulates. */
   | { kind: 'level-complete' }
 
@@ -94,8 +103,9 @@ export type NarrationStep = {
  * The config card sections that can pulse, and what the id after the colon names:
  * a security group, a route table, a load balancer (its listener or its targets), a
  * role (its statements or who wears it), an instance (the role it wears), an Auto
- * Scaling group (its scaling policy, its subnets or its minimum size), or an RDS database
- * (Multi-AZ).
+ * Scaling group (its scaling policy, its subnets or its minimum size), an RDS database
+ * (Multi-AZ), a network ACL (its rules), a subnet (which network ACL it uses), or a web
+ * ACL (its rules).
  */
 export const PULSE_SECTIONS = [
   'security-group',
@@ -108,6 +118,9 @@ export const PULSE_SECTIONS = [
   'group-scaling',
   'group-subnets',
   'group-size',
+  'network-acl',
+  'subnet-network-acl',
+  'web-acl-rules',
   'database-multi-az',
 ] as const
 

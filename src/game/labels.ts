@@ -8,6 +8,7 @@ export const CHECK_LABELS: Record<CheckKind, string> = {
   nacl: 'Network ACL',
   'security-group': 'Security group',
   listener: 'Listener',
+  waf: 'AWS WAF',
   'target-selection': 'Target choice',
   iam: 'IAM',
   'block-public-access': 'Block Public Access',

@@ -48,6 +48,13 @@ export {
 export { resolveRoute, isPublicSubnet, type RouteDecision, type RouteQuery } from './routing'
 export { evaluateSecurityGroups, type ConnectionPeer } from './securityGroups'
 export { evaluateNetworkAcl } from './networkAcls'
+export {
+  evaluateWebAcl,
+  describeWafRule,
+  ORDINARY_RATE,
+  RATE_WINDOW_MINUTES,
+  LOWEST_RATE_LIMIT,
+} from './waf'
 export { evaluateIdentityPolicy } from './iam'
 export { evaluateBucketAccess, isBucketPublic, hasPublicStatement, type Caller } from './s3'
 export { validateScene, type SceneProblem } from './validate'

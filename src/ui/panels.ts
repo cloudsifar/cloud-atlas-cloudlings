@@ -25,6 +25,7 @@ import {
   membersTimedOut,
   OUTCOME_LABELS,
   playedTicks,
+  spriteIdOf,
   settledFrom,
   type GameState,
   type LogEntry,
@@ -63,6 +64,7 @@ function familyIcon(kind: ResourceKind): HTMLCanvasElement {
       sunlight: 0,
       burst: 0,
       opacity: 1,
+      art: spriteIdOf(kind),
     })
   return icon
 }
