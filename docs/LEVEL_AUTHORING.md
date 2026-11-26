@@ -90,12 +90,25 @@ An RDS database is a resource like any other:
   "securityGroupIds": ["sg-db"],
   "primarySubnetId": "private-a",
   "multiAz": false,
-  "status": "available"
+  "status": "available",
+  "encryption": { "kind": "kms", "keyId": null }
 }
 ```
 
 Its subnets are its DB subnet group: private, in both zones, with the primary among
 them. Its security group should allow the engine's port (`mysql` or `postgresql`).
+`encryption` is `{ "kind": "none" }` (created unencrypted, as in Level 8), or
+`{ "kind": "kms", "keyId": null }` for the AWS managed key aws/rds (Level 6's
+database), or `{ "kind": "kms", "keyId": "<kms-key id>" }`.
+
+A customer managed KMS key (Level 8) is `{ "kind": "kms-key", "id": "shop-key",
+"name": "shop-key" }`: it lives in the high band, and in a palette entry it protects
+nothing until the player chooses it. A bucket's `encryption` is `{ "kind": "sse-s3" }`,
+`{ "kind": "sse-kms", "keyId": null }` (aws/s3) or `{ "kind": "sse-kms", "keyId":
+"<kms-key id>" }`. A role that reads or writes a bucket under a customer managed key
+needs `kms:Use` on the key. A red kite reading a bucket reads the objects stored before
+the level began, which keep SSE-S3 whatever the default says: start every level's
+buckets on SSE-S3, or the trace's explanation is wrong.
 
 An AWS WAF web ACL (Level 7) protects one load balancer:
 
@@ -274,6 +287,9 @@ The predicates available today (`src/engine/predicates.ts`):
 | `network-acl-allows`                      | The network ACL has an allow rule in `direction` for `ports` from (or to) `peer`                                                            |
 | `network-acl-rules-spaced`                | The network ACL's rule numbers, in each direction, start at `gap` or above and are at least `gap` apart (AWS: leave room, 100, 110, 120)    |
 | `web-acl-protects`                        | A web ACL is associated with the load balancer `loadBalancerId` and has every rule kind in `rules`                                          |
+| `bucket-encrypted-with-customer-key`      | The bucket's default encryption is SSE-KMS with a customer managed key that exists                                                          |
+| `database-encrypted`                      | The database is encrypted at rest, with any key                                                                                             |
+| `one-customer-key`                        | Every one of `resourceIds` (buckets and databases) is encrypted under one and the same customer managed key                                 |
 
 Select kites with `{ "intent": "legitimate" }`, `{ "intent": "hostile" }` or
 `{ "flowIds": ["green-1"] }`. Values for `by`: `route`, `nacl`, `security-group`,
@@ -334,8 +350,9 @@ say "over here" (ADR 0008), e.g. `"pulse": ["security-group:sg-alb"]`. The secti
 `instance-role:<instance id>`, `group-scaling:<group id>`, `group-subnets:<group id>`,
 `group-size:<group id>` (the minimum), `database-multi-az:<database id>`,
 `network-acl:<network ACL id>` (its heading on a subnet's card),
-`subnet-network-acl:<subnet id>` (the subnet's "This subnet uses" choice) and
-`web-acl-rules:<web ACL id>`. In Levels 1–3 every step that asks for a setting to
+`subnet-network-acl:<subnet id>` (the subnet's "This subnet uses" choice),
+`web-acl-rules:<web ACL id>`, `bucket-bpa:<bucket id>`, `bucket-encryption:<bucket id>`,
+`database-encryption:<database id>` and `key-users:<kms-key id>`. In Levels 1–3 every step that asks for a setting to
 change must have one; the level tests check it.
 
 **Linking a phrase to a fact card.** A step's text may contain

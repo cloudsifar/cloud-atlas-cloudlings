@@ -56,6 +56,7 @@ const database = (overrides: Partial<RdsDatabase> = {}): RdsDatabase => ({
   primarySubnetId: 'private-a',
   multiAz: false,
   status: 'available',
+  encryption: { kind: 'kms', keyId: null },
   ...overrides,
 })
 

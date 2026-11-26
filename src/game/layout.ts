@@ -29,6 +29,8 @@ export type CloudGenus =
   | 'altostratus'
   | 'cumulonimbus'
   | 'cirrus'
+  /** A thin veil that forms halos: a KMS key (brief, Section 6). */
+  | 'cirrostratus'
   /** Not a cloud: AWS WAF is a woven net slung beneath the load balancer (brief, Section 6). */
   | 'net'
 
@@ -43,6 +45,7 @@ export const GENUS_OF: Record<ResourceKind, CloudGenus> = {
   // Flat, layered, steady: structured, persistent data (brief, Section 6).
   'rds-database': 'altostratus',
   'waf-web-acl': 'net',
+  'kms-key': 'cirrostratus',
 }
 
 /** Which band of sky each kind of cloud belongs to. 'vertical' spans every band. */
@@ -58,6 +61,7 @@ export const BAND_OF: Record<ResourceKind, SkyBand> = {
   'iam-role': 'high',
   'rds-database': 'mid',
   'waf-web-acl': 'low',
+  'kms-key': 'high',
 }
 
 // The fixed geometry of the sky. Altitude means distance from the internet:
@@ -126,6 +130,9 @@ export function layoutScene(scene: Scene): SceneLayout {
   const lowCentreY = (SKY.low.top + SKY.low.bottom) / 2
   const midCentreY = (SKY.mid.top + SKY.mid.bottom) / 2
 
+  // A database shares the private subnets with the web servers: they move up, so the
+  // database and its caption fit below them (Level 8).
+  const sharingWithDatabase = resourcesOfKind(scene, 'rds-database').length > 0
   // Resources sharing a subnet are spread side by side.
   const placeInSubnet = (kind: 'ec2-instance' | 'nat-gateway') => {
     for (const subnet of scene.subnets) {
@@ -138,7 +145,10 @@ export function layoutScene(scene: Scene): SceneLayout {
         if (kind === 'ec2-instance') {
           const offset = (index - (members.length - 1) / 2) * 120
           clouds[resource.id] = centred(
-            { x: rect.x + rect.width / 2 + offset, y: midCentreY + 4 },
+            {
+              x: rect.x + rect.width / 2 + offset,
+              y: sharingWithDatabase ? SKY.mid.top + 36 : midCentreY + 4,
+            },
             kind,
           )
         } else {
@@ -178,6 +188,17 @@ export function layoutScene(scene: Scene): SceneLayout {
         const index = resourcesOfKind(scene, 'iam-role').indexOf(resource)
         clouds[resource.id] = centred(
           { x: 330 + index * 170, y: (SKY.high.top + SKY.high.bottom) / 2 },
+          resource.kind,
+        )
+        break
+      }
+      case 'kms-key': {
+        // Managed services share the high band: keys after the roles, nearer the bucket.
+        const index =
+          resourcesOfKind(scene, 'iam-role').length +
+          resourcesOfKind(scene, 'kms-key').indexOf(resource)
+        clouds[resource.id] = centred(
+          { x: 330 + index * 170 + 40, y: (SKY.high.top + SKY.high.bottom) / 2 },
           resource.kind,
         )
         break

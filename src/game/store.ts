@@ -49,6 +49,20 @@ export type Store = {
 const rehearsals = new WeakMap<Scene, LevelRun>()
 
 /**
+ * What flying this scene would show, without flying it: the same pure, deterministic
+ * run, worked out once per scene. The Fly button's pointer and the attacker's string
+ * snapping when a breach is fixed both ask it.
+ */
+export function rehearse(level: Level, scene: Scene): LevelRun {
+  let rehearsal = rehearsals.get(scene)
+  if (!rehearsal) {
+    rehearsal = runLevel(level, scene)
+    rehearsals.set(scene, rehearsal)
+  }
+  return rehearsal
+}
+
+/**
  * Whether the narrator's current step is waiting only for a flight: it moves on after a
  * run of the change it asked for, and the sky as it stands would satisfy it. The Fly
  * button points itself out then, so a step that says "make this change" never leaves
@@ -59,11 +73,7 @@ export function readyToFly(state: GameState): boolean {
   if (state.phase === 'flying' || state.lastRunIsCurrent) return false
   const trigger = state.level.narration[state.narrationIndex]?.advanceWhen
   if (trigger?.kind !== 'run-finished' || trigger.predicate === undefined) return false
-  let rehearsal = rehearsals.get(state.scene)
-  if (!rehearsal) {
-    rehearsal = runLevel(state.level, state.scene)
-    rehearsals.set(state.scene, rehearsal)
-  }
+  const rehearsal = rehearse(state.level, state.scene)
   return evaluatePredicate(
     state.scene,
     rehearsal.kiteRuns,

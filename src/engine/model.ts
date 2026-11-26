@@ -160,9 +160,36 @@ export type S3Bucket = {
   policy: BucketPolicyStatement[]
   /** What the bucket holds: decides whether public access is a breach or a legitimate website. */
   dataClass: 'sensitive' | 'public-content'
-  /** New objects are always encrypted at rest; SSE-S3 is the default since January 2023. */
-  encryption: { kind: 'sse-s3' }
+  /**
+   * Default encryption: how S3 encrypts each new object (docs/ENGINE.md, section 17).
+   * New objects are always encrypted at rest; SSE-S3 is the default since January 2023.
+   * Changing it does not re-encrypt the objects already stored.
+   */
+  encryption: BucketEncryption
 }
+
+/**
+ * - `sse-s3`: keys S3 manages for you; nobody needs a KMS permission.
+ * - `sse-kms` with `keyId: null`: the AWS managed key aws/s3, whose key policy lets every
+ *   principal in the account use it through S3.
+ * - `sse-kms` with a key id: a customer managed key (a `kms-key` resource). The caller
+ *   needs permission to use it, from IAM, since the key's default policy delegates to IAM.
+ */
+export type BucketEncryption = { kind: 'sse-s3' } | { kind: 'sse-kms'; keyId: string | null }
+
+/**
+ * Encryption at rest for an RDS database, chosen when the database is created and fixed
+ * from then on. `keyId: null` is the AWS managed key aws/rds; otherwise a `kms-key`.
+ */
+export type DatabaseEncryption = { kind: 'none' } | { kind: 'kms'; keyId: string | null }
+
+/**
+ * A customer managed KMS key (brief, Section 7: cirrostratus, the high band). Its key
+ * policy is the default one, which lets IAM policies in the account decide who may use
+ * it. AWS managed keys (aws/s3, aws/rds) are not resources: a bucket or database names
+ * them with `keyId: null`.
+ */
+export type KmsKey = { kind: 'kms-key'; id: string; name: string }
 
 export type IamRole = { kind: 'iam-role'; id: string; name: string; statements: PolicyStatement[] }
 
@@ -222,6 +249,11 @@ export type RdsDatabase = {
    * 'unavailable' when the primary's AZ has failed and there is no standby.
    */
   status: 'available' | 'failing-over' | 'unavailable'
+  /**
+   * Encryption at rest: set only when a database is created. An unencrypted database is
+   * replaced by an encrypted copy (snapshot, encrypted copy, restore), never changed.
+   */
+  encryption: DatabaseEncryption
 }
 
 /**
@@ -269,6 +301,7 @@ export type Resource =
   | IamRole
   | RdsDatabase
   | WafWebAcl
+  | KmsKey
 
 export type ResourceKind = Resource['kind']
 

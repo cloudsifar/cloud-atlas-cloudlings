@@ -279,6 +279,27 @@
         }
       ]
     },
+    "string-snap": {
+      "file": null,
+      "placeholder": [
+        {
+          "wave": "noise",
+          "from": 3200,
+          "to": 1400,
+          "start": 0,
+          "duration": 0.05,
+          "gain": 0.3
+        },
+        {
+          "wave": "triangle",
+          "from": 880,
+          "to": 180,
+          "start": 0.03,
+          "duration": 0.32,
+          "gain": 0.18
+        }
+      ]
+    },
     "placed": {
       "file": null,
       "placeholder": [

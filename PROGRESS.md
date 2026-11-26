@@ -9,8 +9,9 @@ Running log. Newest state first; updated at the end of every milestone.
       balancer target selection) with tests citing AWS docs; `docs/ENGINE.md`,
       `docs/SIMPLIFICATIONS.md`
 - [x] **Milestone 2** — Levels 1–3 playable with placeholder art
-- [ ] **Milestone 3** — in progress: Levels 4 (Skyway), 5 (Crowd Day), 6 (Storm Front)
-      and 7 (The Wrong Kite) finished; Levels 8–12 and the rest of the engine to do. See "Handover: what to build next" below
+- [ ] **Milestone 3** — in progress: Levels 4 (Skyway), 5 (Crowd Day), 6 (Storm Front),
+      7 (The Wrong Kite) and 8 (Under Lock) finished; Levels 9–12 and the rest of the
+      engine to do. See "Handover: what to build next" below
 - [ ] Milestone 4 — shell (partly started: start screen, level select with ticks and stars,
       Guided Run from Level 1 with "Next level", settings)
 - [ ] Milestone 5 — finish
@@ -63,6 +64,21 @@ Running log. Newest state first; updated at the end of every milestone.
       8 and 16 and back down, with the log reading as expected minute by minute. The
       level was completed with three stars, and every narrator step advanced.
     - No console errors in any of these runs.
+  - Level 8, Under Lock (ADR 0018), on the esbuild bundle, 26 November 2026, every
+    step through the interface:
+    - The first run: the red Cloudling reads the receipts, a breach; the bucket stays
+      red with the string attached.
+    - Block Public Access switched on: the string snapped before any flight (seen at
+      250 and 850 ms); the public statement unticked; the Fly button pointed.
+    - The KMS key dragged in; the bucket set to SSE-KMS with it: both uploads fizzled
+      at the key, order lookups answered.
+    - `kms:Use` on the bucket refused on the role's card, with its reason; on the key,
+      accepted: every visitor answered.
+    - The database replaced with an aws/rds copy: two stars and the hint; then with a
+      `shop-key` copy: three stars, three matching halos.
+    - The key's card refused removal while in use. No console errors.
+    - Level 7's first steps replayed: switching Public subnet A to `edge-acl` snapped
+      the one attacker whose path it closed.
   - Level 7, The Wrong Kite (ADR 0017), on the esbuild bundle, 26 November 2026,
     every step through the interface:
     - The first run: three breaches (both web servers marked compromised).
@@ -116,13 +132,16 @@ Running log. Newest state first; updated at the end of every milestone.
 ## Not verified — do these first
 
 1. **Vitest, the Vite build and lint on Windows, on everything since 18 November**
-   (ADRs 0007–0017). In that time the suite has run only on the offline runner
-   (378 tests), and ESLint, Prettier and the project `tsc` were run against the
+   (ADRs 0007–0018). In that time the suite has run only on the offline runner
+   (419 tests), and ESLint, Prettier and the project `tsc` were run against the
    installed packages from the cloud sandbox. On Windows, after `git pull`:
-   `npm ci --ignore-scripts`, then `npm test` (expect 24 test files and **378 passed**),
+   `npm ci --ignore-scripts`, then `npm test` (expect 26 test files and **419 passed**),
    `npm run build` (writes `dist/`, including `dist/sounds/README.md`) and
    `npm run lint`. Read each output, not only the exit code.
-2. **Level 7 played by a person** (ADR 0017): whether the nine steps read clearly and
+2. **Level 8 played by a person** (ADR 0018): whether the eight steps leave time to
+   see each result; whether the snapped string reads as "fixed"; whether the halos and
+   their captions make "one key, both stores" clear; the placeholder `string-snap`
+   sound. **Level 7 played by a person** (ADR 0017): whether the nine steps read clearly and
    leave time to see each result; whether the reply drop on the bottom edge is easy to
    find; whether the WAF net and the netted kites read as caught; the new `blocked-waf`
    placeholder sound. Then **Level 6 replayed** after Simon's first-play changes (ADR 0015): the
@@ -191,8 +210,8 @@ Running log. Newest state first; updated at the end of every milestone.
 
 ## Not started (from the brief)
 
-- Engine: instance failure outside an AZ failure, RDS encryption and read replicas,
-  DynamoDB, SQS, SNS, Lambda, KMS, SSM, Route 53,
+- Engine: instance failure outside an AZ failure, RDS read replicas,
+  DynamoDB, SQS, SNS, Lambda, SSM, Route 53,
   CloudWatch alarms other than a scaling policy's (e.g. publishing to SNS), EBS, EFS,
   DynamoDB gateway endpoint flows, and the cost penalty for idle oversized instances.
 - Levels 7–12.
@@ -288,11 +307,15 @@ Still not done for Level 6, and left for later milestones:
 hostile crowd. Still open for it: the fact cards' `atlasPage` links (`TODO(Simon)`) and
 the `blocked-waf` placeholder sound.
 
-**Level 8, Under Lock (next).** Brief, Section 11. Needs KMS (a customer managed key,
-SSE-KMS on the bucket, `kms:Use` in the role), encryption at rest on RDS set only at
-creation (replace the database), and a first run that ends in a breach of a sensitive
-bucket. The art manifest already has a planned `construct.kms-halo`: give it a hook
-and take it out of `planned` (ADR 0016).
+**Level 8, Under Lock: done** (ADR 0018). Still open for it: the fact cards'
+`atlasPage` links (`TODO(Simon)`) and the `string-snap` placeholder sound.
+
+**Level 9, No Keys at the Door (next).** Brief, Section 11. Needs SSM Session Manager
+(an operator Cloudling with a box-shaped kite, a session drawn from the cirrocumulus to
+the instance), `ssm:ManagedInstance` on the instance role, an outbound path to SSM
+through a NAT Gateway, and a red kite probing port 22. The art manifest already has
+planned `cloudling.operator.idle` and `kite.operator.flying` entries: give them hooks
+and take them out of `planned` (ADR 0016).
 
 **Smaller jobs, any time.**
 
@@ -456,3 +479,13 @@ Two places where the brief's wording was made more exact:
   so. When a step waits for a flight of a change and the sky would now satisfy it, the
   Fly button points itself out. 378 tests pass offline; step 5 played headlessly: no
   pointer before the rule, pointer after it, step 6 after the flight.
+- **Session 3, continued: Level 8, Under Lock (ADR 0018).** Customer managed KMS keys
+  in the high band; bucket default encryption (SSE-S3, SSE-KMS with aws/s3 or a
+  customer managed key) with the KMS check after S3 authorises the role; RDS encryption
+  at rest set only at creation, with "Replace with an encrypted copy"; halos in each
+  key's colour with captions in words; a key in use cannot be removed; the role card
+  refuses statements whose action belongs to another service. Breaches now outlast
+  their run, and the attacker's string snaps as soon as a rehearsal of the changed sky
+  would turn it away (every level). SIMPLIFICATIONS 45–51; THREATS row for Level 8. 419
+  tests pass offline; played headlessly through every step to three stars, no console
+  errors.

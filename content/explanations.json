@@ -30,5 +30,9 @@
   "waf-web-acl": {
     "label": "WAF web ACL",
     "placement": "A web ACL hangs beneath the load balancer it protects, like a net: drop it in the low band, and it is associated with the load balancer there."
+  },
+  "kms-key": {
+    "label": "KMS key",
+    "placement": "A KMS key lives in the high band with the other managed services, outside the VPC. On its own it protects nothing: choose it in a bucket's default encryption, or for a database's encrypted copy."
   }
 }

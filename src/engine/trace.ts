@@ -61,6 +61,8 @@ export type CheckKind =
   | 'waf'
   | 'target-selection'
   | 'iam'
+  /** AWS KMS: may the caller use the key that protects the data? (kms.ts) */
+  | 'kms'
   | 'block-public-access'
   | 'bucket-policy'
   | 'delivery'

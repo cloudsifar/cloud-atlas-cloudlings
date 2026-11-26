@@ -1,0 +1,780 @@
+{
+  "id": 8,
+  "slug": "under-lock",
+  "title": "Under Lock",
+  "concept": "Access control and encryption at rest are different defences: close a public bucket that holds sensitive data, then protect the data with a customer managed KMS key (SSE-KMS), which the application's role must be allowed to use, and replace an unencrypted RDS database with an encrypted copy, since RDS encrypts only at creation.",
+  "guidance": "hints",
+  "region": "sa-east-1",
+  "azs": 2,
+  "lockedIds": [
+    "igw",
+    "alb",
+    "rt-public",
+    "rt-private",
+    "nacl-default",
+    "sg-alb",
+    "sg-app",
+    "sg-db",
+    "app-a",
+    "app-b",
+    "public-a",
+    "public-b",
+    "private-a",
+    "private-b"
+  ],
+  "palette": [
+    {
+      "resource": {
+        "kind": "kms-key",
+        "id": "shop-key",
+        "name": "shop-key"
+      }
+    }
+  ],
+  "removableIds": [],
+  "narration": [
+    {
+      "id": "brief",
+      "text": "Under Lock, back at the São Paulo hat shop. Visitors upload receipts to an S3 bucket and look up orders in an RDS database. An auditor has two worries: who can read the receipts, and who holds the keys that protect the data. Read the bucket's card, then fly the kites.",
+      "highlight": "button:fly",
+      "advanceWhen": {
+        "kind": "run-finished"
+      }
+    },
+    {
+      "id": "what-happened",
+      "text": "The red Cloudling read every receipt, names and home addresses, straight from the bucket: a breach, and its string is still attached. The bucket is public because Block Public Access is off and its policy lets everyone read. Either one alone would have kept it closed.",
+      "highlight": "resource:receipts",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    },
+    {
+      "id": "close",
+      "text": "Close the bucket. On its card, switch Block Public Access on, and untick the policy that lets everyone read: Block Public Access overrides it, but a permission nobody needs is waiting for the day someone switches it off. Then fly.",
+      "highlight": "resource:receipts",
+      "pulse": ["bucket-bpa:receipts"],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "flows-stopped",
+          "flows": {
+            "flowIds": ["red-reader"]
+          }
+        }
+      }
+    },
+    {
+      "id": "key",
+      "text": "The red kite is turned away. The receipts were never unencrypted: since January 2023 S3 encrypts every new object (SSE-S3), with keys S3 manages. The auditor wants a key the shop controls, with every use logged. Drag a KMS key from the tray: a customer managed key.",
+      "highlight": "palette:shop-key",
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "resource-exists",
+          "resourceId": "shop-key"
+        }
+      }
+    },
+    {
+      "id": "bucket-kms",
+      "text": "On the bucket's card, set Default encryption to SSE-KMS with shop-key. New receipts will be encrypted with it; the ones already stored keep their SSE-S3. Then fly the kites.",
+      "highlight": "resource:receipts",
+      "pulse": ["bucket-encryption:receipts"],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "bucket-encrypted-with-customer-key",
+          "bucketId": "receipts"
+        }
+      }
+    },
+    {
+      "id": "kms-use",
+      "text": "The uploads fizzled against the halo. With your own key, S3 asks KMS to use it as the web servers' role, and the key's default policy leaves that to IAM. On app-role's card, add: allow kms:Use on shop-key. Then fly.",
+      "highlight": "resource:app-role",
+      "pulse": ["role-statements:app-role"],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "flows-delivered",
+          "flows": {
+            "intent": "legitimate"
+          }
+        }
+      }
+    },
+    {
+      "id": "database",
+      "text": "Now the orders database: not encrypted, and RDS sets encryption only when a database is created, so that setting is greyed out. On its card, replace it with an encrypted copy. Then fly.",
+      "highlight": "resource:db",
+      "pulse": ["database-encryption:db"],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "database-encrypted",
+          "databaseId": "db"
+        }
+      }
+    },
+    {
+      "id": "wrap",
+      "text": "The receipts are closed to the internet, and both stores are [encrypted at rest](card:concept-encryption-at-rest): access control decides who reads, encryption protects the disks. No third star yet? Give the database's copy shop-key too: one key, one set of permissions, one log of every use.",
+      "pulse": ["database-encryption:db"],
+      "advanceWhen": {
+        "kind": "level-complete"
+      }
+    }
+  ],
+  "initialScene": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": [
+          {
+            "destination": "s3",
+            "target": {
+              "kind": "gateway-endpoint",
+              "service": "s3"
+            }
+          }
+        ]
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "isDefault": true,
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "ec2-app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-db",
+        "name": "rds-db-sg",
+        "inbound": [
+          {
+            "ports": "mysql",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-app"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "https",
+        "targetIds": ["app-a", "app-b"]
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-a",
+        "name": "Web server A",
+        "subnetId": "private-a",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-b",
+        "name": "Web server B",
+        "subnetId": "private-b",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "s3-bucket",
+        "id": "receipts",
+        "name": "receipts",
+        "blockPublicAccess": false,
+        "policy": [
+          {
+            "effect": "allow",
+            "principal": {
+              "kind": "everyone"
+            },
+            "actions": ["s3:Read"]
+          }
+        ],
+        "dataClass": "sensitive",
+        "encryption": {
+          "kind": "sse-s3"
+        }
+      },
+      {
+        "kind": "iam-role",
+        "id": "app-role",
+        "name": "app-role",
+        "statements": [
+          {
+            "effect": "allow",
+            "actions": ["s3:Write"],
+            "resource": "receipts"
+          }
+        ]
+      },
+      {
+        "kind": "rds-database",
+        "id": "db",
+        "name": "orders database",
+        "engine": "mysql",
+        "subnetIds": ["private-a", "private-b"],
+        "securityGroupIds": ["sg-db"],
+        "primarySubnetId": "private-a",
+        "multiAz": false,
+        "status": "available",
+        "encryption": {
+          "kind": "none"
+        }
+      }
+    ]
+  },
+  "population": [
+    {
+      "id": "green-1",
+      "kind": "friendly",
+      "groundPosition": 0,
+      "ip": "203.0.113.10",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "uploads a receipt to swap a hat for a bigger size",
+      "says": "Here's my receipt: can I swap it for a bigger size?",
+      "backendCall": {
+        "destinationId": "receipts",
+        "action": "s3:Write"
+      }
+    },
+    {
+      "id": "green-2",
+      "kind": "friendly",
+      "groundPosition": 1,
+      "ip": "192.0.2.20",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "looks up an order",
+      "says": "Has my hat been posted yet?",
+      "backendCall": {
+        "destinationId": "db"
+      }
+    },
+    {
+      "id": "green-3",
+      "kind": "friendly",
+      "groundPosition": 2,
+      "ip": "203.0.113.31",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "uploads a receipt for a refund",
+      "says": "Receipt attached. Refund, please!",
+      "backendCall": {
+        "destinationId": "receipts",
+        "action": "s3:Write"
+      }
+    },
+    {
+      "id": "green-4",
+      "kind": "friendly",
+      "groundPosition": 3,
+      "ip": "192.0.2.44",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "label": "looks up an order",
+      "says": "When will my hat arrive?",
+      "backendCall": {
+        "destinationId": "db"
+      }
+    },
+    {
+      "id": "red-reader",
+      "kind": "hostile",
+      "groundPosition": 5,
+      "ip": "198.51.100.70",
+      "destinationId": "receipts",
+      "port": 443,
+      "payload": "clean",
+      "action": "s3:Read",
+      "label": "reads every receipt in the bucket: names and home addresses",
+      "says": "An open bucket! Names, addresses, every order…"
+    }
+  ],
+  "events": [],
+  "objectives": [
+    {
+      "id": "receipts-closed",
+      "text": "The red Cloudling can no longer read the receipts",
+      "predicate": {
+        "kind": "flows-stopped",
+        "flows": {
+          "flowIds": ["red-reader"]
+        }
+      }
+    },
+    {
+      "id": "visitors-answered",
+      "text": "Every visitor is answered: receipts stored, orders found",
+      "predicate": {
+        "kind": "flows-delivered",
+        "flows": {
+          "intent": "legitimate"
+        }
+      }
+    },
+    {
+      "id": "receipts-own-key",
+      "text": "New receipts are encrypted with a customer managed KMS key",
+      "predicate": {
+        "kind": "bucket-encrypted-with-customer-key",
+        "bucketId": "receipts"
+      }
+    },
+    {
+      "id": "database-encrypted",
+      "text": "The orders database is encrypted at rest",
+      "predicate": {
+        "kind": "database-encrypted",
+        "databaseId": "db"
+      }
+    }
+  ],
+  "stars": {
+    "wellArchitected": {
+      "text": "One key, both stores: the receipts bucket and the orders database are encrypted with the same customer managed key, so one set of permissions and one log cover all the data",
+      "predicates": [
+        {
+          "kind": "one-customer-key",
+          "resourceIds": ["receipts", "db"]
+        }
+      ]
+    }
+  },
+  "hints": [
+    {
+      "objectiveId": "receipts-closed",
+      "nudge": "Follow the red kite. It never enters the VPC: what lets it into the bucket?",
+      "pointer": {
+        "text": "A bucket is public only when Block Public Access is off and the bucket policy grants everyone. Either switch alone closes it.",
+        "highlight": "resource:receipts"
+      },
+      "nearAnswer": "On the bucket's card, switch Block Public Access on, and untick the policy that lets everyone read."
+    },
+    {
+      "objectiveId": "visitors-answered",
+      "nudge": "Follow a green kite that uploads a receipt. Where does its rain stop?",
+      "pointer": {
+        "text": "With a customer managed key, S3 uses the key as the caller. The web servers' role needs permission to use it, as well as to write to the bucket.",
+        "highlight": "resource:app-role"
+      },
+      "nearAnswer": "On app-role's card, add a statement: allow kms:Use on shop-key."
+    },
+    {
+      "objectiveId": "receipts-own-key",
+      "nudge": "SSE-S3 already encrypts every receipt. Whose key is it?",
+      "pointer": {
+        "text": "SSE-S3 keys belong to S3, and aws/s3 belongs to AWS. A customer managed key is a KMS key you create: drag one from the tray.",
+        "highlight": "palette:shop-key"
+      },
+      "nearAnswer": "Place the KMS key, then set the bucket's Default encryption to SSE-KMS with shop-key."
+    },
+    {
+      "objectiveId": "database-encrypted",
+      "nudge": "The database card's encryption setting is greyed out. Why can't you just tick it?",
+      "pointer": {
+        "text": "RDS sets encryption only when a database is created. An unencrypted one is replaced by an encrypted copy: snapshot, copy with encryption, restore.",
+        "highlight": "resource:db"
+      },
+      "nearAnswer": "On the database's card, choose a key and press Replace with an encrypted copy."
+    }
+  ],
+  "factCards": ["kms-key", "concept-encryption-at-rest", "s3-bucket", "rds-database", "iam-role"],
+  "referenceSolution": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": [
+          {
+            "destination": "s3",
+            "target": {
+              "kind": "gateway-endpoint",
+              "service": "s3"
+            }
+          }
+        ]
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "isDefault": true,
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "ec2-app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-db",
+        "name": "rds-db-sg",
+        "inbound": [
+          {
+            "ports": "mysql",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-app"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "https",
+        "targetIds": ["app-a", "app-b"]
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-a",
+        "name": "Web server A",
+        "subnetId": "private-a",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-b",
+        "name": "Web server B",
+        "subnetId": "private-b",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "s3-bucket",
+        "id": "receipts",
+        "name": "receipts",
+        "blockPublicAccess": true,
+        "policy": [],
+        "dataClass": "sensitive",
+        "encryption": {
+          "kind": "sse-kms",
+          "keyId": "shop-key"
+        }
+      },
+      {
+        "kind": "iam-role",
+        "id": "app-role",
+        "name": "app-role",
+        "statements": [
+          {
+            "effect": "allow",
+            "actions": ["s3:Write"],
+            "resource": "receipts"
+          },
+          {
+            "effect": "allow",
+            "actions": ["kms:Use"],
+            "resource": "shop-key"
+          }
+        ]
+      },
+      {
+        "kind": "rds-database",
+        "id": "db",
+        "name": "orders database",
+        "engine": "mysql",
+        "subnetIds": ["private-a", "private-b"],
+        "securityGroupIds": ["sg-db"],
+        "primarySubnetId": "private-a",
+        "multiAz": false,
+        "status": "available",
+        "encryption": {
+          "kind": "kms",
+          "keyId": "shop-key"
+        }
+      },
+      {
+        "kind": "kms-key",
+        "id": "shop-key",
+        "name": "shop-key"
+      }
+    ]
+  }
+}

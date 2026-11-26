@@ -274,7 +274,8 @@
         "securityGroupIds": ["sg-db"],
         "primarySubnetId": "private-a",
         "multiAz": false,
-        "status": "available"
+        "status": "available",
+        "encryption": { "kind": "kms", "keyId": null }
       }
     ]
   },
@@ -595,7 +596,8 @@
         "securityGroupIds": ["sg-db"],
         "primarySubnetId": "private-a",
         "multiAz": true,
-        "status": "available"
+        "status": "available",
+        "encryption": { "kind": "kms", "keyId": null }
       }
     ]
   }

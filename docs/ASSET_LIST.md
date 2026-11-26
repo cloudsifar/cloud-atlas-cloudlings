@@ -40,6 +40,7 @@ No code changes. If a picture fails to load, its placeholder is drawn instead.
 | `cloud.cumulonimbus.s3-bucket` | 150 × 380 | 0.5, 0.5 | 1 | base + highlight layers | S3 bucket: a tall cumulonimbus with an anvil top, spanning every band of sky. | placeholder |
 | `cloud.cirrus.iam-role` | 130 × 50 | 0.5, 0.5 | 1 | base + highlight layers | IAM role: wispy cirrus in the high band; a thread runs down from it to the clouds that wear it. | placeholder |
 | `cloud.altostratus.rds-database` | 124 × 34 | 0.5, 0.5 | 1 | base + highlight layers | RDS database: a flat, layered altostratus in a private subnet. A Multi-AZ standby is the same graphic, drawn faint in the other zone. | placeholder |
+| `cloud.cirrostratus.kms-key` | 120 × 40 | 0.5, 0.5 | 1 | base + highlight layers | KMS key (customer managed): a thin cirrostratus veil in the high band, with a faint halo in the key's colour. Every cloud encrypted with this key wears the same halo. | placeholder |
 | `construct.waf-net` | 300 × 30 | 0.5, 0.5 | 1 | base + highlight layers. Idle and changed (golden sunlight), tinted in code like a cloud. | AWS WAF web ACL: a woven net slung just beneath the load balancer. Red kites it blocks are caught in it, then fall. | placeholder |
 
 ### Cloudlings
@@ -81,6 +82,7 @@ No code changes. If a picture fails to load, its placeholder is drawn instead.
 | `effect.lightning.ground` | 40 × 220 | 0.5, 0 | 1 | between two points, stretched | Availability Zone failure: lightning from the sky to the ground over the failed zone. Stretched from top to ground. | placeholder |
 | `effect.lightning.cloud` | 120 × 30 | 0, 0.5 | 1 | between two points, stretched | Failover: lightning arcing from cloud to cloud (primary to standby). Stretched between them. | placeholder |
 | `effect.rain` | 24 × 60 | 0.5, 0 | 4 at 10 fps |  | Response returned: a short column of rain falling from a cloud onto the Cloudling below. | placeholder |
+| `construct.kms-halo` | 160 × 90 | 0.5, 0.5 | 1 | between two points, stretched | KMS halo: a faint ring around a cloud whose data is encrypted with a KMS key, in that key's colour (Level 8). Stretched to fit around the cloud: tall round the bucket, flat round the database. | placeholder |
 
 ### Cloudlings
 
@@ -144,7 +146,6 @@ hooked up, with its entry checked by the tests, when the feature that shows it i
 | `cloudling.operator.idle` | 34 × 58 | The operator Cloudling (Level 9): a distinct hat, holding a box-shaped kite. |
 | `kite.operator.flying` | 30 × 30 | The operator's box-shaped kite (Level 9). |
 | `kite.hostile.stolen` | 44 × 40 | A hostile kite carrying stolen raindrops down its string after a breach. |
-| `construct.kms-halo` | 160 × 90 | KMS: a halo around a cloud whose data is encrypted (Level 8). |
 | `construct.efs-mist` | 300 × 60 | EFS: a shared mist between instances in both zones (Level 10). |
 | `construct.ebs-wisp` | 40 × 30 | EBS: a small wisp tied beneath one instance (Level 10). |
 | `effect.wind-lines` | 120 × 20 | Forwarded: a breeze along visible wind lines to the next cloud. |

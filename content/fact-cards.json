@@ -65,10 +65,12 @@
   },
   "s3-bucket": {
     "title": "S3 bucket",
-    "body": "Object storage, outside your VPC, holding as much as you care to put in it. Block Public Access is on by default and overrides any policy that would open the bucket to everyone. Every new object is encrypted at rest by default.",
+    "body": "Object storage, outside your VPC, holding as much as you care to put in it. Block Public Access is on by default and overrides any policy that would open the bucket to everyone. Every new object is encrypted at rest: by default with SSE-S3 (keys S3 manages), or with SSE-KMS and a KMS key, AWS managed (aws/s3) or your own. Changing the default encryption affects new objects only.",
     "simplifications": [
       "Block Public Access is one switch here; in AWS it is four related settings.",
-      "Bucket policies can grant to everyone or to a named role, nothing finer."
+      "Bucket policies can grant to everyone or to a named role, nothing finer.",
+      "The objects a red Cloudling reads are the ones stored before the level began, encrypted with SSE-S3. The application's own reads and writes are of objects under the bucket's current default encryption.",
+      "No S3 Bucket Keys, object-level encryption headers or DSSE-KMS."
     ],
     "atlasPage": "TODO(Simon)"
   },
@@ -76,7 +78,7 @@
     "title": "IAM role",
     "body": "A set of permissions that a resource can wear. IAM denies everything by default; a statement must explicitly allow an action, and an explicit deny beats any allow. Grant only what is used: that is least privilege.",
     "simplifications": [
-      "Permissions are grouped into families such as s3:Read and s3:Write, on one resource or on everything (*).",
+      "Permissions are grouped into families such as s3:Read, s3:Write and kms:Use, on one resource or on everything (*).",
       "There are no users or access keys in the game: only roles."
     ],
     "atlasPage": "TODO(Simon)"
@@ -200,13 +202,14 @@
       "Its security group should allow MySQL 3306 (or PostgreSQL 5432) from the application tier's security group, not from an address range. An address range belongs to one subnet, in one zone; a security group follows the instances wherever they run.",
       "Single-AZ: one copy, in one zone. If that zone fails, the database is down until the zone comes back.",
       "Multi-AZ: RDS keeps a standby in another zone, updated with every write as it happens. If the primary's zone fails, RDS fails over to the standby by itself, typically in 60–120 seconds. The database's endpoint (its address) moves with it, so the application reconnects to the same name.",
-      "The standby serves nothing until it takes over: it is not for spreading reads. Read replicas are the feature for that."
+      "The standby serves nothing until it takes over: it is not for spreading reads. Read replicas are the feature for that.",
+      "Encryption at rest is chosen when a database is created, with the AWS managed key aws/rds or a customer managed key, and cannot be switched on later. To encrypt an existing database, snapshot it, copy the snapshot with encryption on, restore a new database from the copy, and point the application at it. The application needs no KMS permission: RDS uses the key itself."
     ],
     "simplifications": [
       "Database users and passwords, engine versions, storage and backups are left out: the application always has the right credentials here.",
       "A failover takes exactly 2 minutes here. In AWS it is typically 60–120 seconds, and can take longer.",
       "After a failover the database has no standby until its old zone recovers, and zones do not recover during a run here.",
-      "Encryption at rest is chosen when a database is created and cannot be added in place. This level does not show it."
+      "Replacing a database with an encrypted copy happens at once here, keeping its name. In AWS the copy and restore take a while, writes must pause or be replicated meanwhile, and keeping the old name means renaming the old database first."
     ],
     "atlasPage": "TODO(Simon)"
   },
@@ -238,6 +241,27 @@
   "concept-defence-in-depth": {
     "title": "Security at every layer",
     "body": "One of the Well-Architected security principles: apply security at all layers, because no single control sees everything. A network ACL turns addresses away at a subnet's edge, a security group decides which ports a cloud accepts and from whom, and AWS WAF reads the requests themselves. Each stops what the others cannot: here, the block-listed range at the edge, and the hidden script and the flood in WAF.",
+    "simplifications": [],
+    "atlasPage": "TODO(Simon)"
+  },
+  "kms-key": {
+    "title": "KMS key",
+    "body": "AWS Key Management Service keeps encryption keys and uses them for you: the keys never leave it. S3, RDS and many other services ask KMS to use a key whenever they encrypt or decrypt your data. An AWS managed key (aws/s3, aws/rds) is created and controlled by AWS for one service. A customer managed key is yours: you decide who may use it, you can switch on yearly rotation, and every use is recorded in CloudTrail. It costs about a dollar a month.",
+    "points": [
+      "Who may use a key is decided by its key policy. The default key policy lets IAM policies in the account decide, so a role needs permission to use the key.",
+      "With SSE-KMS and a customer managed key, S3 uses the key as the caller: storing an object needs kms:GenerateDataKey, reading one needs kms:Decrypt. Without them, the request fails at the key, even when the role may use the bucket.",
+      "Keys are Regional: a key protects data in its own Region, and its key policy applies only there."
+    ],
+    "simplifications": [
+      "kms:Use stands for the permissions S3 needs from a caller: kms:GenerateDataKey to store an object and kms:Decrypt to read one.",
+      "Every key here has the default key policy, which leaves permissions to IAM. Key policies, grants, aliases, rotation and multi-Region keys are left out.",
+      "A key that still encrypts something cannot be removed. In AWS you schedule a key's deletion, 7 to 30 days ahead, and data under a deleted key can never be read again."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "concept-encryption-at-rest": {
+    "title": "Encryption at rest",
+    "body": "Stored data is kept encrypted, so whoever got hold of the disks or the backups would find only scrambled bytes. It does not decide who may read the data: whoever the bucket or the database lets in gets it decrypted, which is why closing the bucket mattered first. Access control and encryption are different defences. S3 encrypts every new object by default, DynamoDB always encrypts, and an RDS database is encrypted if it was created that way. A customer managed key adds a second permission, checked separately: using the key.",
     "simplifications": [],
     "atlasPage": "TODO(Simon)"
   }

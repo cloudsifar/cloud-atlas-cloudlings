@@ -13,6 +13,9 @@
 // - A Multi-AZ database costs about twice a single-AZ one: you pay for the standby too.
 // - An AWS WAF web ACL is charged by the month, plus a little per rule and per million
 //   requests: much less than the load balancer it protects.
+// - A customer managed KMS key is charged by the month (about a dollar), plus a little
+//   per request; AWS managed keys (aws/s3, aws/rds) have no monthly charge, and SSE-S3
+//   costs nothing extra. Encrypting an RDS database adds nothing to its price.
 
 import { runningCount } from './autoScaling'
 import type { Resource, Scene } from './model'
@@ -37,6 +40,8 @@ export function coinsFor(resource: Resource): number {
       return resource.multiAz ? 12 : 6
     case 'waf-web-acl':
       return 1 + Math.ceil(resource.rules.length / 2)
+    case 'kms-key':
+      return 1
     case 'internet-gateway':
     case 'iam-role':
       return 0

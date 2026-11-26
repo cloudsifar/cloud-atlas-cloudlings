@@ -214,6 +214,11 @@ export type SkyViewModel = {
   crowd: CrowdRecord | null
   /** Resources a hostile kite has got into; they stay red until the cause is fixed. */
   compromisedIds: string[]
+  /**
+   * Breaches from an earlier run, shown after the scene has changed: the attacker's
+   * string stays attached until a fix would turn it away, then snaps (`snappedAt`).
+   */
+  standingBreaches: readonly StandingBreach[]
   /** When each recently changed resource began to glow gold (animation-clock time). */
   sunlightStartedAt: Record<string, number>
   /** 'resource:<id>' or 'subnet:<id>': what the narrator or a hint is pointing at. */
@@ -227,6 +232,20 @@ export type SkyViewModel = {
 }
 
 const SUNLIGHT_DURATION = 1100
+
+/** A breach that outlasts its run (brief, Section 6). */
+export type StandingBreach = {
+  kiteId: string
+  /** The cloud it got into. */
+  resourceId: string
+  /** Where the attacker's string is tied. */
+  at: Point
+  /** Animation-clock time the string snapped, or null while it holds. */
+  snappedAt: number | null
+}
+
+/** How long a snapped string takes to fall away (brief, Section 6: "the snapped string when a breach is fixed"). */
+export const SNAP_DURATION = 2400
 
 function caption(
   context: CanvasRenderingContext2D,
@@ -504,6 +523,42 @@ function drawContainers(context: CanvasRenderingContext2D, model: SkyViewModel):
 // Connections between clouds
 // ---------------------------------------------------------------------------
 
+/** Where the skyway runs, if a private subnet routes S3 traffic to a gateway endpoint. */
+function skywayOf(model: SkyViewModel): { startX: number; endX: number; y: number } | null {
+  const { scene, layout } = model
+  const bucket = resourcesOfKind(scene, 's3-bucket')[0]
+  const bucketRect = bucket ? layout.clouds[bucket.id] : undefined
+  const rects = scene.subnets
+    .filter(
+      (subnet) =>
+        subnet.band === 'mid' && resolveRoute(scene, subnet, 's3').kind === 'gateway-endpoint',
+    )
+    .map((subnet) => layout.subnets[subnet.id])
+    .filter((rect): rect is Rect => rect !== undefined)
+  const first = rects[0]
+  if (!bucketRect || !first) return null
+  return {
+    startX: Math.max(...rects.map((rect) => rect.x + rect.width)),
+    endX: bucketRect.x + bucketRect.width * 0.3,
+    y: first.y + first.height * 0.3,
+  }
+}
+
+/** The skyway's caption, drawn after the clouds so the bucket does not hide it. */
+function drawSkywayCaption(context: CanvasRenderingContext2D, model: SkyViewModel): void {
+  const road = skywayOf(model)
+  if (road)
+    caption(
+      context,
+      'S3 gateway endpoint',
+      (road.startX + road.endX) / 2,
+      road.y - 12,
+      12,
+      'center',
+      '#3c4a78',
+    )
+}
+
 function drawConnections(context: CanvasRenderingContext2D, model: SkyViewModel): void {
   const { scene, layout } = model
   context.save()
@@ -537,20 +592,12 @@ function drawConnections(context: CanvasRenderingContext2D, model: SkyViewModel)
   // endpoint, a road runs from the mid band straight to the bucket, never touching
   // the ground. It is drawn from the routing rules, so it appears exactly when the
   // engine would use it.
-  const bucket = resourcesOfKind(scene, 's3-bucket')[0]
-  const bucketRect = bucket ? layout.clouds[bucket.id] : undefined
-  const viaEndpoint = scene.subnets.filter(
-    (subnet) =>
-      subnet.band === 'mid' && resolveRoute(scene, subnet, 's3').kind === 'gateway-endpoint',
-  )
-  if (bucketRect && viaEndpoint.length > 0) {
-    const rects = viaEndpoint.map((subnet) => layout.subnets[subnet.id])
-    const startX = Math.max(...rects.map((rect) => rect.x + rect.width))
-    const y = rects[0].y + rects[0].height * 0.3
-    const endX = bucketRect.x + bucketRect.width * 0.3
+  const road = skywayOf(model)
+  if (road) {
+    const { startX, endX, y } = road
     context.save()
-    const road = drawArtBetween(context, 'construct.skyway', { x: startX, y }, { x: endX, y })
-    for (const [width, colour, dash] of road
+    const drawn = drawArtBetween(context, 'construct.skyway', { x: startX, y }, { x: endX, y })
+    for (const [width, colour, dash] of drawn
       ? []
       : ([
           [12, 'rgba(255,244,205,0.95)', []],
@@ -567,7 +614,6 @@ function drawConnections(context: CanvasRenderingContext2D, model: SkyViewModel)
       }
     }
     context.restore()
-    caption(context, 'S3 gateway endpoint', (startX + endX) / 2, y - 12, 12, 'center', '#3c4a78')
   }
 
   // A cirrus thread from a role down to whatever wears it.
@@ -741,13 +787,14 @@ function databaseCaption(
   zone: AvailabilityZone,
   lines: [string, string],
   colour: string,
+  secondColour: string = colour,
 ): void {
   const side = databaseCaptionSide(zone)
   const x = side === 'left' ? rect.x - 14 : rect.x + rect.width + 14
   const align = side === 'left' ? 'right' : 'left'
   const middle = rect.y + rect.height / 2
   caption(context, lines[0], x, middle - 7, 12, align, colour)
-  caption(context, lines[1], x, middle + 8, 11, align, colour)
+  caption(context, lines[1], x, middle + 8, 11, align, secondColour)
 }
 
 /**
@@ -788,6 +835,12 @@ function drawDatabase(
     lostZone && lostZone !== primaryZone ? databaseRect(scene, layout, database, lostZone) : null
   const failingOver = view?.status === 'failing-over'
   const waking = failingOver ? (view?.failover ?? 0) : 0
+
+  // Encrypted at rest: primary and standby wear the key's halo (their storage both is).
+  const protection = protectionOf(scene, database)
+  if (protection)
+    for (const copy of [primary, standby])
+      if (copy) drawHalo(context, copy, protection, model.time, model.reducedMotion)
 
   // The wisp bridge between primary and standby: they are kept in step.
   if (primary && standby && !failingOver) {
@@ -849,12 +902,16 @@ function drawDatabase(
           : database.multiAz || standbyZone
             ? 'primary'
             : 'single-AZ'
+    // A level about zones failing says how the database survives one; any other says
+    // how its data is protected at rest.
+    const aboutZones = model.level.events.some((event) => event.kind === 'az-failure')
     databaseCaption(
       context,
       { ...primary, y },
       primaryZone,
-      [database.name, state],
+      [database.name, aboutZones ? state : (encryptionCaption(scene, database) ?? state)],
       primaryDown ? '#9b2c22' : PENCIL,
+      aboutZones ? undefined : protection?.text,
     )
     if (locked) drawPadlock(context, primary.x + primary.width - 2, y + 4)
   }
@@ -1006,6 +1063,115 @@ function drawOutage(context: CanvasRenderingContext2D, model: SkyViewModel): voi
   }
 }
 
+/**
+ * KMS halos (brief, Section 6: "resources encrypted with a key show a matching faint
+ * halo"). Each customer managed key has its own colour, worn by the key itself and by
+ * every bucket or database encrypted with it, so one key protecting two stores reads as
+ * two matching halos. An AWS managed key (aws/s3, aws/rds) gives a fainter, dashed grey
+ * halo; SSE-S3 and an unencrypted database give none. The caption under each says the
+ * same in words, so colour is never the only signal.
+ */
+const KEY_COLOURS = [
+  { halo: '#c08a1e', text: '#7a5410' },
+  { halo: '#7b5fc4', text: '#4f3a8f' },
+  { halo: '#2f8a7a', text: '#1f5d52' },
+] as const
+const AWS_MANAGED = { halo: '#6f7784', text: '#57536a' } as const
+
+type Protection = { colour: string; text: string; customer: boolean; keyName: string }
+
+export function protectionOf(scene: Scene, resource: Resource): Protection | null {
+  const keyId =
+    resource.kind === 's3-bucket'
+      ? resource.encryption.kind === 'sse-kms'
+        ? resource.encryption.keyId
+        : undefined
+      : resource.kind === 'rds-database'
+        ? resource.encryption.kind === 'kms'
+          ? resource.encryption.keyId
+          : undefined
+        : resource.kind === 'kms-key'
+          ? resource.id
+          : undefined
+  if (keyId === undefined) return null
+  if (keyId === null)
+    return {
+      colour: AWS_MANAGED.halo,
+      text: AWS_MANAGED.text,
+      customer: false,
+      keyName: resource.kind === 's3-bucket' ? 'aws/s3' : 'aws/rds',
+    }
+  const keys = resourcesOfKind(scene, 'kms-key')
+  const index = keys.findIndex((key) => key.id === keyId)
+  const key = keys[index]
+  const colours = KEY_COLOURS[index % KEY_COLOURS.length]
+  if (!key || !colours) return null
+  return { colour: colours.halo, text: colours.text, customer: true, keyName: key.name }
+}
+
+/** What a bucket's or database's encryption caption says. */
+export function encryptionCaption(scene: Scene, resource: Resource): string | null {
+  const protection = protectionOf(scene, resource)
+  if (resource.kind === 's3-bucket')
+    return protection ? `SSE-KMS · ${protection.keyName}` : 'SSE-S3 (S3 managed keys)'
+  if (resource.kind === 'rds-database')
+    return protection ? `encrypted: ${protection.keyName}` : 'not encrypted'
+  return null
+}
+
+function drawHalo(
+  context: CanvasRenderingContext2D,
+  rect: Rect,
+  protection: Protection,
+  time: number,
+  reducedMotion: boolean,
+): void {
+  const pad = 10
+  const around = {
+    x: rect.x - pad,
+    y: rect.y - pad,
+    width: rect.width + pad * 2,
+    height: rect.height + pad * 2,
+  }
+  const breathe = reducedMotion ? 1 : 0.85 + 0.15 * Math.sin(time / 1400)
+  if (
+    drawArt(context, 'construct.kms-halo', around, {
+      alpha: (protection.customer ? 0.9 : 0.55) * breathe,
+    })
+  )
+    return
+  context.save()
+  context.strokeStyle = protection.colour
+  context.globalAlpha = (protection.customer ? 0.8 : 0.75) * breathe
+  context.lineWidth = protection.customer ? 3 : 2
+  if (!protection.customer) context.setLineDash([5, 4])
+  context.shadowColor = protection.colour
+  context.shadowBlur = protection.customer ? 10 : 0
+  const centre = centreOf(around)
+  context.beginPath()
+  context.ellipse(centre.x, centre.y, around.width / 2, around.height / 2, 0, 0, Math.PI * 2)
+  context.stroke()
+  context.restore()
+}
+
+/** A small key drawn on a KMS key's veil, so it reads as a key before the final art. */
+function drawKeyGlyph(context: CanvasRenderingContext2D, at: Point, colour: string): void {
+  context.save()
+  context.strokeStyle = colour
+  context.lineWidth = 2.4
+  context.lineCap = 'round'
+  context.beginPath()
+  context.arc(at.x - 12, at.y, 6, 0, Math.PI * 2)
+  context.moveTo(at.x - 6, at.y)
+  context.lineTo(at.x + 14, at.y)
+  context.moveTo(at.x + 8, at.y)
+  context.lineTo(at.x + 8, at.y + 6)
+  context.moveTo(at.x + 13, at.y)
+  context.lineTo(at.x + 13, at.y + 5)
+  context.stroke()
+  context.restore()
+}
+
 function drawClouds(
   context: CanvasRenderingContext2D,
   model: SkyViewModel,
@@ -1017,10 +1183,12 @@ function drawClouds(
     const rect = layout.clouds[resource.id]
     if (!rect) continue
     const locked = model.lockedIds.includes(resource.id)
+    const protection = protectionOf(scene, resource)
     if (resource.kind === 'rds-database') {
       drawDatabase(context, model, resource, locked)
       continue
     }
+    if (protection) drawHalo(context, rect, protection, time, model.reducedMotion)
     const compromised = model.compromisedIds.includes(resource.id)
     const unhealthy = resource.kind === 'ec2-instance' && !resource.healthy
     const bob = model.reducedMotion ? 0 : Math.sin(time / 900 + rect.x * 0.05) * 1.5
@@ -1073,6 +1241,8 @@ function drawClouds(
       drawCloud(context, GENUS_OF[resource.kind], rect.x, y, rect.width, rect.height, look)
     }
     context.restore()
+    if (resource.kind === 'kms-key' && protection)
+      drawKeyGlyph(context, { x: centreOf(rect).x, y: y + rect.height / 2 }, protection.colour)
 
     // Security groups: a pencilled outline traced around each cloud that wears one.
     if ('securityGroupIds' in resource) {
@@ -1141,8 +1311,37 @@ function drawClouds(
     } else {
       caption(context, resource.name, centreOf(rect).x, labelY, 12)
     }
+    const encryption = encryptionCaption(scene, resource)
+    if (encryption)
+      caption(
+        context,
+        encryption,
+        centreOf(rect).x,
+        labelY + 14,
+        11,
+        'center',
+        protection?.text ?? '#57536a',
+      )
+    if (resource.kind === 'kms-key')
+      caption(
+        context,
+        'customer managed key',
+        centreOf(rect).x,
+        labelY + 13,
+        10,
+        'center',
+        '#57536a',
+      )
     if (compromised)
-      caption(context, '⚡ compromised', centreOf(rect).x, labelY + 14, 11, 'center', '#8c1f1f')
+      caption(
+        context,
+        '⚡ compromised',
+        centreOf(rect).x,
+        labelY + (encryption ? 28 : 14),
+        11,
+        'center',
+        '#8c1f1f',
+      )
     if (locked) drawPadlock(context, rect.x + rect.width - 2, y + 4)
 
     if (model.editable && !locked && canStartConnection(resource.kind)) {
@@ -1302,6 +1501,72 @@ function blockOffset(stoppedBy: CheckKind | undefined, progress: number): Point 
   }
 }
 
+/**
+ * A breach that outlasts its run. While it holds, the attacker's string stays tied to
+ * the cloud it got into and stolen raindrops trickle down it. Once a change would turn
+ * the attacker away, the string snaps: the top end whips back into the cloud, the rest
+ * falls slack, and the crumpled kite drops to the ground.
+ */
+function drawStandingBreach(
+  context: CanvasRenderingContext2D,
+  model: SkyViewModel,
+  breach: StandingBreach,
+  hand: Point,
+  feet: Point,
+  hostile: boolean,
+): void {
+  const lerp = (from: Point, to: Point, amount: number): Point => ({
+    x: from.x + (to.x - from.x) * amount,
+    y: from.y + (to.y - from.y) * amount,
+  })
+  if (breach.snappedAt === null) {
+    drawString(context, hand, breach.at, 0, model.time)
+    const trickle = model.reducedMotion ? 0.5 : (model.time / 1600) % 1
+    const drop = lerp(breach.at, hand, trickle)
+    context.save()
+    context.fillStyle = '#3e6eb2'
+    context.beginPath()
+    context.arc(drop.x + 8, drop.y + 6, 3, 0, Math.PI * 2)
+    context.fill()
+    context.restore()
+    return
+  }
+  const progress = Math.min(1, (model.time - breach.snappedAt) / SNAP_DURATION)
+  const brokeAt = lerp(hand, breach.at, 0.55)
+  // The top end whips back up into the cloud and fades.
+  const top = lerp(brokeAt, breach.at, Math.min(1, progress * 2.2))
+  context.save()
+  context.globalAlpha = Math.max(0, 1 - progress * 1.6)
+  context.strokeStyle = 'rgba(70, 66, 82, 0.75)'
+  context.lineWidth = 1
+  context.beginPath()
+  context.moveTo(breach.at.x, breach.at.y)
+  context.lineTo(top.x, top.y)
+  context.stroke()
+  context.restore()
+  // A spark where it broke.
+  if (progress < 0.18) {
+    context.save()
+    context.strokeStyle = `rgba(200, 120, 40, ${1 - progress / 0.18})`
+    context.lineWidth = 1.6
+    for (let ray = 0; ray < 6; ray++) {
+      const angle = (ray / 6) * Math.PI * 2
+      context.beginPath()
+      context.moveTo(brokeAt.x + Math.cos(angle) * 4, brokeAt.y + Math.sin(angle) * 4)
+      context.lineTo(brokeAt.x + Math.cos(angle) * 11, brokeAt.y + Math.sin(angle) * 11)
+      context.stroke()
+    }
+    context.restore()
+  }
+  // The rest falls slack from the attacker's hand.
+  const fallen = { x: brokeAt.x, y: brokeAt.y + (feet.y - 10 - brokeAt.y) * progress * progress }
+  drawString(context, hand, fallen, 0.6 + progress, model.time)
+  // The kite tumbles out of the cloud to the ground beside its Cloudling.
+  const landing = { x: feet.x + 46, y: feet.y - 14 }
+  const kiteAt = lerp(breach.at, landing, progress * progress)
+  drawKite(context, kiteAt.x, kiteAt.y, hostile, 'crumpled', model.time, 0.9)
+}
+
 function drawKiteAndCloudling(
   context: CanvasRenderingContext2D,
   model: SkyViewModel,
@@ -1337,6 +1602,10 @@ function drawKiteAndCloudling(
   if (ending === 'failed') mood = 'droop'
   if (ending === 'foiled') mood = frame?.phase === 'ending' ? 'stamp' : 'idle'
   if (ending === 'breach') mood = 'snicker'
+  const standingMood = !frame
+    ? model.standingBreaches.find((breach) => breach.kiteId === kite.id)
+    : undefined
+  if (standingMood) mood = standingMood.snappedAt === null ? 'snicker' : 'stamp'
 
   const feet = script?.cloudling ?? { x: 290 + kite.groundPosition * 112, y: SKY.groundY }
   const hand = drawCloudling(
@@ -1350,6 +1619,13 @@ function drawKiteAndCloudling(
     model.level.region,
   )
   const rest = script?.rest ?? { x: feet.x + 22, y: feet.y - 92 }
+  const standing = !frame
+    ? model.standingBreaches.find((breach) => breach.kiteId === kite.id)
+    : undefined
+  if (standing) {
+    drawStandingBreach(context, model, standing, hand, feet, hostile)
+    return
+  }
   if (!frame || !script || frame.phase === 'waiting') {
     drawString(context, hand, rest, 0, model.time)
     kites(rest.x, rest.y, 'flying', model.reducedMotion ? 0 : model.time)
@@ -2018,6 +2294,7 @@ export function drawSky(context: CanvasRenderingContext2D, model: SkyViewModel):
   }
   const crowdFrame = model.crowd ? crowdFrameAt(model.crowd, model.runTime) : null
   drawClouds(context, model, burstFor, crowdFrame)
+  drawSkywayCaption(context, model)
   drawOutage(context, model)
   drawHighlight(context, model)
   if (crowdFrame) drawCrowdStream(context, model, crowdFrame)

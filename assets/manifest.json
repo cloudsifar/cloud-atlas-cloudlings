@@ -91,6 +91,16 @@
       "priority": 1,
       "description": "RDS database: a flat, layered altostratus in a private subnet. A Multi-AZ standby is the same graphic, drawn faint in the other zone."
     },
+    "cloud.cirrostratus.kms-key": {
+      "file": null,
+      "width": 120,
+      "height": 40,
+      "anchor": [0.5, 0.5],
+      "highlight": null,
+      "group": "Clouds",
+      "priority": 1,
+      "description": "KMS key (customer managed): a thin cirrostratus veil in the high band, with a faint halo in the key's colour. Every cloud encrypted with this key wears the same halo."
+    },
     "construct.waf-net": {
       "file": null,
       "width": 300,
@@ -579,10 +589,10 @@
       "width": 160,
       "height": 90,
       "anchor": [0.5, 0.5],
-      "status": "planned",
-      "group": "Planned: not drawn yet",
-      "priority": 3,
-      "description": "KMS: a halo around a cloud whose data is encrypted (Level 8)."
+      "group": "Sky constructs and effects",
+      "priority": 2,
+      "description": "KMS halo: a faint ring around a cloud whose data is encrypted with a KMS key, in that key's colour (Level 8). Stretched to fit around the cloud: tall round the bucket, flat round the database.",
+      "repeat": "stretch"
     },
     "construct.efs-mist": {
       "file": null,

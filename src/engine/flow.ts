@@ -34,6 +34,7 @@ import {
   REPRESENTATIVE_EPHEMERAL_PORT,
 } from './ports'
 import { isPublicSubnet, resolveRoute } from './routing'
+import { evaluateKeyUse, needsKeyCheck } from './kms'
 import { evaluateBucketAccess, type Caller } from './s3'
 import { evaluateSecurityGroups, type ConnectionPeer } from './securityGroups'
 import type {
@@ -600,7 +601,7 @@ function instanceToDatabaseChecks(
         case 'available':
           return makeStep(leg, atResource(database.id), 'delivery', {
             result: 'pass',
-            explanation: `"${database.name}" answers the query from its primary in AZ ${zone}.`,
+            explanation: `"${database.name}" answers the query from its primary in AZ ${zone}.${atRestNote(scene, database)}`,
           })
         case 'failing-over':
           return makeStep(leg, atResource(database.id), 'delivery', {
@@ -695,16 +696,29 @@ function instanceToBucketChecks(
       ),
     () => naclStep(scene, subnet, 'outbound', S3_ENDPOINT_ADDRESS, HTTPS_PORT, legs.request),
   ]
-  const authorise: PendingCheck = () => {
-    const role = instance.roleId
-      ? findResourceOfKind(scene, 'iam-role', instance.roleId)
-      : undefined
+  const role = instance.roleId ? findResourceOfKind(scene, 'iam-role', instance.roleId) : undefined
+  const authoriseCaller: PendingCheck = () => {
     const caller: Caller = role
       ? { kind: 'role', role }
       : { kind: 'no-credentials', description: `"${instance.name}"` }
     const { check, ...outcome } = evaluateBucketAccess(bucket, caller, action)
     return makeStep(legs.request, atResource(bucket.id), check, outcome)
   }
+  // Once S3 has authorised the caller, an SSE-KMS bucket asks KMS to use its key on the
+  // caller's behalf (kms.ts). Drawn at the bucket: the rain fizzles against the halo.
+  const useKey: PendingCheck[] =
+    role && needsKeyCheck(bucket, action)
+      ? [
+          () =>
+            makeStep(
+              legs.request,
+              atResource(bucket.id),
+              'kms',
+              evaluateKeyUse(scene, bucket, role, action),
+            ),
+        ]
+      : []
+  const authorise = [authoriseCaller, ...useKey]
   const replyReachesInstance: PendingCheck = () =>
     naclStep(
       scene,
@@ -729,7 +743,7 @@ function instanceToBucketChecks(
               ruleRef: 'S3 prefix list → gateway endpoint',
               explanation: `The route table of "${subnet.name}" sends S3 traffic to a gateway endpoint. The prefix-list route is more specific than 0.0.0.0/0, so it wins, and the traffic never leaves the AWS network.`,
             }),
-          authorise,
+          ...authorise,
         ],
         response: [replyReachesInstance],
       }
@@ -782,7 +796,7 @@ function instanceToBucketChecks(
               ruleRef: '0.0.0.0/0 → Internet Gateway',
               explanation: `"${nat.name}" forwards the connection out through the Internet Gateway, using its own public address. It carries outbound connections only.`,
             }),
-          authorise,
+          ...authorise,
         ],
         response: [
           () =>
@@ -908,4 +922,19 @@ function evaluateInternetToPrivateResource(name: string): FlowResult {
       }),
     ],
   }
+}
+
+/**
+ * What a database's encryption at rest means for a query. RDS uses the key itself,
+ * so the application connecting to it needs no KMS permission (docs/ENGINE.md, section 17).
+ */
+function atRestNote(scene: Scene, database: RdsDatabase): string {
+  const encryption = database.encryption
+  if (encryption.kind === 'none')
+    return ' Its storage is not encrypted at rest, and RDS can only encrypt a database when it is created.'
+  const key =
+    encryption.keyId === null
+      ? 'the AWS managed key aws/rds'
+      : `"${findResourceOfKind(scene, 'kms-key', encryption.keyId)?.name ?? encryption.keyId}"`
+  return ` Its storage is encrypted at rest with ${key}; RDS uses the key itself, so the application needs no KMS permission.`
 }

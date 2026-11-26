@@ -11,6 +11,7 @@ export const CHECK_LABELS: Record<CheckKind, string> = {
   waf: 'AWS WAF',
   'target-selection': 'Target choice',
   iam: 'IAM',
+  kms: 'KMS key',
   'block-public-access': 'Block Public Access',
   'bucket-policy': 'Bucket policy',
   delivery: 'Delivery',

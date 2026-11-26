@@ -85,7 +85,11 @@ export function evaluateBucketAccess(
         result: 'pass',
         ruleRef: `bucket policy: allow ${action} to everyone`,
         matched: { kind: 'bucket-statement', bucketId: bucket.id, index: allowIndex, action },
-        explanation: `Block Public Access is off and the bucket policy of "${bucket.name}" allows ${action} to everyone, so anyone on the internet may do this.`,
+        explanation: `Block Public Access is off and the bucket policy of "${bucket.name}" allows ${action} to everyone, so anyone on the internet may do this.${
+          bucket.encryption.kind === 'sse-kms'
+            ? ' Switching the bucket to SSE-KMS changed how new objects are encrypted, not who may read them: the objects already stored keep the SSE-S3 encryption they were written with, and S3 decrypts them for anyone the bucket lets in.'
+            : ''
+        }`,
       }
     }
     return {

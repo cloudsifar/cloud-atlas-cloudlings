@@ -31,6 +31,10 @@ import {
 import {
   addNetworkAclRule,
   addRoleStatement,
+  keyUsers,
+  replaceDatabaseWithEncryptedCopy,
+  roleStatementProblem,
+  setBucketEncryption,
   addSecurityGroupRule,
   networkAclRuleProblem,
   removeNetworkAclRule,
@@ -52,6 +56,7 @@ import {
   setTargetRegistered,
   type GameState,
 } from '../game'
+import { REGION_NAMES } from '../levels'
 import { button, dropdown, h, type Option } from './dom'
 
 export type CardSubject = { kind: 'resource'; id: string } | { kind: 'subnet'; id: string }
@@ -584,6 +589,95 @@ const KIND_SUBTITLE: Record<Resource['kind'], string> = {
   'iam-role': 'Permissions a resource can wear',
   'rds-database': 'A managed relational database',
   'waf-web-acl': 'A web application firewall: it reads each request',
+  'kms-key': 'A customer managed encryption key',
+}
+
+/**
+ * A database's encryption at rest (docs/ENGINE.md, section 17). RDS sets it only when a
+ * database is created, so the setting itself is greyed out; an encrypted copy replaces
+ * the database instead, which is how AWS does it.
+ */
+function databaseEncryptionSection(
+  state: GameState,
+  database: Extract<Resource, { kind: 'rds-database' }>,
+  actions: CardActions,
+  locked: boolean,
+): HTMLElement[] {
+  const { scene } = state
+  const keys = resourcesOfKind(scene, 'kms-key')
+  const encryption = database.encryption
+  const keyName = (keyId: string | null) =>
+    keyId === null
+      ? 'the AWS managed key aws/rds'
+      : (keys.find((key) => key.id === keyId)?.name ?? keyId)
+  const parts: HTMLElement[] = [
+    attention(
+      h('h5', { textContent: 'Encryption at rest' }),
+      actions,
+      `database-encryption:${database.id}`,
+    ),
+    h(
+      'label',
+      { class: 'check' },
+      h('input', { type: 'checkbox', checked: encryption.kind === 'kms', disabled: true }),
+      'Encrypted (set only when a database is created)',
+    ),
+    h('p', {
+      class: 'note',
+      textContent:
+        encryption.kind === 'none'
+          ? 'Created without encryption. RDS cannot encrypt a database in place: replace it with an encrypted copy.'
+          : `Encrypted with ${keyName(encryption.keyId)}. RDS uses the key itself; the application needs no KMS permission.`,
+    }),
+  ]
+  if (locked) return parts
+  const choiceKey = `${database.id}-copy-key`
+  const current = encryption.kind === 'kms' ? (encryption.keyId ?? 'aws-managed') : null
+  const chosen = () => pick(choiceKey, 'aws-managed')
+  const replace = button(
+    'Replace with an encrypted copy',
+    () => {
+      const value = chosen()
+      actions.edit((scene) =>
+        replaceDatabaseWithEncryptedCopy(
+          scene,
+          database.id,
+          value === 'aws-managed' ? null : value,
+        ),
+      )
+    },
+    `${database.id}-replace`,
+  )
+  const refresh = () => {
+    replace.disabled = chosen() === current
+  }
+  refresh()
+  parts.push(
+    h(
+      'div',
+      { class: 'add-row' },
+      dropdown(
+        'Key for the copy',
+        [
+          { value: 'aws-managed', label: 'AWS managed key (aws/rds)' },
+          ...keys.map((key) => ({ value: key.id, label: `${key.name} (customer managed)` })),
+        ],
+        chosen(),
+        (value) => {
+          draft[choiceKey] = value
+          refresh()
+        },
+        choiceKey,
+      ),
+      replace,
+    ),
+    h('p', {
+      class: 'note',
+      textContent:
+        'RDS snapshots the database, copies the snapshot with encryption on, restores a new database from the copy, and gives it the old name, so the application still connects to it. In AWS this takes a while, and writes wait.',
+    }),
+  )
+  return parts
 }
 
 function resourceCard(state: GameState, resource: Resource, actions: CardActions): HTMLElement[] {
@@ -858,6 +952,36 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
       )
       break
     }
+    case 'kms-key': {
+      // A customer managed key (docs/ENGINE.md, section 17).
+      const users = keyUsers(scene, resource.id)
+      body.append(
+        h('p', {
+          class: 'note',
+          textContent: `Customer managed · in ${REGION_NAMES[level.region]} (${level.region}) · about a dollar a month, plus a little per use`,
+        }),
+        h('h5', { textContent: 'Key policy' }),
+        h('p', {
+          class: 'note',
+          textContent:
+            'The default policy: it lets IAM policies in this account decide who may use the key. So a role that reads or writes data under it needs kms:Use on it, and every use is logged.',
+        }),
+        attention(h('h5', { textContent: 'Protects' }), actions, `key-users:${resource.id}`),
+        h('p', {
+          class: 'note',
+          textContent:
+            users.length > 0
+              ? users.join(', ')
+              : 'Nothing yet. Choose it as a bucket’s default encryption, or for a database’s encrypted copy.',
+        }),
+        h('p', {
+          class: 'note',
+          textContent:
+            'AWS managed keys (aws/s3, aws/rds) cost nothing a month, but AWS sets their policy and rotation, and you cannot change them.',
+        }),
+      )
+      break
+    }
     case 'waf-web-acl': {
       // An AWS WAF web ACL: what it protects, and the rules it reads each request with.
       const protectedOne = scene.resources.find((each) => each.id === resource.loadBalancerId)
@@ -987,6 +1111,7 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
             'If the primary’s zone fails, RDS fails over to the standby by itself, typically within a minute or two (2 minutes here). The database keeps its address, so the application reconnects to the same name. A Multi-AZ database costs about twice as much.',
         }),
       )
+      body.append(...databaseEncryptionSection(state, resource, actions, locked))
       break
     }
     case 's3-bucket': {
@@ -1012,9 +1137,13 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
       body.append(
         h('p', {
           class: 'note',
-          textContent: `Holds: ${resource.dataClass === 'sensitive' ? 'sensitive data' : 'public content (a website)'} · Encrypted at rest: always (SSE-S3)`,
+          textContent: `Holds: ${resource.dataClass === 'sensitive' ? 'sensitive data' : 'public content (a website)'}`,
         }),
-        h('label', { class: 'check' }, blockBox, 'Block Public Access'),
+        attention(
+          h('label', { class: 'check' }, blockBox, 'Block Public Access'),
+          actions,
+          `bucket-bpa:${resource.id}`,
+        ),
         h('label', { class: 'check' }, publicBox, 'Bucket policy: allow s3:Read to everyone'),
         h('p', {
           class: 'note',
@@ -1022,15 +1151,68 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
             'The bucket is public only if Block Public Access is off and the policy grants everyone.',
         }),
       )
+      // Default encryption (docs/ENGINE.md, section 17): always on, and which keys.
+      const keys = resourcesOfKind(scene, 'kms-key')
+      const encryptionValue =
+        resource.encryption.kind === 'sse-s3'
+          ? 'sse-s3'
+          : resource.encryption.keyId === null
+            ? 'aws-managed'
+            : `key:${resource.encryption.keyId}`
+      const encryptionField = dropdown(
+        'Default encryption',
+        [
+          { value: 'sse-s3', label: 'SSE-S3: keys S3 manages' },
+          { value: 'aws-managed', label: 'SSE-KMS: AWS managed key (aws/s3)' },
+          ...keys.map((key) => ({
+            value: `key:${key.id}`,
+            label: `SSE-KMS: ${key.name} (customer managed)`,
+          })),
+        ],
+        encryptionValue,
+        (value) =>
+          actions.edit((current) =>
+            setBucketEncryption(
+              current,
+              resource.id,
+              value === 'sse-s3'
+                ? { kind: 'sse-s3' }
+                : { kind: 'sse-kms', keyId: value === 'aws-managed' ? null : value.slice(4) },
+            ),
+          ),
+        'bucket-encryption',
+        locked,
+      )
+      attention(encryptionField.firstElementChild, actions, `bucket-encryption:${resource.id}`)
+      body.append(
+        encryptionField,
+        h('p', {
+          class: 'note',
+          textContent:
+            resource.encryption.kind === 'sse-s3'
+              ? 'Every new object is encrypted at rest. With SSE-S3 nobody needs a key permission, and nobody outside S3 controls the key.'
+              : resource.encryption.keyId === null
+                ? 'S3 uses the AWS managed key aws/s3 for new objects. Anyone in the account allowed to use the bucket may use it through S3; you cannot change its policy.'
+                : 'S3 uses your key for new objects, as the caller: whoever reads or writes them needs kms:Use on the key. You decide who, and every use is logged.',
+        }),
+        h('p', {
+          class: 'note',
+          textContent:
+            'This applies to new objects only. Objects already stored keep the encryption they were written with.',
+        }),
+      )
       break
     }
     case 'iam-role': {
       const buckets = resourcesOfKind(scene, 's3-bucket')
-      const actionOptions: Option<ServiceAction>[] = (
-        ['s3:Read', 's3:Write', 's3:Delete'] as const
-      ).map((action) => ({ value: action, label: action }))
+      const keys = resourcesOfKind(scene, 'kms-key')
+      const actionOptions: Option<ServiceAction>[] = [
+        ...(['s3:Read', 's3:Write', 's3:Delete'] as const),
+        ...(keys.length > 0 ? (['kms:Use'] as const) : []),
+      ].map((action) => ({ value: action, label: action }))
       const resourceOptions: Option<string>[] = [
-        ...buckets.map((bucket) => ({ value: bucket.id, label: bucket.name })),
+        ...buckets.map((bucket) => ({ value: bucket.id, label: `${bucket.name} (bucket)` })),
+        ...keys.map((key) => ({ value: key.id, label: `${key.name} (KMS key)` })),
         { value: '*', label: '* (every resource)' },
       ]
       const nameOf = (id: string) =>
@@ -1061,6 +1243,17 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
         ),
       )
       if (!locked) {
+        const problem = h('p', { class: 'note rule-problem', attrs: { role: 'status' } })
+        const add = button(
+          'Add statement',
+          () => actions.edit((current) => addRoleStatement(current, resource.id, statement())),
+          key('add'),
+        )
+        const check = () => {
+          const issue = roleStatementProblem(scene, statement())
+          problem.textContent = issue ?? ''
+          add.disabled = issue !== null
+        }
         body.append(
           h(
             'div',
@@ -1079,23 +1272,27 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
               'Action',
               actionOptions,
               statement().actions[0] ?? 's3:Read',
-              (value) => (draft[key('action')] = value),
+              (value) => {
+                draft[key('action')] = value
+                check()
+              },
               key('action'),
             ),
             dropdown(
               'On',
               resourceOptions,
               statement().resource,
-              (value) => (draft[key('resource')] = value),
+              (value) => {
+                draft[key('resource')] = value
+                check()
+              },
               key('resource'),
             ),
-            button(
-              'Add statement',
-              () => actions.edit((current) => addRoleStatement(current, resource.id, statement())),
-              key('add'),
-            ),
+            add,
           ),
+          problem,
         )
+        check()
       }
       body.append(
         attention(h('h5', { textContent: 'Worn by' }), actions, `role-wearers:${resource.id}`),
@@ -1131,7 +1328,19 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
 
   const fromPalette = level.palette.some((entry) => entry.resource.id === resource.id)
   const removable = fromPalette || (level.removableIds ?? []).includes(resource.id)
-  if (removable && !locked) {
+  const encrypting = resource.kind === 'kms-key' ? keyUsers(scene, resource.id) : []
+  if (removable && !locked && encrypting.length > 0) {
+    parts.push(
+      h(
+        'footer',
+        { class: 'card-footer' },
+        h('p', {
+          class: 'note',
+          textContent: `Still encrypting ${encrypting.join(' and ')}. AWS only schedules a key's deletion (7 to 30 days), and data under a deleted key can never be read again: move them to another key first.`,
+        }),
+      ),
+    )
+  } else if (removable && !locked) {
     const warning = level.removalWarnings?.[resource.id]
     parts.push(
       warning && actions.pendingRemoval === resource.id

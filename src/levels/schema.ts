@@ -104,8 +104,9 @@ export type NarrationStep = {
  * a security group, a route table, a load balancer (its listener or its targets), a
  * role (its statements or who wears it), an instance (the role it wears), an Auto
  * Scaling group (its scaling policy, its subnets or its minimum size), an RDS database
- * (Multi-AZ), a network ACL (its rules), a subnet (which network ACL it uses), or a web
- * ACL (its rules).
+ * (Multi-AZ, or its encryption at rest), a network ACL (its rules), a subnet (which
+ * network ACL it uses), a web ACL (its rules), a bucket (Block Public Access, or its
+ * default encryption) or a KMS key (what it protects).
  */
 export const PULSE_SECTIONS = [
   'security-group',
@@ -122,6 +123,10 @@ export const PULSE_SECTIONS = [
   'subnet-network-acl',
   'web-acl-rules',
   'database-multi-az',
+  'bucket-bpa',
+  'bucket-encryption',
+  'database-encryption',
+  'key-users',
 ] as const
 
 /**

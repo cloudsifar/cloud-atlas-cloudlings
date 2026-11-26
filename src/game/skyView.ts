@@ -20,11 +20,17 @@ import {
   type Point,
 } from './layout'
 import { crowdClock, crowdCuesBetween, crowdRunDuration, TICK_DURATION } from './crowdPlayback'
-import { buildScripts, runDuration, soundsBetween, type KiteScript } from './playback'
-import { drawSky, SPEECH_DURATION, type DragView } from './render'
+import { buildScripts, frameAt, runDuration, soundsBetween, type KiteScript } from './playback'
+import {
+  drawSky,
+  SNAP_DURATION,
+  SPEECH_DURATION,
+  type DragView,
+  type StandingBreach,
+} from './render'
 import { playSound } from './sound'
 import { prefersReducedMotion } from './storage'
-import type { Store } from './store'
+import { rehearse, type Store } from './store'
 
 export type SkyCallbacks = {
   onSelectResource(id: string): void
@@ -99,6 +105,10 @@ export function createSkyView(
 
   let scripts: KiteScript[] = []
   let scriptsScene: Scene | null = null
+  // Breaches that outlast their run, the run they came from, and the scene last checked.
+  let standing: StandingBreach[] = []
+  let standingRun: object | null = null
+  let standingScene: Scene | null = null
   let runStartedAt = 0
   let previousRunTime = 0
 
@@ -195,22 +205,61 @@ export function createSkyView(
       callbacks.onCrowdMinute?.(minute)
     }
 
-    const compromisedIds =
-      showRun && state.phase !== 'flying'
-        ? (state.lastRun?.kiteRuns ?? [])
-            .filter((kiteRun) => kiteRun.result.outcome === 'breach')
-            .map((kiteRun) => {
-              // What the attack got into: the cloud it was delivered to (a web server
-              // behind the load balancer, say), else the cloud it aimed at.
-              const delivered = [...kiteRun.result.trace]
-                .reverse()
-                .find((step) => step.check === 'delivery' && step.at.kind === 'resource')
-              const id = delivered?.at.kind === 'resource' ? delivered.at.id : undefined
-              return id && state.scene.resources.some((resource) => resource.id === id)
+    // A breach outlasts its run (brief, Section 6): the cloud stays compromised, with the
+    // attacker's string still attached, until the player fixes the cause. The moment
+    // the sky as it now stands would turn the attacker away, the string snaps.
+    if (state.phase === 'flying') {
+      standing = []
+      standingRun = null
+    } else if (showRun && state.lastRun && standingRun !== state.lastRun) {
+      standingRun = state.lastRun
+      standing = state.lastRun.kiteRuns
+        .filter((kiteRun) => kiteRun.result.outcome === 'breach')
+        .map((kiteRun) => {
+          // What the attack got into: the cloud it was delivered to (a web server
+          // behind the load balancer, say), else the cloud it aimed at.
+          const delivered = [...kiteRun.result.trace]
+            .reverse()
+            .find((step) => step.check === 'delivery' && step.at.kind === 'resource')
+          const id = delivered?.at.kind === 'resource' ? delivered.at.id : undefined
+          const script = scripts.find((each) => each.kiteRun.kite.id === kiteRun.kite.id)
+          return {
+            kiteId: kiteRun.kite.id,
+            resourceId:
+              id && state.scene.resources.some((resource) => resource.id === id)
                 ? id
-                : kiteRun.kite.destinationId
-            })
-        : []
+                : kiteRun.kite.destinationId,
+            at: script ? frameAt(script, Infinity).kitePosition : { x: 0, y: 0 },
+            snappedAt: null,
+          }
+        })
+      standingScene = state.scene
+    }
+    if (
+      !showRun &&
+      state.phase !== 'flying' &&
+      standingScene !== state.scene &&
+      standing.length > 0
+    ) {
+      standingScene = state.scene
+      const rehearsal = rehearse(state.level, state.scene)
+      for (const breach of standing) {
+        if (breach.snappedAt !== null) continue
+        const now = rehearsal.kiteRuns.find((kiteRun) => kiteRun.kite.id === breach.kiteId)
+        if (now && now.result.outcome !== 'breach') {
+          breach.snappedAt = timestamp
+          playSound('string-snap')
+        }
+      }
+    }
+    standing = standing.filter(
+      (breach) =>
+        breach.snappedAt === null ||
+        (!reducedMotion && timestamp - breach.snappedAt < SNAP_DURATION),
+    )
+    const compromisedIds = standing
+      .filter((breach) => breach.snappedAt === null)
+      .map((breach) => breach.resourceId)
 
     drawSky(context!, {
       level: state.level,
@@ -223,6 +272,7 @@ export function createSkyView(
       runTime,
       crowd,
       compromisedIds,
+      standingBreaches: showRun ? [] : standing,
       sunlightStartedAt,
       highlights,
       selectedKiteId,

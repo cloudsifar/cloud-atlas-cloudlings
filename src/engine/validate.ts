@@ -128,6 +128,14 @@ export function validateScene(scene: Scene): SceneProblem[] {
   }
 
   for (const resource of scene.resources) {
+    // AWS behaviour modelled: data encrypted under a KMS key names that key, which must
+    // exist in the account (and Region).
+    const requireKey = (subjectId: string, name: string, keyId: string) => {
+      if (
+        !scene.resources.some((candidate) => candidate.kind === 'kms-key' && candidate.id === keyId)
+      )
+        broken(subjectId, `"${name}" is encrypted with a KMS key that does not exist.`)
+    }
     const requireGroups = (ids: string[]) => {
       for (const id of ids) {
         if (!groupIds.has(id))
@@ -196,6 +204,8 @@ export function validateScene(scene: Scene): SceneProblem[] {
             )
           }
         }
+        if (resource.encryption.kind === 'sse-kms' && resource.encryption.keyId !== null)
+          requireKey(resource.id, resource.name, resource.encryption.keyId)
         break
       case 'iam-role':
         for (const statement of resource.statements) {
@@ -230,6 +240,8 @@ export function validateScene(scene: Scene): SceneProblem[] {
             `The primary of "${resource.name}" must run in a subnet of its DB subnet group.`,
           )
         }
+        if (resource.encryption.kind === 'kms' && resource.encryption.keyId !== null)
+          requireKey(resource.id, resource.name, resource.encryption.keyId)
         break
       }
       case 'waf-web-acl': {
@@ -278,6 +290,7 @@ export function validateScene(scene: Scene): SceneProblem[] {
         break
       }
       case 'internet-gateway':
+      case 'kms-key':
         break
     }
   }

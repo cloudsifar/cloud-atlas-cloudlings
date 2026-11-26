@@ -46,6 +46,7 @@ const RESOURCE_FIELDS: Record<ResourceKind, Record<string, 'string' | 'boolean' 
     primarySubnetId: 'string',
     multiAz: 'boolean',
     status: 'string',
+    encryption: 'object',
   },
   'ec2-instance': {
     subnetId: 'string',
@@ -60,6 +61,7 @@ const RESOURCE_FIELDS: Record<ResourceKind, Record<string, 'string' | 'boolean' 
     encryption: 'object',
   },
   'iam-role': { statements: 'object' },
+  'kms-key': {},
 }
 
 /** Cloudlings must use the address ranges reserved for documentation (RFC 5737). */

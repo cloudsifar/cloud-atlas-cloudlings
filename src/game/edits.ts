@@ -5,6 +5,7 @@
 // inputs trustworthy. The UI never changes a scene any other way.
 
 import type {
+  BucketEncryption,
   LoadBalancer,
   NetworkAclRule,
   PolicyStatement,
@@ -82,6 +83,9 @@ export function moveToSubnet(scene: Scene, resourceId: string, subnetId: string)
 
 /** Removes a cloud and everything that only made sense while it existed. */
 export function removeResource(scene: Scene, id: string): Scene {
+  // A key that still encrypts something stays: AWS only schedules a key's deletion
+  // (7 to 30 days), and data under a deleted key can never be read again.
+  if (keyUsers(scene, id).length > 0) return scene
   return edit(scene, (draft) => {
     const removed = draft.resources.find((resource) => resource.id === id)
     if (!removed) return
@@ -314,6 +318,7 @@ export function setInstanceRole(scene: Scene, instanceId: string, roleId: string
 }
 
 export function addRoleStatement(scene: Scene, roleId: string, statement: PolicyStatement): Scene {
+  if (roleStatementProblem(scene, statement)) return scene
   return changeResource(scene, 'iam-role', roleId, (role) => {
     const duplicate = role.statements.some(
       (existing) => JSON.stringify(existing) === JSON.stringify(statement),
@@ -343,6 +348,68 @@ export function setPublicRead(scene: Scene, bucketId: string, on: boolean): Scen
     if (on)
       bucket.policy.push({ effect: 'allow', principal: { kind: 'everyone' }, actions: ['s3:Read'] })
   })
+}
+
+/** Sets a bucket's default encryption. Objects already stored keep theirs (docs/ENGINE.md, section 17). */
+export function setBucketEncryption(
+  scene: Scene,
+  bucketId: string,
+  encryption: BucketEncryption,
+): Scene {
+  return changeResource(scene, 's3-bucket', bucketId, (bucket) => {
+    bucket.encryption = encryption
+  })
+}
+
+/**
+ * Replaces an RDS database with an encrypted copy, which is the only way AWS offers:
+ * snapshot it, copy the snapshot with encryption on (choosing the key), restore a new
+ * database from the copy, and give it the old name so the application's connection
+ * still works. Everything else about the database stays as it was. An encrypted
+ * database can also be re-encrypted under another key this way. Encryption is never
+ * switched off: RDS cannot decrypt a database either.
+ */
+export function replaceDatabaseWithEncryptedCopy(
+  scene: Scene,
+  databaseId: string,
+  keyId: string | null,
+): Scene {
+  return changeResource(scene, 'rds-database', databaseId, (database) => {
+    database.encryption = { kind: 'kms', keyId }
+  })
+}
+
+/** The names of everything a KMS key encrypts: data that would be lost with it. */
+export function keyUsers(scene: Scene, keyId: string): string[] {
+  return scene.resources
+    .filter(
+      (resource) =>
+        (resource.kind === 's3-bucket' &&
+          resource.encryption.kind === 'sse-kms' &&
+          resource.encryption.keyId === keyId) ||
+        (resource.kind === 'rds-database' &&
+          resource.encryption.kind === 'kms' &&
+          resource.encryption.keyId === keyId),
+    )
+    .map((resource) => resource.name)
+}
+
+/**
+ * Why a role statement makes no sense, or null if it does. IAM itself would accept
+ * any of these; the card refuses them so the player learns which actions belong to
+ * which service (docs/SIMPLIFICATIONS.md).
+ */
+export function roleStatementProblem(scene: Scene, statement: PolicyStatement): string | null {
+  if (statement.resource === '*') return null
+  const target = scene.resources.find((resource) => resource.id === statement.resource)
+  if (!target) return 'That resource is not in the sky.'
+  for (const action of statement.actions) {
+    if (action === 'kms:Use' && target.kind !== 'kms-key')
+      return `kms:Use is about a KMS key, and "${target.name}" is not one.`
+    if (action.startsWith('s3:') && target.kind !== 's3-bucket')
+      return `${action} is about an S3 bucket, and "${target.name}" is not one.`
+  }
+  return null
 }
 
 export type ConnectionResult = { ok: true; scene: Scene } | { ok: false; reason: string }

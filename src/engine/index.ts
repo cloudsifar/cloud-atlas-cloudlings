@@ -13,6 +13,7 @@ export {
 } from './ports'
 export { cidrContains, addressInSubnet } from './address'
 export { evaluateFlow, healthyTargets, ENGINE_PORT } from './flow'
+export { evaluateKeyUse, needsKeyCheck } from './kms'
 export {
   expandAutoScalingGroups,
   groupInstances,

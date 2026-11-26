@@ -381,7 +381,53 @@ only the S3 access decision applies.
   [the default network ACL allows all traffic](https://docs.aws.amazon.com/vpc/latest/userguide/default-network-acl.html),
   [CreateNetworkAclEntry: rule numbers and leaving room](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateNetworkAclEntry.html).
 
+## 17. Encryption at rest with AWS KMS: `kms.ts`, `s3.ts`, `flow.ts`
+
+- **Modelled.**
+  - **Keys.** A `kms-key` is a customer managed key with the default key policy, which
+    lets IAM policies in the account decide who may use it. AWS managed keys (aws/s3,
+    aws/rds) are not resources: a bucket or database names one with `keyId: null`.
+  - **Bucket default encryption** (`S3Bucket.encryption`): SSE-S3, or SSE-KMS with the
+    AWS managed key or a customer managed key. It applies to new objects only.
+  - **The KMS check** (`evaluateKeyUse`, check `kms`). When a role reads or writes an
+    object in an SSE-KMS bucket, S3 asks KMS to use the key as that role, after S3 has
+    authorised the role for the bucket:
+    - storing an object needs kms:GenerateDataKey and reading one needs kms:Decrypt,
+      both modelled as `kms:Use`;
+    - with the AWS managed key, its key policy already allows every principal in the
+      account through S3, so the check passes;
+    - with a customer managed key, the role must allow `kms:Use` on the key (or on `*`),
+      and an explicit deny wins;
+    - deleting an object involves no key;
+    - the step is drawn at the bucket: the rain fizzles against the halo.
+  - **Anonymous reads** of a public bucket read the objects already stored, which keep
+    the SSE-S3 encryption they were written with. Switching the bucket to SSE-KMS does
+    not stop them; closing the bucket does. The trace says so.
+  - **RDS** (`RdsDatabase.encryption`): none, or encrypted with aws/rds or a customer
+    managed key. It is set only when a database is created. The edit
+    `replaceDatabaseWithEncryptedCopy` stands for snapshot, encrypted copy and restore.
+    Queries need no KMS permission (RDS uses the key itself), and the answer's
+    explanation says how the data is protected.
+  - **Validation.** A bucket or database must name a key that exists.
+  - **Cost.** A customer managed key is 1 coin.
+  - **Predicates.** `bucket-encrypted-with-customer-key`, `database-encrypted` and
+    `one-customer-key`.
+  - **Scoring.** The KMS check records the role statement it relied on, so the
+    least-privilege rules for roles apply to `kms:Use`: an unused one, or one on `*`,
+    is a finding.
+- **AWS references.**
+  [SSE-KMS and the KMS permissions it needs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html),
+  [changing default encryption leaves existing objects as they are](https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingEncryption.html),
+  [every new object encrypted since January 2023](https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-encryption-faq.html),
+  [the default key policy enables IAM policies](https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html),
+  [AWS managed key policies (kms:ViaService, kms:CallerAccount)](https://docs.aws.amazon.com/kms/latest/developerguide/conditions-kms.html),
+  [RDS encryption only at creation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html),
+  [encrypting an existing database by snapshot copy and restore](https://docs.aws.amazon.com/prescriptive-guidance/latest/patterns/encrypt-an-existing-amazon-rds-for-postgresql-db-instance.html).
+- **Code.** `src/engine/kms.ts`; `useKey` in `instanceToBucketChecks`; the anonymous
+  read note in `s3.ts`; `atRestNote` in `flow.ts`; the key checks in `validate.ts`.
+- **Tests.** `tests/engine/kms.test.ts`, `tests/game/underLock.test.ts`.
+
 ## Not built yet
 
-DynamoDB, SQS, SNS, Lambda, KMS, SSM, Route 53, and CloudWatch alarms other than a
+DynamoDB, SQS, SNS, Lambda, SSM, Route 53, and CloudWatch alarms other than a
 scaling policy's. See `PROGRESS.md`.

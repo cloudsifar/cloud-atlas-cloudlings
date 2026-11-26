@@ -97,6 +97,12 @@ export type Predicate =
   | { kind: 'role-allows'; roleId: string; action: ServiceAction; resourceId: string }
   /** Block Public Access is on and the bucket policy grants nothing to everyone. */
   | { kind: 'bucket-locked-down'; bucketId: string }
+  /** The bucket's default encryption is SSE-KMS with a customer managed key (an existing `kms-key`). */
+  | { kind: 'bucket-encrypted-with-customer-key'; bucketId: string }
+  /** The database is encrypted at rest, with any key. */
+  | { kind: 'database-encrypted'; databaseId: string }
+  /** Every one of these buckets and databases is encrypted under one and the same customer managed key. */
+  | { kind: 'one-customer-key'; resourceIds: string[] }
   /**
    * Every subnet that holds an instance sends that service's traffic to a gateway
    * endpoint, so none of it leaves the AWS network (none of it "crosses the ground").
@@ -350,6 +356,18 @@ export function evaluatePredicate(
       const bucket = findResourceOfKind(scene, 's3-bucket', predicate.bucketId)
       return bucket !== undefined && bucket.blockPublicAccess && !hasPublicStatement(bucket)
     }
+    case 'bucket-encrypted-with-customer-key': {
+      const key = customerKeyOf(scene, predicate.bucketId)
+      return key !== undefined
+    }
+    case 'database-encrypted':
+      return (
+        findResourceOfKind(scene, 'rds-database', predicate.databaseId)?.encryption.kind === 'kms'
+      )
+    case 'one-customer-key': {
+      const keys = predicate.resourceIds.map((id) => customerKeyOf(scene, id))
+      return keys.length > 0 && keys.every((key) => key !== undefined && key === keys[0])
+    }
     case 'service-routed-through-gateway-endpoint': {
       // Asked of the routing rules, not read off the route tables: where would
       // this service's traffic actually go from each instance's subnet?
@@ -405,4 +423,19 @@ export function evaluateObjectives(
     text: objective.text,
     met: evaluatePredicate(scene, runs, objective.predicate, crowd),
   }))
+}
+
+/**
+ * The id of the customer managed key a bucket's default encryption or a database's
+ * encryption at rest uses, if any. AWS managed keys and SSE-S3 give undefined.
+ */
+function customerKeyOf(scene: Scene, resourceId: string): string | undefined {
+  const resource = scene.resources.find((candidate) => candidate.id === resourceId)
+  const keyId =
+    resource?.kind === 's3-bucket' && resource.encryption.kind === 'sse-kms'
+      ? resource.encryption.keyId
+      : resource?.kind === 'rds-database' && resource.encryption.kind === 'kms'
+        ? resource.encryption.keyId
+        : null
+  return keyId !== null && findResourceOfKind(scene, 'kms-key', keyId) ? keyId : undefined
 }

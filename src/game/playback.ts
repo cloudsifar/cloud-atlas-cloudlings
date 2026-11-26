@@ -67,6 +67,8 @@ const BLOCK_SOUND: Record<CheckKind, SoundId> = {
   nacl: 'blocked-nacl',
   route: 'no-route',
   iam: 'blocked-iam',
+  // Blocked by IAM or KMS: the same fizz (brief, Section 5).
+  kms: 'blocked-iam',
   'bucket-policy': 'blocked-iam',
   'block-public-access': 'blocked-public-access',
   listener: 'timed-out',

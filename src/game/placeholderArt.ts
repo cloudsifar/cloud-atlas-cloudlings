@@ -101,6 +101,14 @@ export const SILHOUETTES: Record<Exclude<SpriteShape, 'cirrus' | 'net'>, Ellipse
       [0.76, 0.74, 0.2, 0.2],
     ],
   ],
+  // A thin, smooth veil, high up: the cloud that forms halos. One long sheet.
+  cirrostratus: [
+    [
+      [0.5, 0.52, 0.48, 0.26],
+      [0.28, 0.48, 0.24, 0.3],
+      [0.72, 0.5, 0.25, 0.28],
+    ],
+  ],
   // Enormous and vertical: a tower with an anvil top.
   cumulonimbus: [
     [
