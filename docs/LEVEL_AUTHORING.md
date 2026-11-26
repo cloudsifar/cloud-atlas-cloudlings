@@ -319,6 +319,10 @@ If a level needs a statement none of these can make, add a predicate to
 | `{ "kind": "run-finished", "predicate": … }` | The kites have flown with the scene as it is now, and that scene satisfies the predicate: "make this change, then fly". A run from before the latest edit does not count |
 | `{ "kind": "level-complete" }`               | The kites have flown and every objective was met. Use this before a step that congratulates                                                                              |
 
+A step that waits for a flight shows no Next button, so its text must tell the player to
+fly (a level test checks for the word). With a predicate, the Fly button also points
+itself out once the sky would satisfy it.
+
 `highlight` is optional: `palette:<id>`, `resource:<id>`, `subnet:<id>` or `button:fly`,
 or a list of them to point at several things at once (both EC2 instances that share a
 security group).

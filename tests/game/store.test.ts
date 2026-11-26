@@ -6,8 +6,13 @@
 // documentation page to cite.
 
 import { describe, expect, it } from 'vitest'
-import { addSecurityGroupRule, removeResource } from '../../src/game/edits'
-import { createStore, type Store } from '../../src/game/store'
+import {
+  addNetworkAclRule,
+  addSecurityGroupRule,
+  removeResource,
+  setSubnetNetworkAcl,
+} from '../../src/game/edits'
+import { createStore, readyToFly, type Store } from '../../src/game/store'
 import { LEVELS } from '../../src/levels'
 
 const firstKite = () => {
@@ -72,5 +77,82 @@ describe('narration rewinds when a completed step is undone', () => {
     )
     expect(store.getState().undoStack.length).toBe(2)
     expect(currentStep(store)).toBe('fly')
+  })
+})
+
+describe('the Fly button points itself out when a step waits only for a flight', () => {
+  // Level 7 step 5 asks for an outbound rule and moves on after a run that answers every
+  // visitor. Once the rule is in, nothing else on screen says what comes next.
+  const wrongKite = () => {
+    const level = LEVELS.find((candidate) => candidate.slug === 'the-wrong-kite')
+    if (!level) throw new Error('Level 7 is missing')
+    return level
+  }
+  const flyAndLand = (store: Store) => {
+    store.startRun()
+    store.finishRun()
+  }
+  /** Level 7 at step 5: edge-acl on both public subnets, HTTPS allowed in, flown. */
+  function atStateless(): Store {
+    const store = createStore(wrongKite())
+    flyAndLand(store) // brief
+    store.acknowledgeNarration() // what happened
+    store.applyEdit((scene) => setSubnetNetworkAcl(scene, 'public-a', 'edge-acl'))
+    store.applyEdit((scene) => setSubnetNetworkAcl(scene, 'public-b', 'edge-acl'))
+    flyAndLand(store) // associate
+    store.applyEdit((scene) =>
+      addNetworkAclRule(scene, 'edge-acl', 'inbound', {
+        number: 100,
+        action: 'allow',
+        ports: 'https',
+        peer: { kind: 'anywhere' },
+      }),
+    )
+    flyAndLand(store) // allow HTTPS
+    return store
+  }
+  const allowReplies = (store: Store) =>
+    store.applyEdit((scene) =>
+      addNetworkAclRule(scene, 'edge-acl', 'outbound', {
+        number: 100,
+        action: 'allow',
+        ports: 'ephemeral',
+        peer: { kind: 'anywhere' },
+      }),
+    )
+
+  it('reaches the stateless step', () => {
+    expect(currentStep(atStateless())).toBe('stateless')
+  })
+
+  it('does not point before the change that the step asks for', () => {
+    const store = atStateless()
+    expect(readyToFly(store.getState())).toBe(false)
+    // A change that leaves the replies dropped does not count either.
+    store.applyEdit((scene) =>
+      addNetworkAclRule(scene, 'edge-acl', 'outbound', {
+        number: 150,
+        action: 'allow',
+        ports: 'https',
+        peer: { kind: 'anywhere' },
+      }),
+    )
+    expect(store.getState().lastRunIsCurrent).toBe(false)
+    expect(readyToFly(store.getState())).toBe(false)
+  })
+
+  it('points once the change is made and not yet flown', () => {
+    const store = atStateless()
+    allowReplies(store)
+    expect(currentStep(store)).toBe('stateless')
+    expect(readyToFly(store.getState())).toBe(true)
+  })
+
+  it('stops pointing once the kites have flown and the narrator has moved on', () => {
+    const store = atStateless()
+    allowReplies(store)
+    flyAndLand(store)
+    expect(currentStep(store)).toBe('deny-range')
+    expect(readyToFly(store.getState())).toBe(false)
   })
 })

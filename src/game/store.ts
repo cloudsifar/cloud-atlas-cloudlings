@@ -45,6 +45,33 @@ export type Store = {
   revealHint(objectiveId: string): void
 }
 
+/** A quiet run of a scene nobody has flown yet, kept per scene (scenes are never edited in place). */
+const rehearsals = new WeakMap<Scene, LevelRun>()
+
+/**
+ * Whether the narrator's current step is waiting only for a flight: it moves on after a
+ * run of the change it asked for, and the sky as it stands would satisfy it. The Fly
+ * button points itself out then, so a step that says "make this change" never leaves
+ * the player wondering what comes next (Simon, Level 7 step 5, 26 November 2026). The
+ * run is the same pure, deterministic one that flying would make.
+ */
+export function readyToFly(state: GameState): boolean {
+  if (state.phase === 'flying' || state.lastRunIsCurrent) return false
+  const trigger = state.level.narration[state.narrationIndex]?.advanceWhen
+  if (trigger?.kind !== 'run-finished' || trigger.predicate === undefined) return false
+  let rehearsal = rehearsals.get(state.scene)
+  if (!rehearsal) {
+    rehearsal = runLevel(state.level, state.scene)
+    rehearsals.set(state.scene, rehearsal)
+  }
+  return evaluatePredicate(
+    state.scene,
+    rehearsal.kiteRuns,
+    trigger.predicate,
+    rehearsal.crowd ?? null,
+  )
+}
+
 export function createStore(level: Level): Store {
   const initial = (): GameState => ({
     level,

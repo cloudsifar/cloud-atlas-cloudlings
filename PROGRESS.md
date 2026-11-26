@@ -117,9 +117,9 @@ Running log. Newest state first; updated at the end of every milestone.
 
 1. **Vitest, the Vite build and lint on Windows, on everything since 18 November**
    (ADRs 0007–0017). In that time the suite has run only on the offline runner
-   (367 tests), and ESLint, Prettier and the project `tsc` were run against the
+   (378 tests), and ESLint, Prettier and the project `tsc` were run against the
    installed packages from the cloud sandbox. On Windows, after `git pull`:
-   `npm ci --ignore-scripts`, then `npm test` (expect 24 test files and **367 passed**),
+   `npm ci --ignore-scripts`, then `npm test` (expect 24 test files and **378 passed**),
    `npm run build` (writes `dist/`, including `dist/sounds/README.md`) and
    `npm run lint`. Read each output, not only the exit code.
 2. **Level 7 played by a person** (ADR 0017): whether the nine steps read clearly and
@@ -451,3 +451,8 @@ Two places where the brief's wording was made more exact:
   Prettier and the project `tsc` are clean against the installed packages (run in the
   desktop workspace VM on 26 November 2026); Vitest and the Vite build are still to run
   on Windows (see "Not verified").
+- **Session 3, continued: Level 7, first play (ADR 0017, addendum).** Step 5 now ends
+  "Then fly again", and a level test checks that every step that waits for a flight says
+  so. When a step waits for a flight of a change and the sky would now satisfy it, the
+  Fly button points itself out. 378 tests pass offline; step 5 played headlessly: no
+  pointer before the rule, pointer after it, step 6 after the flight.

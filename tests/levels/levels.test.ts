@@ -67,6 +67,15 @@ describe('shipped levels', () => {
         }
       })
 
+      it('tells the player to fly in every step that waits for a flight', () => {
+        // A step that moves on only after a run shows no Next button, so its text must
+        // say what to do once the change is made (Simon, Level 7 step 5).
+        for (const step of level.narration) {
+          if (step.advanceWhen.kind !== 'run-finished') continue
+          expect(step.text, `narration step "${step.id}"`).toMatch(/\bfly\b/i)
+        }
+      })
+
       if (level.id <= BEGINNER_LEVELS) {
         it('points at the card section for every step that asks for a setting to change', () => {
           // Beginner levels pulse the section heading the player has to change (ADR 0008).

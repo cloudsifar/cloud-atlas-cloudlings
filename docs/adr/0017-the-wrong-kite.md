@@ -164,3 +164,17 @@ The sky:
   - `npm test` and `npm run build`, expecting 367 tests in 24 files;
   - ESLint and Prettier;
   - the new `blocked-waf` sound by ear.
+
+**Addendum, 26 November 2026: Simon's first play.** On step 5, once the outbound
+ephemeral rule was added, nothing said what came next: no Next button (the step waits
+for a flight) and no instruction to fly. Two changes:
+
+- **The text.** Step 5 now ends "Then fly again", like the steps before and after it.
+  A level test now checks that every step that waits for a flight says "fly".
+- **The Fly button points itself out.** When the current step waits for a flight of a
+  change, and the sky as it stands would satisfy it, the button gets the same dashed
+  pulse as a highlighted tray card (`readyToFly` in `store.ts`). It finds this out by
+  running the same pure, deterministic simulation that flying would, once per scene. It
+  does not point before the change is right, so it confirms the change without giving
+  it away earlier than the narrator does. Steps without a predicate (a plain "fly the
+  kites") are unchanged.

@@ -82,7 +82,7 @@
     },
     {
       "id": "stateless",
-      "text": "The requests got in, but every reply was dropped on its way out: follow a green kite to see where. A network ACL is stateless, so a reply needs its own rule. Add an outbound rule allowing Ephemeral 1024–65535 to anywhere. The two rules numbered 200 are the same pair, for the web servers.",
+      "text": "The requests got in, but every reply was dropped on its way out: follow a green kite to see where. A network ACL is stateless, so a reply needs its own rule. Add an outbound rule: number 100, allow Ephemeral 1024–65535 to anywhere (the two rules numbered 200 are the same pair, for the web servers). Then fly again.",
       "highlight": "subnet:public-a",
       "pulse": ["network-acl:edge-acl"],
       "advanceWhen": {
