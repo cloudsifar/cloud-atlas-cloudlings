@@ -400,22 +400,19 @@ function networkAclSection(
     ),
   )
   if (scene.networkAcls.length > 1 && !level.lockedIds.includes(subnetId)) {
-    section.append(
-      attention(
-        dropdown(
-          'This subnet uses',
-          scene.networkAcls.map((each) => ({
-            value: each.id,
-            label: each.isDefault ? `${each.name} (the default: allows everything)` : each.name,
-          })),
-          acl.id,
-          (value) => actions.edit((current) => setSubnetNetworkAcl(current, subnetId, value)),
-          `${subnetId}-network-acl`,
-        ),
-        actions,
-        `subnet-network-acl:${subnetId}`,
-      ),
+    const choose = dropdown(
+      'This subnet uses',
+      scene.networkAcls.map((each) => ({
+        value: each.id,
+        label: each.isDefault ? `${each.name} (the default: allows everything)` : each.name,
+      })),
+      acl.id,
+      (value) => actions.edit((current) => setSubnetNetworkAcl(current, subnetId, value)),
+      `${subnetId}-network-acl`,
     )
+    // The label pulses, not the whole field: a swelling dropdown spills out of the card.
+    attention(choose.firstElementChild, actions, `subnet-network-acl:${subnetId}`)
+    section.append(choose)
   }
   section.append(
     h('p', { class: 'note', textContent: `Used by: ${usedBy.join(', ')}.` }),
@@ -426,7 +423,8 @@ function networkAclSection(
         : 'Read lowest number first; the first match decides, so a deny must come before the allow it is an exception to. Stateless: replies need their own rule. A custom ACL denies everything it has no rule for.',
     }),
   )
-  if (aclLocked) section.append(h('p', { class: 'locked-note', textContent: 'Locked in this level.' }))
+  if (aclLocked)
+    section.append(h('p', { class: 'locked-note', textContent: 'Locked in this level.' }))
 
   for (const direction of ['inbound', 'outbound'] as const) {
     const preposition = direction === 'inbound' ? 'from' : 'to'
@@ -535,7 +533,12 @@ function networkAclSection(
     )
   }
   section.append(
-    button('What is a network ACL?', () => actions.openFactCard('network-acl'), 'fact-nacl', 'link'),
+    button(
+      'What is a network ACL?',
+      () => actions.openFactCard('network-acl'),
+      'fact-nacl',
+      'link',
+    ),
   )
   return section
 }
@@ -903,7 +906,9 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
         h('p', {
           class: 'note',
           textContent:
-            'Default action: Allow. Each rule below blocks what it recognises, and anything no rule blocks goes on. A blocked request gets 403 Forbidden.',
+            resource.defaultAction === 'allow'
+              ? 'Default action: Allow. Each rule below blocks what it recognises, and anything no rule blocks goes on. A blocked request gets 403 Forbidden.'
+              : 'Default action: Block. Anything no rule allows gets 403 Forbidden.',
         }),
         attention(h('h5', { textContent: 'Rules' }), actions, `web-acl-rules:${resource.id}`),
         h(

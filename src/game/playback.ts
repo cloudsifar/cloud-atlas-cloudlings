@@ -8,6 +8,7 @@
 import { failingStep, type CheckKind, type Scene, type TraceStep } from '../engine'
 import type { KiteRun, LevelRun } from '../levels'
 import {
+  borderCrossing,
   cloudlingPosition,
   kiteRestPosition,
   positionOfRef,
@@ -20,6 +21,12 @@ import type { SoundId } from './sound'
 export type Beat = {
   step: TraceStep
   position: Point
+  /**
+   * A place passed on the way to this beat that has no check of its own: a reply
+   * crossing a subnet passes back through the load balancer between the subnet's two
+   * checks (in, then out).
+   */
+  via?: Point
   /** The request travels as a kite; backend calls and responses travel as rain. */
   carrier: 'kite' | 'rain'
   /** Milliseconds after the kite's own start at which the carrier sets off for, and reaches, this beat. */
@@ -95,24 +102,26 @@ export function buildScript(
   // Nothing is animated after the step that stopped the flow.
   const shown = failed ? steps.slice(0, steps.indexOf(failed) + 1) : steps
 
+  const places = placeSteps(steps, scene, layout, cloudling, rest)
   const beats: Beat[] = []
   let clock = 0
   let previous = rest
-  for (const step of shown) {
-    const position = positionOfRef(scene, layout, step.at, cloudling, previous)
-    const distance = Math.hypot(position.x - previous.x, position.y - previous.y)
+  shown.forEach((step, index) => {
+    const { position, via } = places[index] ?? { position: previous }
+    const distance = pathLength(via ? [previous, via, position] : [previous, position])
     const departAt = clock
     const arriveAt = departAt + distance / SPEED
     beats.push({
       step,
       position,
+      ...(via ? { via } : {}),
       carrier: step.leg === 'request' ? 'kite' : 'rain',
       departAt,
       arriveAt,
     })
     clock = arriveAt + PAUSE_AT_CHECK
     previous = position
-  }
+  })
 
   const ending = endingOf(kiteRun)
   const cues: KiteScript['cues'] = []
@@ -147,6 +156,135 @@ export function buildScript(
     duration: clock + ENDING_DURATION,
     cues,
   }
+}
+
+/**
+ * A kite or its reply crossing a subnet's fence: a network ACL check on the main path.
+ * Backend calls keep their simpler placement (the nearest stretch of fence), since the
+ * NAT gateway or endpoint they pass has no step of its own to steer by.
+ */
+const isCrossing = (step: TraceStep | undefined): boolean =>
+  step?.at.kind === 'subnet' &&
+  step.check === 'nacl' &&
+  (step.leg === 'request' || step.leg === 'response')
+
+/** Two crossings of one subnet in a row: in, then straight back out. */
+const sameSubnet = (first: TraceStep | undefined, second: TraceStep | undefined): boolean =>
+  isCrossing(first) &&
+  isCrossing(second) &&
+  first?.at.kind === 'subnet' &&
+  second?.at.kind === 'subnet' &&
+  first.at.id === second.at.id
+
+/**
+ * Places every step of a trace on the stage. Resources are their cloud's centre; a
+ * subnet's check is the point where the path crosses that subnet's fence, going in
+ * towards the resource the flow visits there or coming out towards wherever it goes
+ * next. Whether a check is going in or coming out follows the path: the flow is inside
+ * a subnet from the check that lets it in (or from a resource it starts at there) until
+ * the check that lets it out. A reply's two checks at one subnet (in, then out) pass
+ * through the resource the request visited there, which has no check on the way back.
+ */
+export function placeSteps(
+  steps: TraceStep[],
+  scene: Scene,
+  layout: SceneLayout,
+  cloudling: Point,
+  rest: Point,
+): { position: Point; via?: Point }[] {
+  const centre = (step: TraceStep, previous: Point) =>
+    positionOfRef(scene, layout, step.at, cloudling, previous)
+  const subnetOf = (step: TraceStep): string | undefined => {
+    if (step.at.kind !== 'resource') return undefined
+    const id = step.at.id.split('#')[0]
+    const resource = scene.resources.find((each) => each.id === id)
+    return resource && 'subnetId' in resource ? resource.subnetId : undefined
+  }
+  // The resource the request visits inside each subnet: the one right after the check
+  // that lets it in.
+  const visited = new Map<string, Point>()
+  steps.forEach((step, index) => {
+    const next = steps[index + 1]
+    if (
+      step.leg === 'request' &&
+      isCrossing(step) &&
+      step.at.kind === 'subnet' &&
+      next?.at.kind === 'resource' &&
+      !visited.has(step.at.id)
+    )
+      visited.set(step.at.id, centre(next, rest))
+  })
+  // Where the flow is going after a step on the main path: the next resource, the
+  // resource inside the next subnet it passes straight through, or (on the way back)
+  // its Cloudling.
+  const headingFor = (index: number): Point | undefined => {
+    const step = steps[index] as TraceStep
+    if (step.at.kind === 'subnet' && sameSubnet(step, steps[index + 1])) {
+      const inside = visited.get(step.at.id)
+      if (inside) return inside
+    }
+    for (let next = index + 1; next < steps.length; next++) {
+      const later = steps[next] as TraceStep
+      if (later.leg !== step.leg) break
+      if (later.at.kind !== 'subnet') return centre(later, rest)
+      const inside = visited.get(later.at.id)
+      if (sameSubnet(later, steps[next + 1]) && inside) return inside
+    }
+    return step.leg === 'response' ? { x: cloudling.x, y: cloudling.y - 60 } : undefined
+  }
+
+  const places: { position: Point; via?: Point }[] = []
+  let previous = rest
+  let inside: string | undefined
+  steps.forEach((step, index) => {
+    let place: { position: Point; via?: Point } = { position: centre(step, previous) }
+    const home = subnetOf(step)
+    if (home) inside = home
+    const rect = step.at.kind === 'subnet' ? layout.subnets[step.at.id] : undefined
+    if (isCrossing(step) && step.at.kind === 'subnet' && rect) {
+      const entering = inside !== step.at.id
+      inside = entering ? step.at.id : undefined
+      const via = sameSubnet(steps[index - 1], step) ? visited.get(step.at.id) : undefined
+      const from = via ?? previous
+      const heading = headingFor(index)
+      place = {
+        position: heading
+          ? borderCrossing(rect, from, heading, entering ? 'enter' : 'exit')
+          : borderCrossing(rect, from, from, 'enter'),
+        ...(via ? { via } : {}),
+      }
+    }
+    places.push(place)
+    previous = place.position
+  })
+  return places
+}
+
+function pathLength(points: Point[]): number {
+  let length = 0
+  for (let index = 1; index < points.length; index++) {
+    const from = points[index - 1] as Point
+    const to = points[index] as Point
+    length += Math.hypot(to.x - from.x, to.y - from.y)
+  }
+  return length
+}
+
+/** The point a fraction of the way along a path of straight pieces. */
+function alongPath(points: Point[], fraction: number): Point {
+  const total = pathLength(points)
+  let remaining = total * fraction
+  for (let index = 1; index < points.length; index++) {
+    const from = points[index - 1] as Point
+    const to = points[index] as Point
+    const piece = Math.hypot(to.x - from.x, to.y - from.y)
+    if (remaining <= piece || index === points.length - 1) {
+      const part = piece === 0 ? 1 : Math.min(1, remaining / piece)
+      return { x: from.x + (to.x - from.x) * part, y: from.y + (to.y - from.y) * part }
+    }
+    remaining -= piece
+  }
+  return points[points.length - 1] ?? { x: 0, y: 0 }
 }
 
 export function buildScripts(run: LevelRun, scene: Scene, layout: SceneLayout): KiteScript[] {
@@ -206,10 +344,10 @@ export function frameAt(script: KiteScript, time: number): KiteFrame {
   const from = script.beats[index - 1]?.position ?? script.rest
   const travel = beat.arriveAt - beat.departAt
   const fraction = travel <= 0 ? 1 : Math.min(1, Math.max(0, (local - beat.departAt) / travel))
-  const position = {
-    x: from.x + (beat.position.x - from.x) * fraction,
-    y: from.y + (beat.position.y - from.y) * fraction,
-  }
+  const position = alongPath(
+    beat.via ? [from, beat.via, beat.position] : [from, beat.position],
+    fraction,
+  )
   const arrived = local >= beat.arriveAt
   return {
     phase: 'flying',

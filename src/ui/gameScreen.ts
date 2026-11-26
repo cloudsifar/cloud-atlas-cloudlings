@@ -47,6 +47,8 @@ export type GameNavigation = {
 export type GameScreen = {
   /** Hides or shows the level without losing it: the menu is opened over a paused level. */
   setActive(active: boolean): void
+  /** Redraws the panels: a picture has arrived (ADR 0016). The sky redraws every frame anyway. */
+  refresh(): void
   destroy(): void
 }
 
@@ -382,13 +384,27 @@ export function mountGameScreen(
           attrs: { 'aria-label': 'Close explanation', 'data-focus-key': 'explanation-close' },
         }),
       )
-      // Beside the cloud, never on top of it: to its right if there is room, otherwise to its left.
+      // Beside the cloud, never on top of it, and never under an open card: to its right
+      // if there is room, otherwise to its left, otherwise just below it.
       const boxWidth = 260
       const gap = 14
+      const cardOnRight = card?.classList.contains('on-right') ?? false
+      const cardOnLeft = card?.classList.contains('on-left') ?? false
+      const free = { from: cardOnLeft ? 524 : 204, to: cardOnRight ? 756 : 1076 }
       const rightOfCloud = explained.x + explained.width + gap
-      const left = rightOfCloud + boxWidth <= 1076 ? rightOfCloud : explained.x - boxWidth - gap
+      const leftOfCloud = explained.x - boxWidth - gap
+      let left = rightOfCloud
+      let top = Math.max(explained.y - 6, 50)
+      if (rightOfCloud + boxWidth > free.to) {
+        if (leftOfCloud >= free.from) left = leftOfCloud
+        else {
+          const centred = centreOf(explained).x - boxWidth / 2
+          left = Math.min(Math.max(centred, free.from), free.to - boxWidth)
+          top = explained.y + explained.height + gap
+        }
+      }
       box.style.left = `${Math.max(left, 204)}px`
-      box.style.top = `${Math.max(explained.y - 6, 50)}px`
+      box.style.top = `${top}px`
       floating.push(box)
     }
     if (message)
@@ -492,6 +508,9 @@ export function mountGameScreen(
     setActive(next) {
       active = next
       sky.setActive(next)
+    },
+    refresh() {
+      draw()
     },
     destroy() {
       unsubscribe()

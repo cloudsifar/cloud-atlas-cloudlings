@@ -28,20 +28,20 @@ export function renderAssetList(manifest) {
     '1. Draw it as a transparent PNG at the size given (or a multiple of it, same proportions),',
     '   and export it to WebP.',
     '2. Put the WebP in `public/art/`.',
-    '3. In `assets/manifest.json`, set the entry\'s `file` to the file name.',
+    "3. In `assets/manifest.json`, set the entry's `file` to the file name.",
     '',
     'No code changes. If a picture fails to load, its placeholder is drawn instead.',
     '',
     '- **Anchor**: the point of the picture placed on its position, as fractions of its width',
-    '  and height (`0.5, 1` is the middle of the bottom edge: a Cloudling\'s feet).',
+    "  and height (`0.5, 1` is the middle of the bottom edge: a Cloudling's feet).",
     '- **Frames**: frames side by side in one strip, left to right, each the size given,',
     '  played at the rate shown.',
-    '- **Points**: named places on the picture, as fractions (a Cloudling\'s hand holds the string).',
+    "- **Points**: named places on the picture, as fractions (a Cloudling's hand holds the string).",
     '- **Between two points**: stretched from one to the other, or repeated (tiled) along the way.',
     '- **Clouds come in two layers.** The base layer is light and near-neutral, so code can tint',
     '  it blue by band, grey when unhealthy and red when compromised; the pencil texture must',
     '  survive the tint. An optional highlight layer (`highlight` in the manifest) carries the',
-    '  golden sunlight and the white burst; without one, a soft glow cut to the base\'s shape is',
+    "  golden sunlight and the white burst; without one, a soft glow cut to the base's shape is",
     '  used. Both layers are the same size.',
     '- **The sky itself** is a gradient drawn in code in every region, so it costs no file.',
     '',
@@ -57,7 +57,9 @@ export function renderAssetList(manifest) {
       lines.push('| --- | --- | --- | --- | --- | --- | --- |')
       for (const [id, entry] of inPriority.filter(([, candidate]) => candidate.group === group)) {
         const notes = [
-          entry.repeat ? `between two points, ${entry.repeat === 'tile' ? 'tiled' : 'stretched'}` : '',
+          entry.repeat
+            ? `between two points, ${entry.repeat === 'tile' ? 'tiled' : 'stretched'}`
+            : '',
           entry.points
             ? Object.entries(entry.points)
                 .map(([name, [x, y]]) => `${name} at ${x}, ${y}`)
@@ -94,5 +96,5 @@ export function renderAssetList(manifest) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const manifest = JSON.parse(readFileSync('assets/manifest.json', 'utf8'))
   writeFileSync('docs/ASSET_LIST.md', renderAssetList(manifest))
-  console.log('Wrote docs/ASSET_LIST.md')
+  process.stdout.write('Wrote docs/ASSET_LIST.md\n')
 }

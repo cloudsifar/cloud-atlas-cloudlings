@@ -483,14 +483,17 @@ function drawContainers(context: CanvasRenderingContext2D, model: SkyViewModel):
 
     caption(context, subnet.name, rect.x + 8, rect.y + 10, 11, 'left', '#57536a')
     if (subnet.band === 'low') {
-      // "Public" is a fact about routing, so the label follows the route table.
+      // "Public" is a fact about routing, so the label follows the route table. It sits
+      // in the corner away from the middle of the VPC, where a load balancer spanning
+      // both zones keeps its own caption.
+      const outerRight = rect.x + rect.width / 2 > layout.vpc.x + layout.vpc.width / 2
       caption(
         context,
         isPublic ? '✓ public: routes to the Internet Gateway' : 'not public yet: no internet route',
-        rect.x + 8,
+        outerRight ? rect.x + rect.width - 8 : rect.x + 8,
         rect.y + rect.height - 9,
         10,
-        'left',
+        outerRight ? 'right' : 'left',
         isPublic ? '#2f6b3a' : '#8a5a2b',
       )
     }
@@ -547,10 +550,12 @@ function drawConnections(context: CanvasRenderingContext2D, model: SkyViewModel)
     const endX = bucketRect.x + bucketRect.width * 0.3
     context.save()
     const road = drawArtBetween(context, 'construct.skyway', { x: startX, y }, { x: endX, y })
-    for (const [width, colour, dash] of road ? [] : [
-      [12, 'rgba(255,244,205,0.95)', []],
-      [1.4, 'rgba(70,90,150,0.85)', [7, 5]],
-    ] as const) {
+    for (const [width, colour, dash] of road
+      ? []
+      : ([
+          [12, 'rgba(255,244,205,0.95)', []],
+          [1.4, 'rgba(70,90,150,0.85)', [7, 5]],
+        ] as const)) {
       context.lineWidth = width
       context.strokeStyle = colour
       context.setLineDash([...dash])
@@ -1087,10 +1092,19 @@ function drawClouds(
       })
     }
 
+    // A load balancer with a WAF net slung beneath it keeps its caption inside its cloud,
+    // near the bottom, so the net has the space below to itself.
+    const netted =
+      resource.kind === 'load-balancer' &&
+      scene.resources.some(
+        (each) => each.kind === 'waf-web-acl' && each.loadBalancerId === resource.id,
+      )
     const labelY =
       resource.kind === 's3-bucket'
         ? rect.y + rect.height + 12
-        : y + rect.height + ('securityGroupIds' in resource ? 16 : 10)
+        : netted
+          ? y + rect.height - 13
+          : y + rect.height + ('securityGroupIds' in resource ? 16 : 10)
     if (resource.kind === 'auto-scaling-group') {
       // The fleet's name and what it is doing, one line, so it stays in the mid band.
       const view =
@@ -1114,7 +1128,7 @@ function drawClouds(
         )
       }
     } else if (resource.kind === 'waf-web-acl') {
-      // Beside the net's end, clear of the load balancer's own caption below it.
+      // Beside the net's end, inside the public subnet, above its route label.
       caption(
         context,
         `AWS WAF · ${resource.name}`,
@@ -1294,6 +1308,7 @@ function drawKiteAndCloudling(
   kite: Kite,
   script: KiteScript | undefined,
   costume: string,
+  labelled: Set<string>,
 ): void {
   const hostile = kite.kind === 'hostile'
   // A flood is a flock of kites from one Cloudling (brief, Section 6): one on the string,
@@ -1303,7 +1318,15 @@ function drawKiteAndCloudling(
     drawKite(context, x, y, hostile, state, time, scale)
     if (!flock) return
     for (const [dx, dy] of FLOCK)
-      drawKite(context, x + dx * scale, y + dy * scale, hostile, state, time + dx * 37, scale * 0.75)
+      drawKite(
+        context,
+        x + dx * scale,
+        y + dy * scale,
+        hostile,
+        state,
+        time + dx * 37,
+        scale * 0.75,
+      )
   }
   const frame: KiteFrame | undefined = script ? frameAt(script, model.runTime) : undefined
   const finished = frame?.phase === 'ending' || frame?.phase === 'done'
@@ -1355,19 +1378,22 @@ function drawKiteAndCloudling(
     // A red kite stopped by a check is a defence working: no red cross on a cloud that
     // is configured correctly.
     const kind: MarkKind = !failed ? 'pass' : hostile ? 'blocked' : 'fail'
-    const label =
-      newest || failed
-        ? `${CHECK_LABELS[beat.step.check]}${kind === 'blocked' ? ': blocked' : ''}`
-        : selected
-          ? String(index + 1)
-          : undefined
+    // Several kites stopped at one stretch of fence share one label: six "Network ACL"
+    // captions on top of each other read as a smudge, not as six stops.
+    const spot = `${Math.round(beat.position.x / 24)},${Math.round(beat.position.y / 24)}:${beat.step.check}:${kind}`
+    const named = (newest || failed) && !labelled.has(spot)
+    if (named) labelled.add(spot)
+    const label = named
+      ? `${CHECK_LABELS[beat.step.check]}${kind === 'blocked' ? ': blocked' : ''}`
+      : selected
+        ? String(index + 1)
+        : undefined
     marker(context, jitter, kind, label)
   })
 
   if (frame.phase === 'flying') {
     drawString(context, hand, frame.kitePosition, 0, model.time)
-    if (frame.carrier === 'kite')
-      kites(frame.position.x, frame.position.y, 'flying', model.time)
+    if (frame.carrier === 'kite') kites(frame.position.x, frame.position.y, 'flying', model.time)
     else drawRain(context, frame.position, model.time)
     return
   }
@@ -1425,8 +1451,7 @@ function drawKiteAndCloudling(
         // A pale shell closes over the bucket.
         const bucket = model.layout.clouds[kite.destinationId]
         const shell =
-          bucket &&
-          drawArt(context, 'construct.bucket-shell', bucket, { alpha: 1 - progress })
+          bucket && drawArt(context, 'construct.bucket-shell', bucket, { alpha: 1 - progress })
         if (bucket && !shell) {
           context.save()
           context.fillStyle = `rgba(250, 250, 240, ${0.5 * (1 - progress)})`
@@ -1452,16 +1477,20 @@ function drawKiteAndCloudling(
         const ground = { x: feet.x + 30, y: feet.y - 6 }
         const position = lerp(bumped, ground, late)
         if (late < 1) drawString(context, hand, position, late, model.time)
-        kites(position.x,
-          position.y, late > 0.15 ? 'crumpled' : caughtState(script.stoppedBy),
+        kites(
+          position.x,
+          position.y,
+          late > 0.15 ? 'crumpled' : caughtState(script.stoppedBy),
           model.time,
         )
       } else {
         // A stopped friendly kite is the player's misconfiguration: it sags back to its Cloudling.
         const position = lerp(bumped, { x: rest.x, y: rest.y + 26 }, late)
         drawString(context, hand, position, 0.4 + late * 0.4, model.time)
-        kites(position.x,
-          position.y, late === 0 ? caughtState(script.stoppedBy) : 'flying',
+        kites(
+          position.x,
+          position.y,
+          late === 0 ? caughtState(script.stoppedBy) : 'flying',
           model.reducedMotion ? 0 : model.time,
           1 - late * 0.1,
         )
@@ -1713,9 +1742,7 @@ function drawWeatherStation(
     'station.anemometer',
     { x, y: y - 120 },
     {
-      frame: Math.floor(
-        ((((spin / (Math.PI * 2)) % 1) + 1) % 1) * cupFrames,
-      ),
+      frame: Math.floor(((((spin / (Math.PI * 2)) % 1) + 1) % 1) * cupFrames),
     },
   )
   for (let arm = 0; arm < (cups ? 0 : 3); arm++) {
@@ -1999,6 +2026,7 @@ export function drawSky(context: CanvasRenderingContext2D, model: SkyViewModel):
   if (crowdFrame && model.crowd) {
     drawCrowd(context, model, theme.costume)
   } else {
+    const labelled = new Set<string>()
     for (const kite of model.level.population) {
       drawKiteAndCloudling(
         context,
@@ -2006,6 +2034,7 @@ export function drawSky(context: CanvasRenderingContext2D, model: SkyViewModel):
         kite,
         model.scripts.find((script) => script.kiteRun.kite.id === kite.id),
         theme.costume,
+        labelled,
       )
     }
   }

@@ -15,8 +15,6 @@ const stage = h('div', { class: 'stage' })
 app.append(stage)
 // Zone and subnet letters in bold, everywhere in the interface (src/ui/dom.ts).
 installPlaceLetters(document.body)
-// Final art, wherever assets/manifest.json names a picture; placeholders until then.
-loadArt()
 
 /** Desktop first: the stage is designed at 1280×720 and scaled to fit, never cropped. */
 function fitStage(): void {
@@ -32,6 +30,10 @@ fitStage()
 const gameLayer = h('div', { class: 'game-layer' })
 const menuLayer = h('div', { class: 'menu-layer' })
 let game: { level: Level; screen: GameScreen } | null = null
+
+// Final art, wherever assets/manifest.json names a picture; placeholders until then. The
+// sky redraws every frame; the panels (the tray's icons) redraw as each picture arrives.
+loadArt(() => game?.screen.refresh())
 
 function useLayers(): void {
   if (gameLayer.parentElement !== stage) stage.replaceChildren(gameLayer, menuLayer)

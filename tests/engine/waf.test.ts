@@ -34,14 +34,7 @@ import {
   type WafRule,
   type WafWebAcl,
 } from '../../src/engine'
-import {
-  BAD_RANGE_IP,
-  byId,
-  GREEN_IP,
-  sceneWith,
-  webRequest,
-  workingScene,
-} from './fixtures'
+import { BAD_RANGE_IP, byId, GREEN_IP, sceneWith, webRequest, workingScene } from './fixtures'
 
 const webAcl = (rules: WafRule[], overrides: Partial<WafWebAcl> = {}): WafWebAcl => ({
   kind: 'waf-web-acl',
@@ -134,9 +127,9 @@ describe('the web ACL on the request path', () => {
   })
 
   it('adds no step when no web ACL protects the load balancer', () => {
-    expect(evaluateFlow(workingScene(), webRequest()).trace.some((step) => step.check === 'waf')).toBe(
-      false,
-    )
+    expect(
+      evaluateFlow(workingScene(), webRequest()).trace.some((step) => step.check === 'waf'),
+    ).toBe(false)
   })
 })
 
@@ -144,7 +137,10 @@ describe('a hostile kite that reaches the application', () => {
   it('is a breach, whatever it carries: the attack got where it was going', () => {
     expect(evaluateFlow(workingScene(), flood).outcome).toBe('breach')
     expect(evaluateFlow(workingScene(), script).outcome).toBe('breach')
-    const stuffing = webRequest({ intent: 'hostile', source: { kind: 'internet', ip: BAD_RANGE_IP } })
+    const stuffing = webRequest({
+      intent: 'hostile',
+      source: { kind: 'internet', ip: BAD_RANGE_IP },
+    })
     expect(evaluateFlow(workingScene(), stuffing).outcome).toBe('breach')
   })
 
@@ -194,7 +190,12 @@ const EDGE: NetworkAcl = {
   inbound: [
     { number: 90, action: 'deny', ports: 'all', peer: { kind: 'cidr', cidr: '198.51.100.0/24' } },
     { number: 100, action: 'allow', ports: 'https', peer: { kind: 'anywhere' } },
-    { number: 200, action: 'allow', ports: 'ephemeral', peer: { kind: 'cidr', cidr: '10.0.0.0/16' } },
+    {
+      number: 200,
+      action: 'allow',
+      ports: 'ephemeral',
+      peer: { kind: 'cidr', cidr: '10.0.0.0/16' },
+    },
   ],
   outbound: [
     { number: 100, action: 'allow', ports: 'ephemeral', peer: { kind: 'anywhere' } },
@@ -233,7 +234,9 @@ describe('the edge network ACL', () => {
   })
 
   it('drops every reply without the outbound ephemeral rule: network ACLs are stateless', () => {
-    const scene = withEdge((acl) => (acl.outbound = acl.outbound.filter((rule) => rule.number !== 100)))
+    const scene = withEdge(
+      (acl) => (acl.outbound = acl.outbound.filter((rule) => rule.number !== 100)),
+    )
     const result = evaluateFlow(scene, webRequest())
     expect(result.outcome).toBe('blocked')
     expect(failingStep(result)?.leg).toBe('response')
@@ -266,7 +269,11 @@ describe('scoring and predicates for the edge', () => {
     const holds = (predicate: Parameters<typeof evaluatePredicate>[2]) =>
       evaluatePredicate(scene, [], predicate)
     expect(
-      holds({ kind: 'network-acl-on-subnets', networkAclId: 'edge', subnetIds: ['public-a', 'public-b'] }),
+      holds({
+        kind: 'network-acl-on-subnets',
+        networkAclId: 'edge',
+        subnetIds: ['public-a', 'public-b'],
+      }),
     ).toBe(true)
     expect(
       holds({ kind: 'network-acl-on-subnets', networkAclId: 'edge', subnetIds: ['private-a'] }),

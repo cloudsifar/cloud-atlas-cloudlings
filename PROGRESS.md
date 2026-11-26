@@ -9,8 +9,8 @@ Running log. Newest state first; updated at the end of every milestone.
       balancer target selection) with tests citing AWS docs; `docs/ENGINE.md`,
       `docs/SIMPLIFICATIONS.md`
 - [x] **Milestone 2** — Levels 1–3 playable with placeholder art
-- [ ] **Milestone 3** — in progress: Levels 4 (Skyway), 5 (Crowd Day) and 6 (Storm Front)
-      finished; Levels 7–12 and the rest of the engine to do. See "Handover: what to build next" below
+- [ ] **Milestone 3** — in progress: Levels 4 (Skyway), 5 (Crowd Day), 6 (Storm Front)
+      and 7 (The Wrong Kite) finished; Levels 8–12 and the rest of the engine to do. See "Handover: what to build next" below
 - [ ] Milestone 4 — shell (partly started: start screen, level select with ticks and stars,
       Guided Run from Level 1 with "Next level", settings)
 - [ ] Milestone 5 — finish
@@ -63,6 +63,22 @@ Running log. Newest state first; updated at the end of every milestone.
       8 and 16 and back down, with the log reading as expected minute by minute. The
       level was completed with three stars, and every narrator step advanced.
     - No console errors in any of these runs.
+  - Level 7, The Wrong Kite (ADR 0017), on the esbuild bundle, 26 November 2026,
+    every step through the interface:
+    - The first run: three breaches (both web servers marked compromised).
+    - Both public subnets switched to `edge-acl` on their cards: every kite tangled at
+      the edge, one label per stop.
+    - Inbound 100 HTTPS added: requests in, every reply dropped, drawn on the public
+      subnets' bottom edge.
+    - Outbound 100 ephemeral added: visitors answered. An inbound deny at 110 left the
+      step where it was; removed and re-added at 90, the range was turned away at the
+      edge and the narrator moved on.
+    - The WAF web ACL dragged from the tray: the placement tip stayed clear of its card,
+      both rules ticked, the net caught the script and the flood. All four objectives and
+      three stars; all nine narrator steps advanced.
+    - Levels 2, 3, 5 and 6 opened and flown afterwards, to check the moved captions and
+      the new path placement.
+    - No console errors in any of these runs.
   - Level 6 after the first-play changes (ADR 0015), on the esbuild bundle, 25 November
     2026:
     - The unsolved run ended on its own after minute 10 (17.7 s), the clock showing
@@ -100,13 +116,16 @@ Running log. Newest state first; updated at the end of every milestone.
 ## Not verified — do these first
 
 1. **Vitest, the Vite build and lint on Windows, on everything since 18 November**
-   (ADRs 0007–0015). In that time the suite has run only on the offline runner
-   (318 tests), and ESLint, Prettier and the project `tsc` were run against the
+   (ADRs 0007–0017). In that time the suite has run only on the offline runner
+   (367 tests), and ESLint, Prettier and the project `tsc` were run against the
    installed packages from the cloud sandbox. On Windows, after `git pull`:
-   `npm ci --ignore-scripts`, then `npm test` (expect 21 test files and **318 passed**),
+   `npm ci --ignore-scripts`, then `npm test` (expect 24 test files and **367 passed**),
    `npm run build` (writes `dist/`, including `dist/sounds/README.md`) and
    `npm run lint`. Read each output, not only the exit code.
-2. **Level 6 replayed by a person** after Simon's first-play changes (ADR 0015): the
+2. **Level 7 played by a person** (ADR 0017): whether the nine steps read clearly and
+   leave time to see each result; whether the reply drop on the bottom edge is easy to
+   find; whether the WAF net and the netted kites read as caught; the new `blocked-waf`
+   placeholder sound. Then **Level 6 replayed** after Simon's first-play changes (ADR 0015): the
    unsolved run now ends on its own after minute 10; zone and subnet letters are bold
    everywhere; the last step hints at the third star; a fleet draws one cloudlet per
    instance. Still open from the first play: whether the storm's slow-motion minutes
@@ -172,7 +191,7 @@ Running log. Newest state first; updated at the end of every milestone.
 
 ## Not started (from the brief)
 
-- Engine: WAF, instance failure outside an AZ failure, RDS encryption and read replicas,
+- Engine: instance failure outside an AZ failure, RDS encryption and read replicas,
   DynamoDB, SQS, SNS, Lambda, KMS, SSM, Route 53,
   CloudWatch alarms other than a scaling policy's (e.g. publishing to SNS), EBS, EFS,
   DynamoDB gateway endpoint flows, and the cost penalty for idle oversized instances.
@@ -265,25 +284,43 @@ Still not done for Level 6, and left for later milestones:
 - `thunder` and `failover` are synthesised placeholders.
 - A replay speed control would now help on both crowd levels.
 
-**Level 7, The Wrong Kite (next).** Brief, Section 6. Needs WAF (a web ACL on the load
-balancer with the Core rule set and a rate-based rule), custom network ACLs on the
-public subnets with rule order that matters, and three kinds of red kite: a known bad
-range, a malicious payload, and a flood. The engine already evaluates network ACLs in
-rule order with ephemeral ports (section 6 of `docs/ENGINE.md`); WAF is new, and a
-flood needs a hostile crowd or a rate count on the timeline.
+**Level 7, The Wrong Kite: done** (ADR 0017). A flood is a kite with a `rate`, not a
+hostile crowd. Still open for it: the fact cards' `atlasPage` links (`TODO(Simon)`) and
+the `blocked-waf` placeholder sound.
+
+**Level 8, Under Lock (next).** Brief, Section 11. Needs KMS (a customer managed key,
+SSE-KMS on the bucket, `kms:Use` in the role), encryption at rest on RDS set only at
+creation (replace the database), and a first run that ends in a breach of a sensitive
+bucket. The art manifest already has a planned `construct.kms-halo`: give it a hook
+and take it out of `planned` (ADR 0016).
 
 **Smaller jobs, any time.**
 
-- Load sprite files named in `assets/manifest.json` (currently only sizes are used).
+- Final art: drop pictures into `public/art/` and name them in `assets/manifest.json`
+  (ADR 0016); check the first one in a browser.
 - Delay the results card until the kites' endings have played.
 - Disclose simplifications 11b and 17 on fact cards.
-- Fix the label overlaps in the low band.
-- Write `docs/ASSET_LIST.md` and `CREDITS.md`; choose and bundle fonts, with an ADR.
+- Label overlaps in the low band: mostly fixed with Level 7 (the "✓ public" labels in
+  the outer corners, one label per stop). A failed reply's label at the bottom edge of
+  Public subnet **B** can still touch that subnet's "✓ public" label.
+- Write `CREDITS.md`; choose and bundle fonts, with an ADR.
 - Regional costumes are a tunic colour only; the four regional skylines exist.
 
 ## Conflicts between the brief and AWS documentation
 
-None found so far. Two places where the brief's wording was made more exact:
+One, found with Level 7:
+
+- **Where WAF sits on a load balancer's path.** The brief (Section 7) lists the
+  ALB's checks as security group, then WAF web ACL, then listener. The engine reads
+  the web ACL after the listener, before a target is chosen. An HTTPS request's
+  content cannot be read until the listener has accepted the connection and
+  terminated TLS, and a request to a port with no listener is never accepted at all.
+  An AWS-reviewed answer on re:Post describes WAF inspection on an ALB as happening
+  after listener rules are evaluated, then forwarding to the target if WAF allows it:
+  https://repost.aws/questions/QULtY4XatRSjOGLvQk9v7fJg. The order makes no difference
+  to any outcome in Level 7. Described in `docs/ENGINE.md`, section 16, and ADR 0017.
+
+Two places where the brief's wording was made more exact:
 
 - A target the load balancer cannot reach (for example, shut out by its security group)
   fails its health check, so the load balancer routes around it; if no target is
@@ -399,3 +436,18 @@ None found so far. Two places where the brief's wording was made more exact:
   lower case throughout; Level 6's last step hints at the third star and pulses the
   fleet's minimum; a fleet draws exactly one cloudlet per instance. 318 tests pass
   offline.
+- **Session 3, continued: Level 7, The Wrong Kite (ADR 0017), and the art framework
+  (ADR 0016).** AWS WAF web ACLs (IP set, rate-based, Core rule set; 403 on a block),
+  read after the listener; any hostile kite that reaches a target is a breach; custom
+  network ACLs associated and edited on a subnet's card, scored for least privilege;
+  `run-finished` narrator steps that need the change to have been flown. The third star
+  asks for rule numbers with room between them, since deny-before-allow is required by
+  an objective. Network ACL checks are drawn where the path crosses the fence, so a
+  dropped reply shows on the edge it leaves by. Every visual now has an entry in
+  `assets/manifest.json` and a hook in the code, so final art drops into `public/art/`
+  with no code changes; `npm run assets:list` writes `docs/ASSET_LIST.md` for the
+  artist. SIMPLIFICATIONS 38–44; THREATS rows for Level 7. 367 tests pass offline;
+  played headlessly through every step to three stars, no console errors. ESLint,
+  Prettier and the project `tsc` are clean against the installed packages (run in the
+  desktop workspace VM on 26 November 2026); Vitest and the Vite build are still to run
+  on Windows (see "Not verified").

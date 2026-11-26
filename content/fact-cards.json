@@ -35,9 +35,7 @@
   "security-group": {
     "title": "Security group",
     "body": "A firewall worn by a resource: the pencilled outline around a cloud. It holds allow rules only; anything not allowed is refused. It is stateful: the reply to an allowed request is always let through. A rule's source can be another security group, meaning \"anything wearing that group\".",
-    "simplifications": [
-      "Ports are picked from a short list of named choices."
-    ],
+    "simplifications": ["Ports are picked from a short list of named choices."],
     "atlasPage": "TODO(Simon)"
   },
   "network-acl": {

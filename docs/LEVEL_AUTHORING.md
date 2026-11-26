@@ -96,6 +96,31 @@ An RDS database is a resource like any other:
 
 Its subnets are its DB subnet group: private, in both zones, with the primary among
 them. Its security group should allow the engine's port (`mysql` or `postgresql`).
+
+An AWS WAF web ACL (Level 7) protects one load balancer:
+
+```json
+{
+  "kind": "waf-web-acl",
+  "id": "shop-waf",
+  "name": "shop-web-acl",
+  "loadBalancerId": null,
+  "defaultAction": "allow",
+  "rules": []
+}
+```
+
+In a palette entry, leave `loadBalancerId` null: placing the web ACL associates it with
+the scene's load balancer, and removing it clears the association. Rules are
+`{ "kind": "core-rule-set" }`, `{ "kind": "rate-based", "limit": 100 }` (a whole number,
+at least 10, per five minutes) and `{ "kind": "ip-set", "cidrs": ["198.51.100.0/24"] }`,
+each kind at most once.
+
+Network ACLs: mark the VPC's default one `"isDefault": true` (every level has one). A
+second, custom ACL that the player associates and edits starts with whatever rules the
+level gives it; rule numbers run from 1 to 32766. The least-privilege star judges the
+allow rules of custom ACLs the player can edit (every allow rule must be one some kite
+relied on, and none may open all traffic); it never judges the default ACL.
 The simplest way to write `referenceSolution` is to copy `initialScene` and make the
 changes the player is meant to make. Two rules the validator enforces:
 
@@ -138,6 +163,10 @@ carries a complete resource with a fixed id (for example the bucket `photos`).
   query from the instance that answered the kite: it needs the database's security
   group to allow the engine's port from that instance, and the database to be
   available (Level 6).
+- `rate` (optional) is how many requests the Cloudling sends in five minutes. Leave it
+  out for an ordinary visitor (counted as 20). A flood sets it high (Level 7: 3000);
+  above ten times the ordinary rate it is drawn as a flock of kites. Only a WAF
+  rate-based rule reads it.
 - `label` names what the kite does, for the trace inspector. `says` is what the
   Cloudling says in its speech bubble when clicked, in its own voice: "I want to visit
   the website!", or for a hostile one, what it is after.
@@ -241,10 +270,14 @@ The predicates available today (`src/engine/predicates.ts`):
 | `security-group-allows-group`             | The group `securityGroupId` allows `ports` inbound from the group `fromSecurityGroupId` (security group chaining)                           |
 | `crowd-answered-at-end`                   | Every crowd kite in the last tick was answered (needs `crowd`)                                                                              |
 | `crowd-failures-only-during-failover`     | Every tick was fully answered, or a database was failing over during it: static stability (needs `crowd` and a database)                    |
+| `network-acl-on-subnets`                  | Every one of `subnetIds` is associated with the network ACL `networkAclId`                                                                  |
+| `network-acl-allows`                      | The network ACL has an allow rule in `direction` for `ports` from (or to) `peer`                                                            |
+| `network-acl-rules-spaced`                | The network ACL's rule numbers, in each direction, start at `gap` or above and are at least `gap` apart (AWS: leave room, 100, 110, 120)    |
+| `web-acl-protects`                        | A web ACL is associated with the load balancer `loadBalancerId` and has every rule kind in `rules`                                          |
 
 Select kites with `{ "intent": "legitimate" }`, `{ "intent": "hostile" }` or
 `{ "flowIds": ["green-1"] }`. Values for `by`: `route`, `nacl`, `security-group`,
-`listener`, `target-selection`, `iam`, `block-public-access`, `bucket-policy`.
+`listener`, `waf`, `target-selection`, `iam`, `block-public-access`, `bucket-policy`.
 
 **Order matters.** When the kites land, the objectives tick one at a time, a second
 apart, in the order they are listed here (ADR 0011). List them in the order the player
@@ -277,13 +310,14 @@ If a level needs a statement none of these can make, add a predicate to
 
 `advanceWhen` says what moves the narrator on:
 
-| Trigger                                     | Moves on when                                                                                                              |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `{ "kind": "acknowledged" }`                | The player presses Next                                                                                                    |
-| `{ "kind": "scene", "predicate": … }`       | The scene satisfies the predicate. If it is already true, the step is skipped, so players who work ahead are not held back |
-| `{ "kind": "card-opened", "subjectId": … }` | The player opens that config card                                                                                          |
-| `{ "kind": "run-finished" }`                | The kites have flown, whatever happened                                                                                    |
-| `{ "kind": "level-complete" }`              | The kites have flown and every objective was met. Use this before a step that congratulates                                |
+| Trigger                                      | Moves on when                                                                                                                                                            |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `{ "kind": "acknowledged" }`                 | The player presses Next                                                                                                                                                  |
+| `{ "kind": "scene", "predicate": … }`        | The scene satisfies the predicate. If it is already true, the step is skipped, so players who work ahead are not held back                                               |
+| `{ "kind": "card-opened", "subjectId": … }`  | The player opens that config card                                                                                                                                        |
+| `{ "kind": "run-finished" }`                 | The kites have flown, whatever happened                                                                                                                                  |
+| `{ "kind": "run-finished", "predicate": … }` | The kites have flown with the scene as it is now, and that scene satisfies the predicate: "make this change, then fly". A run from before the latest edit does not count |
+| `{ "kind": "level-complete" }`               | The kites have flown and every objective was met. Use this before a step that congratulates                                                                              |
 
 `highlight` is optional: `palette:<id>`, `resource:<id>`, `subnet:<id>` or `button:fly`,
 or a list of them to point at several things at once (both EC2 instances that share a
@@ -294,7 +328,10 @@ say "over here" (ADR 0008), e.g. `"pulse": ["security-group:sg-alb"]`. The secti
 `security-group:<id>`, `route-table:<id>`, `listener:<load balancer id>`,
 `targets:<load balancer id>`, `role-statements:<role id>`, `role-wearers:<role id>`,
 `instance-role:<instance id>`, `group-scaling:<group id>`, `group-subnets:<group id>`,
-`group-size:<group id>` (the minimum) and `database-multi-az:<database id>`. In Levels 1–3 every step that asks for a setting to
+`group-size:<group id>` (the minimum), `database-multi-az:<database id>`,
+`network-acl:<network ACL id>` (its heading on a subnet's card),
+`subnet-network-acl:<subnet id>` (the subnet's "This subnet uses" choice) and
+`web-acl-rules:<web ACL id>`. In Levels 1–3 every step that asks for a setting to
 change must have one; the level tests check it.
 
 **Linking a phrase to a fact card.** A step's text may contain
@@ -344,3 +381,18 @@ is. Text inside a dropdown option cannot be bold and is left plain.
 - `content/explanations.json`: the box shown when a cloud is placed, one entry per service.
 - `content/fact-cards.json`: fact cards, including each service's disclosed
   simplifications and its Cloud Atlas page reference (`TODO(Simon)`).
+
+## Pictures
+
+Every visual the game draws looks itself up in `assets/manifest.json` by id (ADR 0016).
+Until a picture exists, the placeholder drawing stands in. When a level brings in a new
+kind of cloud, construct, effect or panel:
+
+1. Add a manifest entry for it, with `"status": "planned"` until it is drawn, and its
+   size, anchor, frames and points.
+2. Ask for it in the code by that id (`drawArt`, `drawArtAt`, `drawArtBetween`, or an
+   `--art-…` custom property for interface pictures), keeping a placeholder.
+3. Run `npm run assets:list` to regenerate `docs/ASSET_LIST.md`.
+
+`tests/game/art.test.ts` fails if a drawn id has no entry, if an entry is never asked
+for, or if the asset list is out of date.

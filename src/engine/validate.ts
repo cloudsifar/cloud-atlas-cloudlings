@@ -253,7 +253,10 @@ export function validateScene(scene: Scene): SceneProblem[] {
             )
         }
         for (const rule of resource.rules) {
-          if (rule.kind === 'rate-based' && !(Number.isInteger(rule.limit) && rule.limit >= LOWEST_RATE_LIMIT))
+          if (
+            rule.kind === 'rate-based' &&
+            !(Number.isInteger(rule.limit) && rule.limit >= LOWEST_RATE_LIMIT)
+          )
             misconfigured(
               resource.id,
               `A rate-based rule's limit must be a whole number of at least ${LOWEST_RATE_LIMIT}.`,
@@ -263,7 +266,10 @@ export function validateScene(scene: Scene): SceneProblem[] {
               try {
                 cidrContains(cidr, '0.0.0.0')
               } catch {
-                broken(resource.id, `The IP set of "${resource.name}" has "${cidr}", which is not an address range.`)
+                broken(
+                  resource.id,
+                  `The IP set of "${resource.name}" has "${cidr}", which is not an address range.`,
+                )
               }
             }
         }

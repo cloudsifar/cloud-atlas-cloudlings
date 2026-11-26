@@ -332,7 +332,56 @@ only the S3 access decision applies.
   `crowd-failures-only-during-failover`.
 - **Tests.** `tests/engine/storm.test.ts`.
 
+## 16. AWS WAF web ACLs: `waf.ts`, `flow.ts`
+
+- **Modelled.** A `waf-web-acl` is associated with one load balancer (`loadBalancerId`;
+  `null` protects nothing) and has a default action (`allow` or `block`) and up to three
+  rules: an IP set (CIDRs), a rate-based rule (a limit per five minutes) and the AWS
+  managed Core rule set. `evaluateFlow` reads it after the listener has accepted the
+  connection and before a target is chosen (`webAclFor`, `evaluateWebAcl`):
+  - **The rules run in a fixed order**: IP set, then rate-based, then the Core rule set.
+    The first that blocks decides. A request no rule blocks takes the default action.
+  - **A block** is HTTP 403 Forbidden from WAF: the flow is `blocked`, no target sees
+    it, and the trace step's check is `waf`.
+  - **Rate-based.** A flow's `rate` is how many requests its sender makes in five
+    minutes (a kite's `rate` in the level file; an ordinary visitor is `ORDINARY_RATE`,
+    20). Over the limit, the request is blocked. AWS accepts limits from 10
+    (`LOWEST_RATE_LIMIT`).
+  - **Core rule set.** A flow whose `payload` is `malicious` is blocked by it.
+  - **Validation.** The load balancer exists; one web ACL per load balancer; a rate limit
+    is a whole number of at least 10; IP set entries are valid CIDRs; no rule kind twice.
+- **Breach, generalised.** Any hostile kite that reaches a target is now a breach, not
+  only one carrying a payload: a flood that gets through has done what it came for.
+- **AWS references.**
+  [web ACL default action](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-default-action.html),
+  [rate-based rule settings](https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-type-rate-based-high-level-settings.html),
+  [lower rate limits, from 10](https://aws.amazon.com/about-aws/whats-new/2024/08/aws-waf-rate-based-rules-lower-rate-limits),
+  [baseline managed rule groups (Core rule set)](https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-baseline.html),
+  [rule actions: Block answers 403](https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-action.html).
+- **Code.** `src/engine/waf.ts`; the web ACL step in `evaluateFlow`; the WAF case in
+  `validate.ts`; predicate `web-acl-protects`.
+- **Tests.** `tests/engine/waf.test.ts`.
+
+### Network ACLs the player edits
+
+- **Custom ACLs.** A VPC's default network ACL (`isDefault: true`) allows everything; a
+  custom one denies whatever it has no rule for. A subnet is associated with exactly one.
+  Rule numbers run from 1 to 32766 (validated).
+- **Least privilege** (`scoreScene`). Each allow rule on an editable, non-default ACL
+  must be one some kite's flow relied on, and must not open all traffic. Deny rules only
+  narrow, so they are never findings. The default ACL is left out: it is AWS's, not the
+  player's.
+- **Predicates.** `network-acl-on-subnets`, `network-acl-allows` and
+  `network-acl-rules-spaced` (numbers at least `gap` apart, starting at `gap` or above:
+  AWS recommends leaving room, as in 100, 110, 120).
+- **AWS references.**
+  [network ACL rules](https://docs.aws.amazon.com/vpc/latest/userguide/nacl-rules.html),
+  [a new custom network ACL blocks everything until rules are added](https://docs.aws.amazon.com/vpc/latest/userguide/create-network-acl.html),
+  [custom network ACL example: a reply rule for every rule](https://docs.aws.amazon.com/vpc/latest/userguide/custom-network-acl.html),
+  [the default network ACL allows all traffic](https://docs.aws.amazon.com/vpc/latest/userguide/default-network-acl.html),
+  [CreateNetworkAclEntry: rule numbers and leaving room](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateNetworkAclEntry.html).
+
 ## Not built yet
 
-WAF, DynamoDB, SQS, SNS, Lambda, KMS, SSM, Route 53, and CloudWatch alarms other than a
+DynamoDB, SQS, SNS, Lambda, KMS, SSM, Route 53, and CloudWatch alarms other than a
 scaling policy's. See `PROGRESS.md`.

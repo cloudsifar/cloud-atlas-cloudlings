@@ -269,8 +269,7 @@ export function evaluatePredicate(
       return (['inbound', 'outbound'] as const).every((direction) => {
         const numbers = acl[direction].map((rule) => rule.number).sort((a, b) => a - b)
         return numbers.every(
-          (number, index) =>
-            number - (index === 0 ? 0 : numbers[index - 1]!) >= predicate.gap,
+          (number, index) => number - (index === 0 ? 0 : numbers[index - 1]!) >= predicate.gap,
         )
       })
     }

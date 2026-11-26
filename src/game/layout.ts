@@ -214,8 +214,9 @@ export function layoutScene(scene: Scene): SceneLayout {
         break
       }
       case 'waf-web-acl': {
-        // A net slung beneath the load balancer it protects, over the cloud's lower
-        // edge and clear of its caption (brief, Section 6).
+        // A net slung beneath the load balancer it protects, from just inside the
+        // cloud's lower edge (brief, Section 6). The load balancer's caption moves inside
+        // its cloud while a net hangs there, so the net has the space below to itself.
         const protectedOne = resourcesOfKind(scene, 'load-balancer').find(
           (loadBalancer) => loadBalancer.id === resource.loadBalancerId,
         )
@@ -224,7 +225,7 @@ export function layoutScene(scene: Scene): SceneLayout {
           : null
         const { width, height } = spriteSize('waf-web-acl')
         clouds[resource.id] = above
-          ? { x: above.x, y: above.y + above.height - height + 4, width, height }
+          ? { x: above.x, y: above.y + above.height - 14, width, height }
           : centred({ x: vpcCentreX, y: lowCentreY + 30 }, resource.kind)
         break
       }
@@ -323,6 +324,48 @@ function closestPointOnBorder(rect: Rect, point: Point): Point {
   ]
   distances.sort((first, second) => first.distance - second.distance)
   return distances[0]?.edge ?? { x, y }
+}
+
+/**
+ * Where a straight line from `from` to `to` crosses a subnet's fence, going in or coming
+ * out. A boundary check belongs on the stretch of fence the kite (or rain) actually
+ * crosses: a reply leaving for the internet is stopped at the edge facing the gateway,
+ * not at the edge it came in by. When the line misses the rectangle (a load balancer is
+ * drawn straddling two subnets, so its centre can sit just outside either), the nearest
+ * point of fence to where it is coming from, or going to, stands in.
+ */
+export function borderCrossing(
+  rect: Rect,
+  from: Point,
+  to: Point,
+  direction: 'enter' | 'exit',
+): Point {
+  const fallback = () =>
+    direction === 'enter' ? closestPointOnBorder(rect, from) : closestPointOnBorder(rect, to)
+  // Liang–Barsky clipping of the segment against the rectangle.
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const sides: [number, number][] = [
+    [-dx, from.x - rect.x],
+    [dx, rect.x + rect.width - from.x],
+    [-dy, from.y - rect.y],
+    [dy, rect.y + rect.height - from.y],
+  ]
+  let enter = 0
+  let exit = 1
+  for (const [p, q] of sides) {
+    if (p === 0) {
+      if (q < 0) return fallback()
+      continue
+    }
+    const t = q / p
+    if (p < 0) enter = Math.max(enter, t)
+    else exit = Math.min(exit, t)
+  }
+  if (enter > exit) return fallback()
+  const at = (t: number): Point => ({ x: from.x + dx * t, y: from.y + dy * t })
+  if (direction === 'enter') return enter > 0 || !contains(rect, from) ? at(enter) : fallback()
+  return exit < 1 ? at(exit) : fallback()
 }
 
 /**

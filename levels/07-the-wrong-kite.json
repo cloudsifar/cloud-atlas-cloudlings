@@ -51,23 +51,14 @@
     {
       "id": "associate",
       "text": "First, the edge. The VPC has a second network ACL, edge-acl, made for the public subnets. Click Public subnet A and switch it to edge-acl, then Public subnet B. Then fly the kites and watch what a custom ACL does with traffic it has no rule for.",
-      "highlight": [
-        "subnet:public-a",
-        "subnet:public-b"
-      ],
-      "pulse": [
-        "subnet-network-acl:public-a",
-        "subnet-network-acl:public-b"
-      ],
+      "highlight": ["subnet:public-a", "subnet:public-b"],
+      "pulse": ["subnet-network-acl:public-a", "subnet-network-acl:public-b"],
       "advanceWhen": {
         "kind": "run-finished",
         "predicate": {
           "kind": "network-acl-on-subnets",
           "networkAclId": "edge-acl",
-          "subnetIds": [
-            "public-a",
-            "public-b"
-          ]
+          "subnetIds": ["public-a", "public-b"]
         }
       }
     },
@@ -75,9 +66,7 @@
       "id": "allow-https",
       "text": "Every kite tangled in the ribbon: edge-acl has no rule for HTTPS from the internet, so its final * rule denied them all. A custom ACL denies whatever it is not told to allow. Add an inbound rule: number 100, allow HTTPS 443 from anywhere. Then fly again.",
       "highlight": "subnet:public-a",
-      "pulse": [
-        "network-acl:edge-acl"
-      ],
+      "pulse": ["network-acl:edge-acl"],
       "advanceWhen": {
         "kind": "run-finished",
         "predicate": {
@@ -95,9 +84,7 @@
       "id": "stateless",
       "text": "The requests got in, but every reply was dropped on its way out: follow a green kite to see where. A network ACL is stateless, so a reply needs its own rule. Add an outbound rule allowing Ephemeral 1024–65535 to anywhere. The two rules numbered 200 are the same pair, for the web servers.",
       "highlight": "subnet:public-a",
-      "pulse": [
-        "network-acl:edge-acl"
-      ],
+      "pulse": ["network-acl:edge-acl"],
       "advanceWhen": {
         "kind": "run-finished",
         "predicate": {
@@ -112,17 +99,13 @@
       "id": "deny-range",
       "text": "Visitors get in and out, and so does the block-listed range. Add an inbound rule denying All traffic from 198.51.100.0/24, numbered below 100: rules are read lowest first and the first match decides, so a deny after the allow is never read. Then fly.",
       "highlight": "subnet:public-a",
-      "pulse": [
-        "network-acl:edge-acl"
-      ],
+      "pulse": ["network-acl:edge-acl"],
       "advanceWhen": {
         "kind": "run-finished",
         "predicate": {
           "kind": "flows-stopped",
           "flows": {
-            "flowIds": [
-              "red-range"
-            ]
+            "flowIds": ["red-range"]
           },
           "by": "nacl"
         }
@@ -132,18 +115,13 @@
       "id": "waf",
       "text": "The other two arrive like any visitor: HTTPS 443, ordinary addresses. Only AWS WAF reads the requests themselves. Drag a WAF web ACL from the tray onto the load balancer, then switch on the Core rule set and a rate-based rule.",
       "highlight": "palette:shop-waf",
-      "pulse": [
-        "web-acl-rules:shop-waf"
-      ],
+      "pulse": ["web-acl-rules:shop-waf"],
       "advanceWhen": {
         "kind": "scene",
         "predicate": {
           "kind": "web-acl-protects",
           "loadBalancerId": "alb",
-          "rules": [
-            "core-rule-set",
-            "rate-based"
-          ]
+          "rules": ["core-rule-set", "rate-based"]
         }
       }
     },
@@ -158,9 +136,7 @@
     {
       "id": "wrap",
       "text": "Each attack stopped at the [layer that can see it](card:concept-defence-in-depth): the range at the subnet edge, the script and the flood in WAF. No third star yet? Leave room between rule numbers, at least 10 apart like 90, 100, 110, so a rule can go between any two later without renumbering.",
-      "pulse": [
-        "network-acl:edge-acl"
-      ],
+      "pulse": ["network-acl:edge-acl"],
       "advanceWhen": {
         "kind": "level-complete"
       }
@@ -334,27 +310,17 @@
         "id": "alb",
         "name": "Application Load Balancer",
         "scheme": "internet-facing",
-        "subnetIds": [
-          "public-a",
-          "public-b"
-        ],
-        "securityGroupIds": [
-          "sg-alb"
-        ],
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
         "listener": "https",
-        "targetIds": [
-          "app-a",
-          "app-b"
-        ]
+        "targetIds": ["app-a", "app-b"]
       },
       {
         "kind": "ec2-instance",
         "id": "app-a",
         "name": "Web server A",
         "subnetId": "private-a",
-        "securityGroupIds": [
-          "sg-app"
-        ],
+        "securityGroupIds": ["sg-app"],
         "roleId": null,
         "size": "small",
         "healthy": true
@@ -364,9 +330,7 @@
         "id": "app-b",
         "name": "Web server B",
         "subnetId": "private-b",
-        "securityGroupIds": [
-          "sg-app"
-        ],
+        "securityGroupIds": ["sg-app"],
         "roleId": null,
         "size": "small",
         "healthy": true
@@ -450,9 +414,7 @@
       "predicate": {
         "kind": "flows-stopped",
         "flows": {
-          "flowIds": [
-            "red-range"
-          ]
+          "flowIds": ["red-range"]
         },
         "by": "nacl"
       }
@@ -463,9 +425,7 @@
       "predicate": {
         "kind": "flows-stopped",
         "flows": {
-          "flowIds": [
-            "red-script"
-          ]
+          "flowIds": ["red-script"]
         },
         "by": "waf"
       }
@@ -476,9 +436,7 @@
       "predicate": {
         "kind": "flows-stopped",
         "flows": {
-          "flowIds": [
-            "red-flood"
-          ]
+          "flowIds": ["red-flood"]
         },
         "by": "waf"
       }
@@ -544,12 +502,7 @@
       "nearAnswer": "On edge-acl: inbound, allow HTTPS 443 from anywhere; outbound, allow Ephemeral 1024–65535 to anywhere. Keep the two rules numbered 200 for the web servers."
     }
   ],
-  "factCards": [
-    "network-acl",
-    "waf-web-acl",
-    "concept-defence-in-depth",
-    "security-group"
-  ],
+  "factCards": ["network-acl", "waf-web-acl", "concept-defence-in-depth", "security-group"],
   "referenceSolution": {
     "vpc": {
       "cidr": "10.0.0.0/16"
@@ -743,27 +696,17 @@
         "id": "alb",
         "name": "Application Load Balancer",
         "scheme": "internet-facing",
-        "subnetIds": [
-          "public-a",
-          "public-b"
-        ],
-        "securityGroupIds": [
-          "sg-alb"
-        ],
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
         "listener": "https",
-        "targetIds": [
-          "app-a",
-          "app-b"
-        ]
+        "targetIds": ["app-a", "app-b"]
       },
       {
         "kind": "ec2-instance",
         "id": "app-a",
         "name": "Web server A",
         "subnetId": "private-a",
-        "securityGroupIds": [
-          "sg-app"
-        ],
+        "securityGroupIds": ["sg-app"],
         "roleId": null,
         "size": "small",
         "healthy": true
@@ -773,9 +716,7 @@
         "id": "app-b",
         "name": "Web server B",
         "subnetId": "private-b",
-        "securityGroupIds": [
-          "sg-app"
-        ],
+        "securityGroupIds": ["sg-app"],
         "roleId": null,
         "size": "small",
         "healthy": true
