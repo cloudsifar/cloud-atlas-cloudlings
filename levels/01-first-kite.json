@@ -9,14 +9,14 @@
   "narration": [
     {
       "id": "welcome",
-      "text": "Welcome to the sky above N. Virginia. The dashed border is your VPC: your own region of the AWS network. The Cloudlings on the ground are the internet, and their kites are requests. Right now there is no way in. Click any Cloudling to hear what it wants.",
+      "text": "Welcome to the sky above N. Virginia, where Kitepost, a new photo-sharing app, is about to go live. The dashed border is your VPC: your own region of the AWS network. The Cloudlings on the ground are the internet, and their kites are requests. Right now there is no way in. Click any Cloudling to hear what it wants.",
       "advanceWhen": {
         "kind": "acknowledged"
       }
     },
     {
       "id": "instances",
-      "text": "Two EC2 instances are already running in the mid band, in private subnets. They are locked for now; we will look inside them in the next level. They wear their own security group, ec2-app-sg; the load balancer you are about to add brings its own, alb-sg. Each kind of component gets its own group, so each opens only what it needs. Our job is to let the green kites reach them safely.",
+      "text": "Two EC2 instances are already running Kitepost in the mid band, in private subnets; they are locked for now. They wear their own security group, ec2-app-sg, and the load balancer you are about to add brings its own, alb-sg: each kind of component opens only what it needs. Our job is to let the green kites reach them safely.",
       "highlight": "resource:app-a",
       "advanceWhen": {
         "kind": "acknowledged"
@@ -108,7 +108,7 @@
     },
     {
       "id": "fly",
-      "text": "Ready. Press \"Fly kites\" and watch. Three green kites are visitors; the red one is aiming at SSH 22.",
+      "text": "Ready. Press \"Fly kites\" and watch. Three green kites are Kitepost's first visitors; the red one is aiming at SSH 22.",
       "highlight": "button:fly",
       "advanceWhen": {
         "kind": "level-complete"
@@ -298,8 +298,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website",
-      "says": "I want to visit the website!"
+      "label": "opens Kitepost",
+      "says": "Is Kitepost live yet? I want to see the feed!"
     },
     {
       "id": "green-2",
@@ -309,8 +309,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website",
-      "says": "I want to visit the website!"
+      "label": "opens Kitepost",
+      "says": "Everyone's posting the cherry blossom. Let me see!"
     },
     {
       "id": "green-3",
@@ -320,8 +320,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website",
-      "says": "I want to visit the website!"
+      "label": "opens Kitepost",
+      "says": "I've heard about this new app. Let me in!"
     },
     {
       "id": "red-1",

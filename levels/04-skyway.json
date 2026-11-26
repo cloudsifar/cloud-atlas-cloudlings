@@ -9,14 +9,14 @@
   "narration": [
     {
       "id": "arrival",
-      "text": "Welcome to Frankfurt, eu-central-1. An AWS Region is a separate place in the world with its own Availability Zones, and what you build in one Region stays there unless you say otherwise. From here on you get a goal and hints, not steps.",
+      "text": "Welcome to Frankfurt, eu-central-1, in autumn, when the city fills up for the Mainufer Book Fair. An AWS Region is a separate place in the world with its own Availability Zones, and what you build in one Region stays there unless you say otherwise. From here on you get a goal and hints, not steps.",
       "advanceWhen": {
         "kind": "acknowledged"
       }
     },
     {
       "id": "brief",
-      "text": "The uploads work, but every photo leaves through the NAT Gateway and crosses the ground to reach S3, and the NAT Gateway costs coins every hour it exists. Nothing here needs the internet except S3. Find a cheaper, more private way: start with the private route table.",
+      "text": "Publishers are uploading catalogues and cover images to the fair's bucket. Every upload leaves through the NAT Gateway and crosses the ground to reach S3, and the NAT Gateway costs coins every hour it exists. Nothing here needs the internet except S3. Find a cheaper, more private way: start with the private route table.",
       "highlight": "subnet:private-a",
       "advanceWhen": {
         "kind": "acknowledged"
@@ -207,7 +207,7 @@
       {
         "kind": "s3-bucket",
         "id": "photos",
-        "name": "photo-bucket",
+        "name": "catalogue-bucket",
         "blockPublicAccess": true,
         "policy": [],
         "dataClass": "sensitive",
@@ -251,8 +251,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "uploads a photo",
-      "says": "I want to upload a photo!",
+      "label": "uploads a catalogue",
+      "says": "Our autumn catalogue, uploading now.",
       "backendCall": {
         "destinationId": "photos",
         "action": "s3:Write"
@@ -266,8 +266,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "uploads a photo",
-      "says": "I want to upload a photo!",
+      "label": "uploads cover images",
+      "says": "Here are the cover images for our stand.",
       "backendCall": {
         "destinationId": "photos",
         "action": "s3:Write"
@@ -281,8 +281,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "uploads a photo",
-      "says": "I want to upload a photo!",
+      "label": "uploads a catalogue",
+      "says": "One more catalogue for Hall 3!",
       "backendCall": {
         "destinationId": "photos",
         "action": "s3:Write"
@@ -297,8 +297,8 @@
       "port": 443,
       "payload": "clean",
       "action": "s3:Read",
-      "label": "tries to read the bucket",
-      "says": "I want to read the photos in your bucket!"
+      "label": "tries to read next season's covers before they are announced",
+      "says": "I want next season's book covers before anyone sees them!"
     }
   ],
   "events": [],
@@ -532,7 +532,7 @@
       {
         "kind": "s3-bucket",
         "id": "photos",
-        "name": "photo-bucket",
+        "name": "catalogue-bucket",
         "blockPublicAccess": true,
         "policy": [],
         "dataClass": "sensitive",

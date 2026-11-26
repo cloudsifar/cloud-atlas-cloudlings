@@ -2,7 +2,7 @@
   "id": 8,
   "slug": "under-lock",
   "title": "Under Lock",
-  "concept": "Access control and encryption at rest are different defences: close a public bucket that holds sensitive data, then protect the data with a customer managed KMS key (SSE-KMS), which the application's role must be allowed to use, and replace an unencrypted RDS database with an encrypted copy, since RDS encrypts only at creation.",
+  "concept": "Access control and encryption at rest are different defences, and a network edge does not cover S3: close a public bucket of sensitive data, encrypt it with a customer managed KMS key the app's role may use, and replace an unencrypted RDS database with an encrypted copy, since RDS encrypts only at creation.",
   "guidance": "hints",
   "region": "sa-east-1",
   "azs": 2,
@@ -12,6 +12,8 @@
     "rt-public",
     "rt-private",
     "nacl-default",
+    "edge-acl",
+    "shop-waf",
     "sg-alb",
     "sg-app",
     "sg-db",
@@ -35,7 +37,7 @@
   "narration": [
     {
       "id": "brief",
-      "text": "Under Lock, back at the São Paulo hat shop. Visitors upload receipts to an S3 bucket and look up orders in an RDS database. An auditor has two worries: who can read the receipts, and who holds the keys that protect the data. Read the bucket's card, then fly the kites.",
+      "text": "Under Lock, back at Pé na Areia. Visitors upload receipts to an S3 bucket and look up orders in an RDS database, behind the network ACL and WAF from last time. An auditor has two worries: who can read the receipts, and who holds the keys that protect the data. Read the bucket's card, then fly.",
       "highlight": "button:fly",
       "advanceWhen": {
         "kind": "run-finished"
@@ -43,7 +45,7 @@
     },
     {
       "id": "what-happened",
-      "text": "The red Cloudling read every receipt, names and home addresses, straight from the bucket: a breach, and its string is still attached. The bucket is public because Block Public Access is off and its policy lets everyone read. Either one alone would have kept it closed.",
+      "text": "The red Cloudling read every receipt straight from the bucket: a breach, and its string is still attached. edge-acl block-lists its address, but S3 is outside the VPC, so no network ACL or WAF stands in its way. The bucket is public because Block Public Access is off and its policy lets everyone read.",
       "highlight": "resource:receipts",
       "advanceWhen": {
         "kind": "acknowledged"
@@ -138,7 +140,7 @@
         "band": "low",
         "cidr": "10.0.1.0/24",
         "routeTableId": "rt-public",
-        "networkAclId": "nacl-default"
+        "networkAclId": "edge-acl"
       },
       {
         "id": "public-b",
@@ -147,7 +149,7 @@
         "band": "low",
         "cidr": "10.0.2.0/24",
         "routeTableId": "rt-public",
-        "networkAclId": "nacl-default"
+        "networkAclId": "edge-acl"
       },
       {
         "id": "private-a",
@@ -218,6 +220,57 @@
               "kind": "anywhere"
             },
             "ports": "all"
+          }
+        ]
+      },
+      {
+        "id": "edge-acl",
+        "name": "edge-acl",
+        "inbound": [
+          {
+            "number": 90,
+            "action": "deny",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "198.51.100.0/24"
+            },
+            "ports": "all"
+          },
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "https"
+          },
+          {
+            "number": 200,
+            "action": "allow",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "10.0.0.0/16"
+            },
+            "ports": "ephemeral"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "ephemeral"
+          },
+          {
+            "number": 200,
+            "action": "allow",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "10.0.0.0/16"
+            },
+            "ports": "http"
           }
         ]
       }
@@ -366,6 +419,22 @@
         "encryption": {
           "kind": "none"
         }
+      },
+      {
+        "kind": "waf-web-acl",
+        "id": "shop-waf",
+        "name": "shop-web-acl",
+        "loadBalancerId": "alb",
+        "defaultAction": "allow",
+        "rules": [
+          {
+            "kind": "core-rule-set"
+          },
+          {
+            "kind": "rate-based",
+            "limit": 100
+          }
+        ]
       }
     ]
   },
@@ -378,8 +447,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "uploads a receipt to swap a hat for a bigger size",
-      "says": "Here's my receipt: can I swap it for a bigger size?",
+      "label": "uploads a receipt to swap flip-flops for a bigger size",
+      "says": "Here's my receipt: can I swap these flip-flops for a bigger size?",
       "backendCall": {
         "destinationId": "receipts",
         "action": "s3:Write"
@@ -394,7 +463,7 @@
       "port": 443,
       "payload": "clean",
       "label": "looks up an order",
-      "says": "Has my hat been posted yet?",
+      "says": "Has my bikini been posted yet?",
       "backendCall": {
         "destinationId": "db"
       }
@@ -408,7 +477,7 @@
       "port": 443,
       "payload": "clean",
       "label": "uploads a receipt for a refund",
-      "says": "Receipt attached. Refund, please!",
+      "says": "Receipt attached. Refund for the sunglasses, please!",
       "backendCall": {
         "destinationId": "receipts",
         "action": "s3:Write"
@@ -423,7 +492,7 @@
       "port": 443,
       "payload": "clean",
       "label": "looks up an order",
-      "says": "When will my hat arrive?",
+      "says": "When will my beach towel arrive?",
       "backendCall": {
         "destinationId": "db"
       }
@@ -542,7 +611,7 @@
         "band": "low",
         "cidr": "10.0.1.0/24",
         "routeTableId": "rt-public",
-        "networkAclId": "nacl-default"
+        "networkAclId": "edge-acl"
       },
       {
         "id": "public-b",
@@ -551,7 +620,7 @@
         "band": "low",
         "cidr": "10.0.2.0/24",
         "routeTableId": "rt-public",
-        "networkAclId": "nacl-default"
+        "networkAclId": "edge-acl"
       },
       {
         "id": "private-a",
@@ -622,6 +691,57 @@
               "kind": "anywhere"
             },
             "ports": "all"
+          }
+        ]
+      },
+      {
+        "id": "edge-acl",
+        "name": "edge-acl",
+        "inbound": [
+          {
+            "number": 90,
+            "action": "deny",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "198.51.100.0/24"
+            },
+            "ports": "all"
+          },
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "https"
+          },
+          {
+            "number": 200,
+            "action": "allow",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "10.0.0.0/16"
+            },
+            "ports": "ephemeral"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "ephemeral"
+          },
+          {
+            "number": 200,
+            "action": "allow",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "10.0.0.0/16"
+            },
+            "ports": "http"
           }
         ]
       }
@@ -769,6 +889,22 @@
           "kind": "kms",
           "keyId": "shop-key"
         }
+      },
+      {
+        "kind": "waf-web-acl",
+        "id": "shop-waf",
+        "name": "shop-web-acl",
+        "loadBalancerId": "alb",
+        "defaultAction": "allow",
+        "rules": [
+          {
+            "kind": "core-rule-set"
+          },
+          {
+            "kind": "rate-based",
+            "limit": 100
+          }
+        ]
       },
       {
         "kind": "kms-key",

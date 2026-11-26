@@ -9,7 +9,7 @@
   "narration": [
     {
       "id": "welcome",
-      "text": "Altitude means distance from the internet. The EC2 instances sit in the mid band, in private subnets. They have only private addresses, so nothing on the internet can reach them directly: the only way in is through the load balancer. Let us prove it.",
+      "text": "Altitude means distance from the internet. Kitepost's EC2 instances sit in the mid band, in private subnets. They have only private addresses, so nothing on the internet can reach them directly: the only way in is through the load balancer. Let us prove it.",
       "advanceWhen": {
         "kind": "acknowledged"
       }
@@ -256,8 +256,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website",
-      "says": "I want to visit the website!"
+      "label": "scrolls the Kitepost feed",
+      "says": "Show me today's posts!"
     },
     {
       "id": "green-2",
@@ -267,8 +267,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website",
-      "says": "I want to visit the website!"
+      "label": "scrolls the Kitepost feed",
+      "says": "Who's posted the blossom today?"
     },
     {
       "id": "green-3",
@@ -278,8 +278,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website",
-      "says": "I want to visit the website!"
+      "label": "scrolls the Kitepost feed",
+      "says": "Just one more scroll…"
     },
     {
       "id": "red-1",
@@ -290,7 +290,7 @@
       "port": 22,
       "payload": "clean",
       "label": "probes SSH 22",
-      "says": "I want to try SSH on port 22. Maybe the servers behind the load balancer will let me in!"
+      "says": "I want to try SSH on port 22. Maybe Kitepost's servers will let me in!"
     }
   ],
   "events": [],

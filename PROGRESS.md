@@ -11,7 +11,8 @@ Running log. Newest state first; updated at the end of every milestone.
 - [x] **Milestone 2** — Levels 1–3 playable with placeholder art
 - [ ] **Milestone 3** — in progress: Levels 4 (Skyway), 5 (Crowd Day), 6 (Storm Front),
       7 (The Wrong Kite) and 8 (Under Lock) finished; Levels 9–12 and the rest of the
-      engine to do. See "Handover: what to build next" below
+      engine to do, planned in `docs/LEVEL_PLANS.md`. See "Handover: what to build next"
+      below
 - [ ] Milestone 4 — shell (partly started: start screen, level select with ticks and stars,
       Guided Run from Level 1 with "Next level", settings)
 - [ ] Milestone 5 — finish
@@ -132,10 +133,10 @@ Running log. Newest state first; updated at the end of every milestone.
 ## Not verified — do these first
 
 1. **Vitest, the Vite build and lint on Windows, on everything since 18 November**
-   (ADRs 0007–0018). In that time the suite has run only on the offline runner
-   (419 tests), and ESLint, Prettier and the project `tsc` were run against the
+   (ADRs 0007–0019). In that time the suite has run only on the offline runner
+   (422 tests), and ESLint, Prettier and the project `tsc` were run against the
    installed packages from the cloud sandbox. On Windows, after `git pull`:
-   `npm ci --ignore-scripts`, then `npm test` (expect 26 test files and **419 passed**),
+   `npm ci --ignore-scripts`, then `npm test` (expect 26 test files and **422 passed**),
    `npm run build` (writes `dist/`, including `dist/sounds/README.md`) and
    `npm run lint`. Read each output, not only the exit code.
 2. **Level 8 played by a person** (ADR 0018): whether the eight steps leave time to
@@ -284,9 +285,9 @@ Still not done for Level 5, and left for later milestones:
 
 **Level 6, Storm Front: built (ADR 0014, 25 November 2026).** What the level does:
 
-- Eight Cloudlings look up their orders: load balancer → web fleet → orders database
-  (RDS for MySQL). The fleet and the database start in AZ a only, and AZ a fails at
-  minute 8.
+- Eight Cloudlings check their book fair bookings: load balancer → web fleet →
+  bookings database (RDS for MySQL). The fleet and the database start in AZ a only,
+  and AZ a fails at minute 8.
 - Three fixes, one narrator step each: spread the fleet over both subnets, make the
   database Multi-AZ, and chain its security group to `ec2-app-sg`. The third is a trap:
   the database starts by allowing MySQL from Private subnet A's range only, so a spread
@@ -307,15 +308,34 @@ Still not done for Level 6, and left for later milestones:
 hostile crowd. Still open for it: the fact cards' `atlasPage` links (`TODO(Simon)`) and
 the `blocked-waf` placeholder sound.
 
-**Level 8, Under Lock: done** (ADR 0018). Still open for it: the fact cards'
-`atlasPage` links (`TODO(Simon)`) and the `string-snap` placeholder sound.
+**Level 8, Under Lock: done** (ADR 0018). It starts from Level 7's solved edge, locked
+(ADR 0019). Still open for it: the fact cards' `atlasPage` links (`TODO(Simon)`) and the
+`string-snap` placeholder sound.
 
-**Level 9, No Keys at the Door (next).** Brief, Section 11. Needs SSM Session Manager
-(an operator Cloudling with a box-shaped kite, a session drawn from the cirrocumulus to
-the instance), `ssm:ManagedInstance` on the instance role, an outbound path to SSM
-through a NAT Gateway, and a red kite probing port 22. The art manifest already has
-planned `cloudling.operator.idle` and `kite.operator.flying` entries: give them hooks
-and take them out of `planned` (ADR 0016).
+**Stories and continuity (ADR 0019).** Each region has one invented business:
+
+- N. Virginia: Kitepost, a photo-sharing app;
+- Frankfurt: the Mainufer Book Fair;
+- São Paulo: Pé na Areia, a beachwear shop;
+- Tokyo: not chosen yet.
+
+Within São Paulo, each level starts from the previous level's solved state, with the
+inherited parts locked. Keep new narrator steps to about 330 characters, so "Step x of
+y" stays in view.
+
+**Level 9, No Keys at the Door (next).** The agreed plan, with the steps, objectives,
+the operator's changing address, the "In the real world" card for Session Manager and
+the engine work it needs, is in **`docs/LEVEL_PLANS.md`**. Read that first. In short:
+
+1. Port 22 is closed, and both the probe and the operator fail.
+2. A bastion host lets the operator in from a /32.
+3. The operator's address changes and they are locked out.
+4. Session Manager through a NAT Gateway, with no port 22 anywhere.
+
+The art manifest already has planned `cloudling.operator.idle` and
+`kite.operator.flying` entries: give them hooks and take them out of `planned`
+(ADR 0016). Levels 10–12 and the open decisions (Tokyo's business first) are in the
+same file.
 
 **Smaller jobs, any time.**
 
@@ -489,3 +509,16 @@ Two places where the brief's wording was made more exact:
   would turn it away (every level). SIMPLIFICATIONS 45–51; THREATS row for Level 8. 419
   tests pass offline; played headlessly through every step to three stars, no console
   errors.
+- **Session 3, continued: regional stories and continuity (ADR 0019).**
+  - **Levels 1–8 rewritten around one invented business per region:**
+    - N. Virginia: Kitepost, a photo-sharing app, in spring;
+    - Frankfurt: the Mainufer Book Fair, in autumn;
+    - São Paulo: Pé na Areia, a beachwear shop, in summer.
+  - **Only text changed.** The text, the Cloudlings' lines and display names were
+    rewritten, and ids are unchanged. Every changed step fits in about three lines.
+  - **Level 8 inherits Level 7's defences.** It now starts with Level 7's solved
+    `edge-acl` and web ACL, locked. The red reader still breaches, because S3 is
+    outside the VPC, and a test checks both points.
+  - **Plans for Levels 9–12** are in `docs/LEVEL_PLANS.md`.
+  - **Checks.** 422 tests pass offline. Played headlessly: the Level 1–7 texts, and
+    Level 8 to three stars, with no console errors.

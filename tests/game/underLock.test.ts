@@ -170,3 +170,39 @@ describe('the Fly button on Level 8', () => {
     expect(readyToFly(store.getState())).toBe(true)
   })
 })
+
+describe("Level 8 carries Level 7's defences", () => {
+  // The São Paulo levels are one shop (ADR 0019): what the player built at the edge in
+  // Level 7 is still there, locked, in Level 8, and it does nothing for the bucket.
+  const wrongKite = LEVELS.find((candidate) => candidate.slug === 'the-wrong-kite')
+  if (!wrongKite) throw new Error('Level 7 is missing')
+  const edgeOf = (scene: Scene) => scene.networkAcls.find((acl) => acl.id === 'edge-acl')
+  const webAclOf = (scene: Scene) =>
+    scene.resources.find((resource) => resource.kind === 'waf-web-acl')
+
+  it('starts with the network ACL and web ACL that Level 7 ends with', () => {
+    expect(edgeOf(level.initialScene)).toEqual(edgeOf(wrongKite.referenceSolution))
+    expect(webAclOf(level.initialScene)).toEqual(webAclOf(wrongKite.referenceSolution))
+    for (const id of ['public-a', 'public-b'])
+      expect(level.initialScene.subnets.find((subnet) => subnet.id === id)?.networkAclId).toBe(
+        'edge-acl',
+      )
+  })
+
+  it('locks them', () => {
+    expect(level.lockedIds).toContain('edge-acl')
+    expect(level.lockedIds).toContain('shop-waf')
+  })
+
+  it('lets visitors through them, but they do not stand between the internet and S3', () => {
+    const run = rehearse(level, level.initialScene)
+    const visitor = run.kiteRuns.find((kiteRun) => kiteRun.kite.id === 'green-1')?.result
+    const checks = visitor?.trace.map((step) => step.check) ?? []
+    expect(checks).toContain('nacl')
+    expect(checks).toContain('waf')
+    const reader = run.kiteRuns.find((kiteRun) => kiteRun.kite.id === 'red-reader')?.result
+    // Its address is in edge-acl's block-listed range, and still it reads the bucket.
+    expect(reader?.outcome).toBe('breach')
+    expect(reader?.trace.some((step) => step.check === 'nacl' || step.check === 'waf')).toBe(false)
+  })
+})

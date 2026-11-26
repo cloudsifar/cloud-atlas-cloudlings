@@ -35,7 +35,7 @@
   "narration": [
     {
       "id": "brief",
-      "text": "The Wrong Kite, in São Paulo. The hat shop works: three visitors browse, log in and buy. Three red Cloudlings have come too: one from an address range on a block list, one hiding a script in a review, one flooding the shop. Click the clouds and read their cards, then fly the kites.",
+      "text": "The Wrong Kite, in São Paulo. Pé na Areia, a beachwear shop, is open for summer: three visitors browse, log in and buy. Three red Cloudlings have come too: one from an address range on a block list, one hiding a script in a review, one flooding the shop. Click the clouds and read their cards, then fly the kites.",
       "highlight": "button:fly",
       "advanceWhen": {
         "kind": "run-finished"
@@ -346,8 +346,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "browses the hats",
-      "says": "Ooh, new hats this week!"
+      "label": "browses the flip-flops",
+      "says": "Ooh, new flip-flops this week!"
     },
     {
       "id": "red-range",
@@ -369,7 +369,7 @@
       "port": 443,
       "payload": "clean",
       "label": "logs in to check an order",
-      "says": "Has my hat been posted yet?"
+      "says": "Has my bikini been posted yet?"
     },
     {
       "id": "red-script",
@@ -402,8 +402,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "buys a hat",
-      "says": "This one, please!"
+      "label": "buys a bikini",
+      "says": "This bikini, please!"
     }
   ],
   "events": [],

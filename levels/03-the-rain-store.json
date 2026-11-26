@@ -9,7 +9,7 @@
   "narration": [
     {
       "id": "welcome",
-      "text": "The Cloudlings want to upload photos. The application needs somewhere to keep them. A NAT Gateway is already in place so the EC2 instances can reach out of the VPC; it is locked for now, and we will question that path in Level 4.",
+      "text": "Spring has brought out the cherry blossom, and Kitepost's Cloudlings want to post their photos of it. The application needs somewhere to keep them. A NAT Gateway is already in place so the EC2 instances can reach out of the VPC; it is locked for now, and we will question that path in Level 4.",
       "highlight": "resource:nat",
       "advanceWhen": {
         "kind": "acknowledged"
@@ -314,8 +314,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "uploads a photo",
-      "says": "I want to upload a photo!",
+      "label": "posts a blossom photo",
+      "says": "Look at this blossom! Posting it now.",
       "backendCall": {
         "destinationId": "photos",
         "action": "s3:Write"
@@ -329,8 +329,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "uploads a photo",
-      "says": "I want to upload a photo!",
+      "label": "posts a blossom photo",
+      "says": "My best photo yet. Post!",
       "backendCall": {
         "destinationId": "photos",
         "action": "s3:Write"
@@ -344,8 +344,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "uploads a photo",
-      "says": "I want to upload a photo!",
+      "label": "posts a blossom photo",
+      "says": "Blossom selfie, coming up.",
       "backendCall": {
         "destinationId": "photos",
         "action": "s3:Write"
@@ -360,8 +360,8 @@
       "port": 443,
       "payload": "clean",
       "action": "s3:Read",
-      "label": "tries to read the bucket",
-      "says": "I want to read the photos in your bucket!"
+      "label": "tries to read everyone's photos straight from the bucket",
+      "says": "I want everyone's photos, the private ones too!"
     }
   ],
   "events": [],

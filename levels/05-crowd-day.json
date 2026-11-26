@@ -9,7 +9,7 @@
   "narration": [
     {
       "id": "brief",
-      "text": "A crowd is coming. Four Cloudlings are here now; more will walk on in groups until there are forty, then drift home again. Each keeps one kite up. A small EC2 instance has room for five kites, so the two here have room for ten. The CloudWatch weather station, bottom right, shows how busy they are: its dial is CPU. Press \"Fly kites\" and watch the dial.",
+      "text": "Opening morning at the Mainufer Book Fair: the ticket site is about to get busy. Four Cloudlings are here now; more will come in groups until there are forty, then drift home. A small EC2 instance has room for five kites, so these two have room for ten. The weather station's dial, bottom right, is CPU. Fly the kites and watch it.",
       "highlight": "button:fly",
       "advanceWhen": {
         "kind": "run-finished"
@@ -94,7 +94,7 @@
     },
     {
       "id": "wrap",
-      "text": "Capacity followed the crowd: the fleet grew as the groups arrived and shrank as they left, so every kite was answered and the quiet hours ran on two small instances. That is elasticity. CloudWatch measured, the scaling policy decided, and the Auto Scaling group did the work.",
+      "text": "Capacity followed the ticket rush: the fleet grew as the groups arrived and shrank as they left, so every kite was answered and the quiet hours ran on two small instances. That is elasticity. CloudWatch measured, the scaling policy decided, and the Auto Scaling group did the work.",
       "advanceWhen": {
         "kind": "level-complete"
       }
@@ -297,8 +297,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website",
-      "says": "I want to visit the website!"
+      "label": "buys a ticket for the fair",
+      "says": "Two tickets for Saturday, please!"
     },
     {
       "id": "green-2",
@@ -308,8 +308,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website",
-      "says": "I want to visit the website!"
+      "label": "buys a ticket for the fair",
+      "says": "One day pass, please."
     },
     {
       "id": "green-3",
@@ -319,8 +319,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website",
-      "says": "I want to visit the website!"
+      "label": "buys a ticket for the fair",
+      "says": "Is the author talk sold out yet?"
     },
     {
       "id": "green-4",
@@ -330,8 +330,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "visits the website",
-      "says": "I want to visit the website!"
+      "label": "buys a ticket for the fair",
+      "says": "Tickets for the whole family!"
     }
   ],
   "crowd": {

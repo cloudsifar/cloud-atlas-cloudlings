@@ -12,7 +12,7 @@
   "narration": [
     {
       "id": "brief",
-      "text": "Storm Front. Eight Cloudlings are looking up their orders: each kite goes through the load balancer to the web fleet, which reads from the orders database. The fleet and the database both live only in Availability Zone a, the left-hand column. Part-way through the day, AZ a will fail. Take your time: click the clouds and read their cards, then press \"Fly kites\" and watch what the storm does.",
+      "text": "Storm Front. Eight Cloudlings are checking their book fair bookings, through the load balancer to the web fleet, which reads from the bookings database. Both live only in Availability Zone a, the left-hand column, and part-way through the day AZ a will fail. Read the clouds' cards, then fly the kites and watch the storm.",
       "highlight": "button:fly",
       "advanceWhen": {
         "kind": "run-finished"
@@ -268,14 +268,17 @@
       {
         "kind": "rds-database",
         "id": "db",
-        "name": "orders database",
+        "name": "bookings database",
         "engine": "mysql",
         "subnetIds": ["private-a", "private-b"],
         "securityGroupIds": ["sg-db"],
         "primarySubnetId": "private-a",
         "multiAz": false,
         "status": "available",
-        "encryption": { "kind": "kms", "keyId": null }
+        "encryption": {
+          "kind": "kms",
+          "keyId": null
+        }
       }
     ]
   },
@@ -288,8 +291,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "looks up an order",
-      "says": "Where is my order?",
+      "label": "checks a booking",
+      "says": "Is my seat at the author talk still booked?",
       "backendCall": {
         "destinationId": "db"
       }
@@ -302,8 +305,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "looks up an order",
-      "says": "Where is my order?",
+      "label": "checks a booking",
+      "says": "Which hall is our stand in?",
       "backendCall": {
         "destinationId": "db"
       }
@@ -316,8 +319,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "looks up an order",
-      "says": "Where is my order?",
+      "label": "checks a booking",
+      "says": "Did my Saturday ticket go through?",
       "backendCall": {
         "destinationId": "db"
       }
@@ -330,8 +333,8 @@
       "destinationId": "alb",
       "port": 443,
       "payload": "clean",
-      "label": "looks up an order",
-      "says": "Where is my order?",
+      "label": "checks a booking",
+      "says": "What time is the signing?",
       "backendCall": {
         "destinationId": "db"
       }
@@ -590,14 +593,17 @@
       {
         "kind": "rds-database",
         "id": "db",
-        "name": "orders database",
+        "name": "bookings database",
         "engine": "mysql",
         "subnetIds": ["private-a", "private-b"],
         "securityGroupIds": ["sg-db"],
         "primarySubnetId": "private-a",
         "multiAz": true,
         "status": "available",
-        "encryption": { "kind": "kms", "keyId": null }
+        "encryption": {
+          "kind": "kms",
+          "keyId": null
+        }
       }
     ]
   }
