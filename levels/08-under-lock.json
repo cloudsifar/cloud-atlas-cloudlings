@@ -45,7 +45,7 @@
     },
     {
       "id": "what-happened",
-      "text": "The red Cloudling read every receipt straight from the bucket: a breach, and its string is still attached. edge-acl block-lists its address, but S3 is outside the VPC, so no network ACL or WAF stands in its way. The bucket is public because Block Public Access is off and its policy lets everyone read.",
+      "text": "The hooded Cloudling read every receipt straight from the bucket: a breach, and its string is still attached. edge-acl block-lists its address, but S3 is outside the VPC, so no network ACL or WAF stands in its way. The bucket is public because Block Public Access is off and its policy lets everyone read.",
       "highlight": "resource:receipts",
       "advanceWhen": {
         "kind": "acknowledged"
