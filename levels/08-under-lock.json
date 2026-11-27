@@ -514,7 +514,7 @@
   "objectives": [
     {
       "id": "receipts-closed",
-      "text": "The red Cloudling can no longer read the receipts",
+      "text": "The hooded Cloudling can no longer read the receipts",
       "predicate": {
         "kind": "flows-stopped",
         "flows": {
