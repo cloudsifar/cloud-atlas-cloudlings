@@ -390,8 +390,8 @@ only the S3 access decision applies.
   - **Bucket default encryption** (`S3Bucket.encryption`): SSE-S3, or SSE-KMS with the
     AWS managed key or a customer managed key. It applies to new objects only.
   - **The KMS check** (`evaluateKeyUse`, check `kms`). When a role reads or writes an
-    object in an SSE-KMS bucket, S3 asks KMS to use the key as that role, after S3 has
-    authorised the role for the bucket:
+    object in an SSE-KMS bucket, S3 calls KMS on that role's behalf, after S3 has
+    authorised the role for the bucket, and KMS checks whether the role may use the key:
     - storing an object needs kms:GenerateDataKey and reading one needs kms:Decrypt,
       both modelled as `kms:Use`;
     - with the AWS managed key, its key policy already allows every principal in the

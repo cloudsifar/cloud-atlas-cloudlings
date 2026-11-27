@@ -93,7 +93,7 @@
     },
     {
       "id": "kms-use",
-      "text": "The uploads fizzled against the halo. With your own key, S3 asks KMS to use it as the web servers' role, and the key's default policy leaves that to IAM. On app-role's card, add: allow kms:Use on shop-key. Then fly.",
+      "text": "The uploads fizzled at the halo. SSE-S3 needed no permission, but shop-key does: for each upload, S3 asks KMS for a data key on behalf of app-role, the web servers' role. The key's default policy has KMS check app-role's IAM permissions, which include nothing for KMS. On app-role's card, add: allow kms:Use on shop-key. Then fly.",
       "highlight": "resource:app-role",
       "pulse": ["role-statements:app-role"],
       "advanceWhen": {

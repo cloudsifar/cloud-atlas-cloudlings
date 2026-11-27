@@ -67,7 +67,7 @@ export function evaluateKeyUse(
     return {
       result: 'fail',
       ruleRef: `role "${role.name}": explicit deny kms:Use`,
-      explanation: `To ${verb}, S3 asks KMS (${operation}) to use "${key.name}" as role "${role.name}". The role explicitly denies kms:Use on it, and an explicit deny overrides every allow.`,
+      explanation: `To ${verb}, S3 calls KMS (${operation}) on behalf of role "${role.name}". KMS checks whether the role may use "${key.name}": the role explicitly denies kms:Use on it, and an explicit deny overrides every allow.`,
     }
   }
   if (identity.verdict === 'allow') {
@@ -81,12 +81,12 @@ export function evaluateKeyUse(
         action: 'kms:Use',
         resourceId: key.id,
       },
-      explanation: `To ${verb}, S3 asks KMS (${operation}) to use the customer managed key "${key.name}" as role "${role.name}". The key's policy leaves it to IAM, and the role allows kms:Use on it.`,
+      explanation: `To ${verb}, S3 calls KMS (${operation}) on behalf of role "${role.name}". KMS checks whether the role may use the customer managed key "${key.name}": the key's default policy leaves that to the role's IAM permissions, and they allow kms:Use on it.`,
     }
   }
   return {
     result: 'fail',
     ruleRef: 'implicit deny: no kms:Use',
-    explanation: `To ${verb}, S3 asks KMS (${operation}) to use the customer managed key "${key.name}" as role "${role.name}". The key's default policy leaves the decision to IAM, and the role does not allow kms:Use on "${key.name}", so KMS refuses and S3 cannot ${action === 's3:Write' ? 'store' : 'return'} it.`,
+    explanation: `To ${verb}, S3 calls KMS (${operation}) on behalf of role "${role.name}". KMS checks whether the role may use the customer managed key "${key.name}": the key's default policy leaves that to the role's IAM permissions, and they do not allow kms:Use on it. KMS refuses, so S3 cannot ${action === 's3:Write' ? 'store' : 'return'} it.`,
   }
 }
