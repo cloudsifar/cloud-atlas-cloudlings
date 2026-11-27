@@ -54,9 +54,9 @@ function drawPlaceholderKeyArt(canvas: HTMLCanvasElement): void {
   context.save()
   context.translate(190, 640)
   context.scale(2.6, 2.6)
-  const hand = drawCloudling(context, 0, 0, false, 'idle', '#e8bd3f', 0)
+  const hand = drawCloudling(context, 0, 0, 'friendly', 'idle', '#e8bd3f', 0)
   drawString(context, hand, { x: 62, y: -128 }, 0, 0)
-  drawKite(context, 62, -128, false, 'flying', 0, 1.6)
+  drawKite(context, 62, -128, 'friendly', 'flying', 0, 1.6)
   context.restore()
 
   context.font = `18px ${CAPTION_FONT}`
@@ -180,7 +180,7 @@ export function mountMenu(root: HTMLElement, actions: MenuActions): void {
         h('div', { class: 'level-grid' }, ...levelCards),
         h('p', {
           class: 'note',
-          textContent: 'Levels 9–12, Demo Mode and the Field Guide to the Sky are still to come.',
+          textContent: 'Levels 10–12, Demo Mode and the Field Guide to the Sky are still to come.',
         }),
       ),
       h(

@@ -149,6 +149,12 @@ export type Ec2Instance = {
   size: 'small' | 'medium' | 'large'
   /** False when the instance has failed; events flip this. */
   healthy: boolean
+  /**
+   * True for an instance with a public IPv4 address as well as its private one. In the
+   * game only a bastion host has one, and it sits in a public subnet (Level 9). Leave it
+   * out for an instance with a private address only, like every web server.
+   */
+  publicAddress?: boolean
 }
 
 export type S3Bucket = {
@@ -190,6 +196,14 @@ export type DatabaseEncryption = { kind: 'none' } | { kind: 'kms'; keyId: string
  * them with `keyId: null`.
  */
 export type KmsKey = { kind: 'kms-key'; id: string; name: string }
+
+/**
+ * AWS Systems Manager Session Manager, in the high band (Level 9). In AWS it is always
+ * there in a Region; placing it in the game stands for choosing to use it. An operator
+ * then starts sessions through it instead of connecting by SSH, and it can reach any
+ * managed instance: one whose SSM Agent has registered with Systems Manager.
+ */
+export type SessionManager = { kind: 'session-manager'; id: string; name: string }
 
 export type IamRole = { kind: 'iam-role'; id: string; name: string; statements: PolicyStatement[] }
 
@@ -302,6 +316,7 @@ export type Resource =
   | RdsDatabase
   | WafWebAcl
   | KmsKey
+  | SessionManager
 
 export type ResourceKind = Resource['kind']
 

@@ -37,7 +37,13 @@ const askedFor = (id: string) =>
   sources.includes(`'${id}'`) || stylesheet.includes(`--art-${id.replaceAll('.', '-')}`)
 
 const KITE_STATES = ['flying', 'tangled', 'netted', 'crumpled']
-const MOODS = { friendly: ['idle', 'cheer', 'droop'], hostile: ['idle', 'stamp', 'snicker'] }
+const MOODS = {
+  friendly: ['idle', 'cheer', 'droop'],
+  hostile: ['idle', 'stamp', 'snicker'],
+  // The operator (Level 9): answered or turned away, like a friendly Cloudling.
+  operator: ['idle', 'cheer', 'droop'],
+}
+const SIDES = ['friendly', 'hostile', 'operator'] as const
 
 /** The ids the code builds from game state rather than writing out. */
 const built = new Set<string>([
@@ -46,11 +52,9 @@ const built = new Set<string>([
     (['skyline', 'ground', 'costume'] as const).map((part) => regionArtId(region, part) ?? ''),
   ),
   ...Object.entries(MOODS).flatMap(([side, moods]) =>
-    moods.map((mood) => cloudlingArtId(side as 'friendly' | 'hostile', mood)),
+    moods.map((mood) => cloudlingArtId(side as (typeof SIDES)[number], mood)),
   ),
-  ...(['friendly', 'hostile'] as const).flatMap((side) =>
-    KITE_STATES.map((state) => kiteArtId(side, state)),
-  ),
+  ...SIDES.flatMap((side) => KITE_STATES.map((state) => kiteArtId(side, state))),
 ])
 
 describe('the manifest covers everything the game draws', () => {
@@ -71,10 +75,12 @@ describe('the manifest covers everything the game draws', () => {
   it('has a Cloudling for every mood the game shows, and a kite for every state', () => {
     for (const [side, moods] of Object.entries(MOODS))
       for (const mood of moods) expect(isArtId(`cloudling.${side}.${mood}`)).toBe(true)
-    for (const side of ['friendly', 'hostile'])
+    for (const side of SIDES)
       for (const state of KITE_STATES) expect(isArtId(`kite.${side}.${state}`)).toBe(true)
     // A Cloudling with a hand to hold the string.
-    for (const id of ids.filter((candidate) => /^cloudling\.(friendly|hostile)\./.test(candidate)))
+    for (const id of ids.filter((candidate) =>
+      /^cloudling\.(friendly|hostile|operator)\./.test(candidate),
+    ))
       expect(ART[id].points?.hand).toBeDefined()
   })
 

@@ -254,7 +254,8 @@ export function drawArtBetween(
 // Ids built from game state: the code asks for these, the tests check each exists.
 // ---------------------------------------------------------------------------
 
-export type CloudlingSide = 'friendly' | 'hostile'
+/** The operator (Level 9) wears a distinct hat and flies a box kite. */
+export type CloudlingSide = 'friendly' | 'hostile' | 'operator'
 
 /** A Cloudling's picture for a mood, or its idle one if that mood has none. */
 export function cloudlingArtId(side: CloudlingSide, mood: string): ArtId {

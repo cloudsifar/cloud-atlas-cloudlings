@@ -1,0 +1,2929 @@
+{
+  "id": 9,
+  "slug": "no-keys-at-the-door",
+  "title": "No Keys at the Door",
+  "concept": "Session Manager reaches a managed instance over the connection its own SSM Agent opens, so the instance needs no inbound port, no public address, no bastion host and no SSH key, and nothing has to change when an administrator's address does.",
+  "guidance": "hints",
+  "region": "sa-east-1",
+  "azs": 2,
+  "lockedIds": [
+    "igw",
+    "alb",
+    "rt-public",
+    "nacl-default",
+    "shop-waf",
+    "sg-alb",
+    "sg-db",
+    "receipts",
+    "db",
+    "shop-key",
+    "app-a",
+    "app-b",
+    "public-a",
+    "public-b",
+    "private-a",
+    "private-b"
+  ],
+  "palette": [
+    {
+      "resource": {
+        "kind": "ec2-instance",
+        "id": "bastion",
+        "name": "Bastion host",
+        "subnetId": "",
+        "securityGroupIds": ["sg-bastion"],
+        "roleId": null,
+        "size": "small",
+        "healthy": true,
+        "publicAddress": true
+      },
+      "securityGroups": [
+        {
+          "id": "sg-bastion",
+          "name": "bastion-sg",
+          "inbound": [],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "kind": "session-manager",
+        "id": "ssm",
+        "name": "Session Manager"
+      }
+    },
+    {
+      "resource": {
+        "kind": "nat-gateway",
+        "id": "nat",
+        "name": "NAT Gateway",
+        "subnetId": ""
+      }
+    }
+  ],
+  "removableIds": [],
+  "narration": [
+    {
+      "id": "brief",
+      "text": "No Keys at the Door, Pé na Areia. After last week's breach the shop's admin, in the hat, needs a shell on Web server A to read its logs, and the hooded Cloudling is probing for SSH on port 22. The web servers have only private addresses. Fly and see what each of them finds.",
+      "highlight": "button:fly",
+      "advanceWhen": {
+        "kind": "run-finished"
+      }
+    },
+    {
+      "id": "what-happened",
+      "text": "Neither got in. Nothing in the sky has a public address, so the probe had nowhere to knock, and the load balancer carries only HTTPS, never SSH. Safe, but the admin has no way in either. The usual answer is a bastion host.",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    },
+    {
+      "id": "bastion",
+      "text": "A bastion host is a small instance with a public address, in a public subnet: the admin connects to it by SSH, then on to the private server. Drag the bastion host from the tray into Public subnet A, then fly.",
+      "highlight": ["palette:bastion", "subnet:public-a"],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "resource-exists",
+          "resourceId": "bastion"
+        }
+      }
+    },
+    {
+      "id": "edge",
+      "text": "edge-acl stopped both kites: it has no rule for SSH. On a public subnet's card, give edge-acl two rules: inbound, allow SSH from the operator's address; outbound, allow SSH to the VPC, for the hop on to the web server. Then fly.",
+      "highlight": "subnet:public-a",
+      "pulse": ["network-acl:edge-acl"],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "all-of",
+          "predicates": [
+            {
+              "kind": "network-acl-allows",
+              "networkAclId": "edge-acl",
+              "direction": "inbound",
+              "ports": "ssh",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "203.0.113.25/32"
+              }
+            },
+            {
+              "kind": "network-acl-allows",
+              "networkAclId": "edge-acl",
+              "direction": "outbound",
+              "ports": "ssh",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bastion-sg",
+      "text": "Past edge-acl, the bastion's own security group, bastion-sg, turned the admin away: a new security group starts with no inbound rules. On the bastion's card, allow SSH from the operator's address only. Then fly.",
+      "highlight": "resource:bastion",
+      "pulse": ["security-group:sg-bastion"],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "security-group-allows",
+          "securityGroupId": "sg-bastion",
+          "ports": "ssh",
+          "peer": {
+            "kind": "cidr",
+            "cidr": "203.0.113.25/32"
+          }
+        }
+      }
+    },
+    {
+      "id": "app-sg",
+      "text": "The admin is on the bastion, but Web server A refused the hop: ec2-app-sg lets in only HTTP from the load balancer. On a web server's card, allow SSH from bastion-sg, the bastion's security group. Then fly.",
+      "highlight": ["resource:app-a", "resource:app-b"],
+      "pulse": ["security-group:sg-app"],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "flows-delivered",
+          "flows": {
+            "flowIds": ["operator"]
+          }
+        }
+      }
+    },
+    {
+      "id": "look",
+      "text": "The admin has a shell. Count what it took: a public machine to keep patched, four rules naming SSH and a private key to keep safe. And the hooded Cloudling is still knocking at the bastion: one leaked key, or one rule too wide, and it is in.",
+      "highlight": "resource:bastion",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    },
+    {
+      "id": "twist",
+      "text": "This weekend the admin is working from the coast, on a beach café's connection, with a new address. Nothing else has changed. Fly again.",
+      "highlight": "button:fly",
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "flows-stopped",
+          "flows": {
+            "flowIds": ["operator"]
+          }
+        }
+      }
+    },
+    {
+      "id": "temptation",
+      "text": "Locked out: every rule names the old address. This is where people widen the rule to anywhere, just for today, and today lasts for years. Session Manager needs no open port at all, so there is no address to keep up with.",
+      "advanceWhen": {
+        "kind": "acknowledged"
+      }
+    },
+    {
+      "id": "ssm",
+      "text": "Drag Session Manager from the tray into the high band. The admin will ask Systems Manager for a session, and the session runs over a connection the instance itself opens: its SSM Agent's, out to Systems Manager on HTTPS 443.",
+      "highlight": "palette:ssm",
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "resource-exists",
+          "resourceId": "ssm"
+        }
+      }
+    },
+    {
+      "id": "role",
+      "text": "Session Manager reaches only managed instances: ones whose SSM Agent has registered with Systems Manager, using the instance's role. On app-role's card, add: allow ssm:ManagedInstance on Session Manager.",
+      "highlight": "resource:app-role",
+      "pulse": ["role-statements:app-role"],
+      "advanceWhen": {
+        "kind": "scene",
+        "predicate": {
+          "kind": "role-allows",
+          "roleId": "app-role",
+          "action": "ssm:ManagedInstance",
+          "resourceId": "ssm"
+        }
+      }
+    },
+    {
+      "id": "nat",
+      "text": "The agent still needs a way out: the private route table reaches only S3. Drag a NAT Gateway into Public subnet B, then on a private subnet's card add the route Internet (0.0.0.0/0) to the NAT Gateway. Then fly.",
+      "highlight": ["palette:nat", "subnet:public-b"],
+      "pulse": ["route-table:rt-private"],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "all-of",
+          "predicates": [
+            {
+              "kind": "resource-exists",
+              "resourceId": "nat"
+            },
+            {
+              "kind": "route-present",
+              "routeTableId": "rt-private",
+              "destination": "internet",
+              "target": "nat-gateway"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "nat-acl",
+      "text": "The agent's connection crossed edge-acl, because the NAT Gateway sits behind it, and network ACLs are stateless. On edge-acl add outbound: HTTPS to anywhere; and inbound: ephemeral ports from anywhere, for the replies. Then fly.",
+      "highlight": "subnet:public-b",
+      "pulse": ["network-acl:edge-acl"],
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "session-opened",
+          "flows": {
+            "flowIds": ["operator"]
+          }
+        }
+      }
+    },
+    {
+      "id": "close",
+      "text": "A session, and no inbound port. Now close the door: remove the bastion host, then every rule that still mentions SSH, on edge-acl and on ec2-app-sg. Then fly.",
+      "highlight": "resource:bastion",
+      "advanceWhen": {
+        "kind": "run-finished",
+        "predicate": {
+          "kind": "all-of",
+          "predicates": [
+            {
+              "kind": "security-groups-closed-to",
+              "ports": "ssh"
+            },
+            {
+              "kind": "none-of",
+              "predicates": [
+                {
+                  "kind": "resource-exists",
+                  "resourceId": "bastion"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wrap",
+      "text": "No keys at the door: no open port, no bastion, no key to lose and no address to keep up with. IAM decides who may start a session, and [CloudTrail records each one](card:cloudtrail). No third star? A rule still mentions SSH. What a real account adds: [Session Manager in the real world](card:session-manager-real-world).",
+      "advanceWhen": {
+        "kind": "level-complete"
+      }
+    }
+  ],
+  "narrationCheckpoints": {
+    "bastion": {
+      "vpc": {
+        "cidr": "10.0.0.0/16"
+      },
+      "subnets": [
+        {
+          "id": "public-a",
+          "name": "Public subnet A",
+          "availabilityZone": "a",
+          "band": "low",
+          "cidr": "10.0.1.0/24",
+          "routeTableId": "rt-public",
+          "networkAclId": "edge-acl"
+        },
+        {
+          "id": "public-b",
+          "name": "Public subnet B",
+          "availabilityZone": "b",
+          "band": "low",
+          "cidr": "10.0.2.0/24",
+          "routeTableId": "rt-public",
+          "networkAclId": "edge-acl"
+        },
+        {
+          "id": "private-a",
+          "name": "Private subnet A",
+          "availabilityZone": "a",
+          "band": "mid",
+          "cidr": "10.0.11.0/24",
+          "routeTableId": "rt-private",
+          "networkAclId": "nacl-default"
+        },
+        {
+          "id": "private-b",
+          "name": "Private subnet B",
+          "availabilityZone": "b",
+          "band": "mid",
+          "cidr": "10.0.12.0/24",
+          "routeTableId": "rt-private",
+          "networkAclId": "nacl-default"
+        }
+      ],
+      "routeTables": [
+        {
+          "id": "rt-public",
+          "name": "Public route table",
+          "routes": [
+            {
+              "destination": "internet",
+              "target": {
+                "kind": "internet-gateway"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rt-private",
+          "name": "Private route table",
+          "routes": [
+            {
+              "destination": "s3",
+              "target": {
+                "kind": "gateway-endpoint",
+                "service": "s3"
+              }
+            }
+          ]
+        }
+      ],
+      "networkAcls": [
+        {
+          "id": "nacl-default",
+          "name": "Default NACL",
+          "isDefault": true,
+          "inbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "all"
+            }
+          ],
+          "outbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "all"
+            }
+          ]
+        },
+        {
+          "id": "edge-acl",
+          "name": "edge-acl",
+          "inbound": [
+            {
+              "number": 90,
+              "action": "deny",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "198.51.100.0/24"
+              },
+              "ports": "all"
+            },
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "https"
+            },
+            {
+              "number": 200,
+              "action": "allow",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              },
+              "ports": "ephemeral"
+            }
+          ],
+          "outbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "ephemeral"
+            },
+            {
+              "number": 200,
+              "action": "allow",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              },
+              "ports": "http"
+            }
+          ]
+        }
+      ],
+      "securityGroups": [
+        {
+          "id": "sg-alb",
+          "name": "alb-sg",
+          "inbound": [
+            {
+              "ports": "https",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-app",
+          "name": "ec2-app-sg",
+          "inbound": [
+            {
+              "ports": "http",
+              "peer": {
+                "kind": "security-group",
+                "securityGroupId": "sg-alb"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-db",
+          "name": "rds-db-sg",
+          "inbound": [
+            {
+              "ports": "mysql",
+              "peer": {
+                "kind": "security-group",
+                "securityGroupId": "sg-app"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-bastion",
+          "name": "bastion-sg",
+          "inbound": [],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        }
+      ],
+      "resources": [
+        {
+          "kind": "internet-gateway",
+          "id": "igw",
+          "name": "Internet Gateway"
+        },
+        {
+          "kind": "load-balancer",
+          "id": "alb",
+          "name": "Application Load Balancer",
+          "scheme": "internet-facing",
+          "subnetIds": ["public-a", "public-b"],
+          "securityGroupIds": ["sg-alb"],
+          "listener": "https",
+          "targetIds": ["app-a", "app-b"]
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "app-a",
+          "name": "Web server A",
+          "subnetId": "private-a",
+          "securityGroupIds": ["sg-app"],
+          "roleId": "app-role",
+          "size": "small",
+          "healthy": true
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "app-b",
+          "name": "Web server B",
+          "subnetId": "private-b",
+          "securityGroupIds": ["sg-app"],
+          "roleId": "app-role",
+          "size": "small",
+          "healthy": true
+        },
+        {
+          "kind": "s3-bucket",
+          "id": "receipts",
+          "name": "receipts",
+          "blockPublicAccess": true,
+          "policy": [],
+          "dataClass": "sensitive",
+          "encryption": {
+            "kind": "sse-kms",
+            "keyId": "shop-key"
+          }
+        },
+        {
+          "kind": "iam-role",
+          "id": "app-role",
+          "name": "app-role",
+          "statements": [
+            {
+              "effect": "allow",
+              "actions": ["s3:Write"],
+              "resource": "receipts"
+            },
+            {
+              "effect": "allow",
+              "actions": ["kms:Use"],
+              "resource": "shop-key"
+            }
+          ]
+        },
+        {
+          "kind": "rds-database",
+          "id": "db",
+          "name": "orders database",
+          "engine": "mysql",
+          "subnetIds": ["private-a", "private-b"],
+          "securityGroupIds": ["sg-db"],
+          "primarySubnetId": "private-a",
+          "multiAz": false,
+          "status": "available",
+          "encryption": {
+            "kind": "kms",
+            "keyId": "shop-key"
+          }
+        },
+        {
+          "kind": "waf-web-acl",
+          "id": "shop-waf",
+          "name": "shop-web-acl",
+          "loadBalancerId": "alb",
+          "defaultAction": "allow",
+          "rules": [
+            {
+              "kind": "core-rule-set"
+            },
+            {
+              "kind": "rate-based",
+              "limit": 100
+            }
+          ]
+        },
+        {
+          "kind": "kms-key",
+          "id": "shop-key",
+          "name": "shop-key"
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "bastion",
+          "name": "Bastion host",
+          "subnetId": "public-a",
+          "securityGroupIds": ["sg-bastion"],
+          "roleId": null,
+          "size": "small",
+          "healthy": true,
+          "publicAddress": true
+        }
+      ]
+    },
+    "edge": {
+      "vpc": {
+        "cidr": "10.0.0.0/16"
+      },
+      "subnets": [
+        {
+          "id": "public-a",
+          "name": "Public subnet A",
+          "availabilityZone": "a",
+          "band": "low",
+          "cidr": "10.0.1.0/24",
+          "routeTableId": "rt-public",
+          "networkAclId": "edge-acl"
+        },
+        {
+          "id": "public-b",
+          "name": "Public subnet B",
+          "availabilityZone": "b",
+          "band": "low",
+          "cidr": "10.0.2.0/24",
+          "routeTableId": "rt-public",
+          "networkAclId": "edge-acl"
+        },
+        {
+          "id": "private-a",
+          "name": "Private subnet A",
+          "availabilityZone": "a",
+          "band": "mid",
+          "cidr": "10.0.11.0/24",
+          "routeTableId": "rt-private",
+          "networkAclId": "nacl-default"
+        },
+        {
+          "id": "private-b",
+          "name": "Private subnet B",
+          "availabilityZone": "b",
+          "band": "mid",
+          "cidr": "10.0.12.0/24",
+          "routeTableId": "rt-private",
+          "networkAclId": "nacl-default"
+        }
+      ],
+      "routeTables": [
+        {
+          "id": "rt-public",
+          "name": "Public route table",
+          "routes": [
+            {
+              "destination": "internet",
+              "target": {
+                "kind": "internet-gateway"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rt-private",
+          "name": "Private route table",
+          "routes": [
+            {
+              "destination": "s3",
+              "target": {
+                "kind": "gateway-endpoint",
+                "service": "s3"
+              }
+            }
+          ]
+        }
+      ],
+      "networkAcls": [
+        {
+          "id": "nacl-default",
+          "name": "Default NACL",
+          "isDefault": true,
+          "inbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "all"
+            }
+          ],
+          "outbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "all"
+            }
+          ]
+        },
+        {
+          "id": "edge-acl",
+          "name": "edge-acl",
+          "inbound": [
+            {
+              "number": 90,
+              "action": "deny",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "198.51.100.0/24"
+              },
+              "ports": "all"
+            },
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "https"
+            },
+            {
+              "number": 200,
+              "action": "allow",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              },
+              "ports": "ephemeral"
+            },
+            {
+              "number": 110,
+              "action": "allow",
+              "ports": "ssh",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "203.0.113.25/32"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "ephemeral"
+            },
+            {
+              "number": 200,
+              "action": "allow",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              },
+              "ports": "http"
+            },
+            {
+              "number": 210,
+              "action": "allow",
+              "ports": "ssh",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              }
+            }
+          ]
+        }
+      ],
+      "securityGroups": [
+        {
+          "id": "sg-alb",
+          "name": "alb-sg",
+          "inbound": [
+            {
+              "ports": "https",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-app",
+          "name": "ec2-app-sg",
+          "inbound": [
+            {
+              "ports": "http",
+              "peer": {
+                "kind": "security-group",
+                "securityGroupId": "sg-alb"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-db",
+          "name": "rds-db-sg",
+          "inbound": [
+            {
+              "ports": "mysql",
+              "peer": {
+                "kind": "security-group",
+                "securityGroupId": "sg-app"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-bastion",
+          "name": "bastion-sg",
+          "inbound": [],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        }
+      ],
+      "resources": [
+        {
+          "kind": "internet-gateway",
+          "id": "igw",
+          "name": "Internet Gateway"
+        },
+        {
+          "kind": "load-balancer",
+          "id": "alb",
+          "name": "Application Load Balancer",
+          "scheme": "internet-facing",
+          "subnetIds": ["public-a", "public-b"],
+          "securityGroupIds": ["sg-alb"],
+          "listener": "https",
+          "targetIds": ["app-a", "app-b"]
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "app-a",
+          "name": "Web server A",
+          "subnetId": "private-a",
+          "securityGroupIds": ["sg-app"],
+          "roleId": "app-role",
+          "size": "small",
+          "healthy": true
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "app-b",
+          "name": "Web server B",
+          "subnetId": "private-b",
+          "securityGroupIds": ["sg-app"],
+          "roleId": "app-role",
+          "size": "small",
+          "healthy": true
+        },
+        {
+          "kind": "s3-bucket",
+          "id": "receipts",
+          "name": "receipts",
+          "blockPublicAccess": true,
+          "policy": [],
+          "dataClass": "sensitive",
+          "encryption": {
+            "kind": "sse-kms",
+            "keyId": "shop-key"
+          }
+        },
+        {
+          "kind": "iam-role",
+          "id": "app-role",
+          "name": "app-role",
+          "statements": [
+            {
+              "effect": "allow",
+              "actions": ["s3:Write"],
+              "resource": "receipts"
+            },
+            {
+              "effect": "allow",
+              "actions": ["kms:Use"],
+              "resource": "shop-key"
+            }
+          ]
+        },
+        {
+          "kind": "rds-database",
+          "id": "db",
+          "name": "orders database",
+          "engine": "mysql",
+          "subnetIds": ["private-a", "private-b"],
+          "securityGroupIds": ["sg-db"],
+          "primarySubnetId": "private-a",
+          "multiAz": false,
+          "status": "available",
+          "encryption": {
+            "kind": "kms",
+            "keyId": "shop-key"
+          }
+        },
+        {
+          "kind": "waf-web-acl",
+          "id": "shop-waf",
+          "name": "shop-web-acl",
+          "loadBalancerId": "alb",
+          "defaultAction": "allow",
+          "rules": [
+            {
+              "kind": "core-rule-set"
+            },
+            {
+              "kind": "rate-based",
+              "limit": 100
+            }
+          ]
+        },
+        {
+          "kind": "kms-key",
+          "id": "shop-key",
+          "name": "shop-key"
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "bastion",
+          "name": "Bastion host",
+          "subnetId": "public-a",
+          "securityGroupIds": ["sg-bastion"],
+          "roleId": null,
+          "size": "small",
+          "healthy": true,
+          "publicAddress": true
+        }
+      ]
+    },
+    "bastion-sg": {
+      "vpc": {
+        "cidr": "10.0.0.0/16"
+      },
+      "subnets": [
+        {
+          "id": "public-a",
+          "name": "Public subnet A",
+          "availabilityZone": "a",
+          "band": "low",
+          "cidr": "10.0.1.0/24",
+          "routeTableId": "rt-public",
+          "networkAclId": "edge-acl"
+        },
+        {
+          "id": "public-b",
+          "name": "Public subnet B",
+          "availabilityZone": "b",
+          "band": "low",
+          "cidr": "10.0.2.0/24",
+          "routeTableId": "rt-public",
+          "networkAclId": "edge-acl"
+        },
+        {
+          "id": "private-a",
+          "name": "Private subnet A",
+          "availabilityZone": "a",
+          "band": "mid",
+          "cidr": "10.0.11.0/24",
+          "routeTableId": "rt-private",
+          "networkAclId": "nacl-default"
+        },
+        {
+          "id": "private-b",
+          "name": "Private subnet B",
+          "availabilityZone": "b",
+          "band": "mid",
+          "cidr": "10.0.12.0/24",
+          "routeTableId": "rt-private",
+          "networkAclId": "nacl-default"
+        }
+      ],
+      "routeTables": [
+        {
+          "id": "rt-public",
+          "name": "Public route table",
+          "routes": [
+            {
+              "destination": "internet",
+              "target": {
+                "kind": "internet-gateway"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rt-private",
+          "name": "Private route table",
+          "routes": [
+            {
+              "destination": "s3",
+              "target": {
+                "kind": "gateway-endpoint",
+                "service": "s3"
+              }
+            }
+          ]
+        }
+      ],
+      "networkAcls": [
+        {
+          "id": "nacl-default",
+          "name": "Default NACL",
+          "isDefault": true,
+          "inbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "all"
+            }
+          ],
+          "outbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "all"
+            }
+          ]
+        },
+        {
+          "id": "edge-acl",
+          "name": "edge-acl",
+          "inbound": [
+            {
+              "number": 90,
+              "action": "deny",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "198.51.100.0/24"
+              },
+              "ports": "all"
+            },
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "https"
+            },
+            {
+              "number": 200,
+              "action": "allow",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              },
+              "ports": "ephemeral"
+            },
+            {
+              "number": 110,
+              "action": "allow",
+              "ports": "ssh",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "203.0.113.25/32"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "ephemeral"
+            },
+            {
+              "number": 200,
+              "action": "allow",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              },
+              "ports": "http"
+            },
+            {
+              "number": 210,
+              "action": "allow",
+              "ports": "ssh",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              }
+            }
+          ]
+        }
+      ],
+      "securityGroups": [
+        {
+          "id": "sg-alb",
+          "name": "alb-sg",
+          "inbound": [
+            {
+              "ports": "https",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-app",
+          "name": "ec2-app-sg",
+          "inbound": [
+            {
+              "ports": "http",
+              "peer": {
+                "kind": "security-group",
+                "securityGroupId": "sg-alb"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-db",
+          "name": "rds-db-sg",
+          "inbound": [
+            {
+              "ports": "mysql",
+              "peer": {
+                "kind": "security-group",
+                "securityGroupId": "sg-app"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-bastion",
+          "name": "bastion-sg",
+          "inbound": [
+            {
+              "ports": "ssh",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "203.0.113.25/32"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        }
+      ],
+      "resources": [
+        {
+          "kind": "internet-gateway",
+          "id": "igw",
+          "name": "Internet Gateway"
+        },
+        {
+          "kind": "load-balancer",
+          "id": "alb",
+          "name": "Application Load Balancer",
+          "scheme": "internet-facing",
+          "subnetIds": ["public-a", "public-b"],
+          "securityGroupIds": ["sg-alb"],
+          "listener": "https",
+          "targetIds": ["app-a", "app-b"]
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "app-a",
+          "name": "Web server A",
+          "subnetId": "private-a",
+          "securityGroupIds": ["sg-app"],
+          "roleId": "app-role",
+          "size": "small",
+          "healthy": true
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "app-b",
+          "name": "Web server B",
+          "subnetId": "private-b",
+          "securityGroupIds": ["sg-app"],
+          "roleId": "app-role",
+          "size": "small",
+          "healthy": true
+        },
+        {
+          "kind": "s3-bucket",
+          "id": "receipts",
+          "name": "receipts",
+          "blockPublicAccess": true,
+          "policy": [],
+          "dataClass": "sensitive",
+          "encryption": {
+            "kind": "sse-kms",
+            "keyId": "shop-key"
+          }
+        },
+        {
+          "kind": "iam-role",
+          "id": "app-role",
+          "name": "app-role",
+          "statements": [
+            {
+              "effect": "allow",
+              "actions": ["s3:Write"],
+              "resource": "receipts"
+            },
+            {
+              "effect": "allow",
+              "actions": ["kms:Use"],
+              "resource": "shop-key"
+            }
+          ]
+        },
+        {
+          "kind": "rds-database",
+          "id": "db",
+          "name": "orders database",
+          "engine": "mysql",
+          "subnetIds": ["private-a", "private-b"],
+          "securityGroupIds": ["sg-db"],
+          "primarySubnetId": "private-a",
+          "multiAz": false,
+          "status": "available",
+          "encryption": {
+            "kind": "kms",
+            "keyId": "shop-key"
+          }
+        },
+        {
+          "kind": "waf-web-acl",
+          "id": "shop-waf",
+          "name": "shop-web-acl",
+          "loadBalancerId": "alb",
+          "defaultAction": "allow",
+          "rules": [
+            {
+              "kind": "core-rule-set"
+            },
+            {
+              "kind": "rate-based",
+              "limit": 100
+            }
+          ]
+        },
+        {
+          "kind": "kms-key",
+          "id": "shop-key",
+          "name": "shop-key"
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "bastion",
+          "name": "Bastion host",
+          "subnetId": "public-a",
+          "securityGroupIds": ["sg-bastion"],
+          "roleId": null,
+          "size": "small",
+          "healthy": true,
+          "publicAddress": true
+        }
+      ]
+    },
+    "app-sg": {
+      "vpc": {
+        "cidr": "10.0.0.0/16"
+      },
+      "subnets": [
+        {
+          "id": "public-a",
+          "name": "Public subnet A",
+          "availabilityZone": "a",
+          "band": "low",
+          "cidr": "10.0.1.0/24",
+          "routeTableId": "rt-public",
+          "networkAclId": "edge-acl"
+        },
+        {
+          "id": "public-b",
+          "name": "Public subnet B",
+          "availabilityZone": "b",
+          "band": "low",
+          "cidr": "10.0.2.0/24",
+          "routeTableId": "rt-public",
+          "networkAclId": "edge-acl"
+        },
+        {
+          "id": "private-a",
+          "name": "Private subnet A",
+          "availabilityZone": "a",
+          "band": "mid",
+          "cidr": "10.0.11.0/24",
+          "routeTableId": "rt-private",
+          "networkAclId": "nacl-default"
+        },
+        {
+          "id": "private-b",
+          "name": "Private subnet B",
+          "availabilityZone": "b",
+          "band": "mid",
+          "cidr": "10.0.12.0/24",
+          "routeTableId": "rt-private",
+          "networkAclId": "nacl-default"
+        }
+      ],
+      "routeTables": [
+        {
+          "id": "rt-public",
+          "name": "Public route table",
+          "routes": [
+            {
+              "destination": "internet",
+              "target": {
+                "kind": "internet-gateway"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rt-private",
+          "name": "Private route table",
+          "routes": [
+            {
+              "destination": "s3",
+              "target": {
+                "kind": "gateway-endpoint",
+                "service": "s3"
+              }
+            }
+          ]
+        }
+      ],
+      "networkAcls": [
+        {
+          "id": "nacl-default",
+          "name": "Default NACL",
+          "isDefault": true,
+          "inbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "all"
+            }
+          ],
+          "outbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "all"
+            }
+          ]
+        },
+        {
+          "id": "edge-acl",
+          "name": "edge-acl",
+          "inbound": [
+            {
+              "number": 90,
+              "action": "deny",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "198.51.100.0/24"
+              },
+              "ports": "all"
+            },
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "https"
+            },
+            {
+              "number": 200,
+              "action": "allow",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              },
+              "ports": "ephemeral"
+            },
+            {
+              "number": 110,
+              "action": "allow",
+              "ports": "ssh",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "203.0.113.25/32"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "ephemeral"
+            },
+            {
+              "number": 200,
+              "action": "allow",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              },
+              "ports": "http"
+            },
+            {
+              "number": 210,
+              "action": "allow",
+              "ports": "ssh",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              }
+            }
+          ]
+        }
+      ],
+      "securityGroups": [
+        {
+          "id": "sg-alb",
+          "name": "alb-sg",
+          "inbound": [
+            {
+              "ports": "https",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-app",
+          "name": "ec2-app-sg",
+          "inbound": [
+            {
+              "ports": "http",
+              "peer": {
+                "kind": "security-group",
+                "securityGroupId": "sg-alb"
+              }
+            },
+            {
+              "ports": "ssh",
+              "peer": {
+                "kind": "security-group",
+                "securityGroupId": "sg-bastion"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-db",
+          "name": "rds-db-sg",
+          "inbound": [
+            {
+              "ports": "mysql",
+              "peer": {
+                "kind": "security-group",
+                "securityGroupId": "sg-app"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-bastion",
+          "name": "bastion-sg",
+          "inbound": [
+            {
+              "ports": "ssh",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "203.0.113.25/32"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        }
+      ],
+      "resources": [
+        {
+          "kind": "internet-gateway",
+          "id": "igw",
+          "name": "Internet Gateway"
+        },
+        {
+          "kind": "load-balancer",
+          "id": "alb",
+          "name": "Application Load Balancer",
+          "scheme": "internet-facing",
+          "subnetIds": ["public-a", "public-b"],
+          "securityGroupIds": ["sg-alb"],
+          "listener": "https",
+          "targetIds": ["app-a", "app-b"]
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "app-a",
+          "name": "Web server A",
+          "subnetId": "private-a",
+          "securityGroupIds": ["sg-app"],
+          "roleId": "app-role",
+          "size": "small",
+          "healthy": true
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "app-b",
+          "name": "Web server B",
+          "subnetId": "private-b",
+          "securityGroupIds": ["sg-app"],
+          "roleId": "app-role",
+          "size": "small",
+          "healthy": true
+        },
+        {
+          "kind": "s3-bucket",
+          "id": "receipts",
+          "name": "receipts",
+          "blockPublicAccess": true,
+          "policy": [],
+          "dataClass": "sensitive",
+          "encryption": {
+            "kind": "sse-kms",
+            "keyId": "shop-key"
+          }
+        },
+        {
+          "kind": "iam-role",
+          "id": "app-role",
+          "name": "app-role",
+          "statements": [
+            {
+              "effect": "allow",
+              "actions": ["s3:Write"],
+              "resource": "receipts"
+            },
+            {
+              "effect": "allow",
+              "actions": ["kms:Use"],
+              "resource": "shop-key"
+            }
+          ]
+        },
+        {
+          "kind": "rds-database",
+          "id": "db",
+          "name": "orders database",
+          "engine": "mysql",
+          "subnetIds": ["private-a", "private-b"],
+          "securityGroupIds": ["sg-db"],
+          "primarySubnetId": "private-a",
+          "multiAz": false,
+          "status": "available",
+          "encryption": {
+            "kind": "kms",
+            "keyId": "shop-key"
+          }
+        },
+        {
+          "kind": "waf-web-acl",
+          "id": "shop-waf",
+          "name": "shop-web-acl",
+          "loadBalancerId": "alb",
+          "defaultAction": "allow",
+          "rules": [
+            {
+              "kind": "core-rule-set"
+            },
+            {
+              "kind": "rate-based",
+              "limit": 100
+            }
+          ]
+        },
+        {
+          "kind": "kms-key",
+          "id": "shop-key",
+          "name": "shop-key"
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "bastion",
+          "name": "Bastion host",
+          "subnetId": "public-a",
+          "securityGroupIds": ["sg-bastion"],
+          "roleId": null,
+          "size": "small",
+          "healthy": true,
+          "publicAddress": true
+        }
+      ]
+    },
+    "twist": {
+      "vpc": {
+        "cidr": "10.0.0.0/16"
+      },
+      "subnets": [
+        {
+          "id": "public-a",
+          "name": "Public subnet A",
+          "availabilityZone": "a",
+          "band": "low",
+          "cidr": "10.0.1.0/24",
+          "routeTableId": "rt-public",
+          "networkAclId": "edge-acl"
+        },
+        {
+          "id": "public-b",
+          "name": "Public subnet B",
+          "availabilityZone": "b",
+          "band": "low",
+          "cidr": "10.0.2.0/24",
+          "routeTableId": "rt-public",
+          "networkAclId": "edge-acl"
+        },
+        {
+          "id": "private-a",
+          "name": "Private subnet A",
+          "availabilityZone": "a",
+          "band": "mid",
+          "cidr": "10.0.11.0/24",
+          "routeTableId": "rt-private",
+          "networkAclId": "nacl-default"
+        },
+        {
+          "id": "private-b",
+          "name": "Private subnet B",
+          "availabilityZone": "b",
+          "band": "mid",
+          "cidr": "10.0.12.0/24",
+          "routeTableId": "rt-private",
+          "networkAclId": "nacl-default"
+        }
+      ],
+      "routeTables": [
+        {
+          "id": "rt-public",
+          "name": "Public route table",
+          "routes": [
+            {
+              "destination": "internet",
+              "target": {
+                "kind": "internet-gateway"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rt-private",
+          "name": "Private route table",
+          "routes": [
+            {
+              "destination": "s3",
+              "target": {
+                "kind": "gateway-endpoint",
+                "service": "s3"
+              }
+            }
+          ]
+        }
+      ],
+      "networkAcls": [
+        {
+          "id": "nacl-default",
+          "name": "Default NACL",
+          "isDefault": true,
+          "inbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "all"
+            }
+          ],
+          "outbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "all"
+            }
+          ]
+        },
+        {
+          "id": "edge-acl",
+          "name": "edge-acl",
+          "inbound": [
+            {
+              "number": 90,
+              "action": "deny",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "198.51.100.0/24"
+              },
+              "ports": "all"
+            },
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "https"
+            },
+            {
+              "number": 200,
+              "action": "allow",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              },
+              "ports": "ephemeral"
+            },
+            {
+              "number": 110,
+              "action": "allow",
+              "ports": "ssh",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "203.0.113.25/32"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "number": 100,
+              "action": "allow",
+              "peer": {
+                "kind": "anywhere"
+              },
+              "ports": "ephemeral"
+            },
+            {
+              "number": 200,
+              "action": "allow",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              },
+              "ports": "http"
+            },
+            {
+              "number": 210,
+              "action": "allow",
+              "ports": "ssh",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "10.0.0.0/16"
+              }
+            }
+          ]
+        }
+      ],
+      "securityGroups": [
+        {
+          "id": "sg-alb",
+          "name": "alb-sg",
+          "inbound": [
+            {
+              "ports": "https",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-app",
+          "name": "ec2-app-sg",
+          "inbound": [
+            {
+              "ports": "http",
+              "peer": {
+                "kind": "security-group",
+                "securityGroupId": "sg-alb"
+              }
+            },
+            {
+              "ports": "ssh",
+              "peer": {
+                "kind": "security-group",
+                "securityGroupId": "sg-bastion"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-db",
+          "name": "rds-db-sg",
+          "inbound": [
+            {
+              "ports": "mysql",
+              "peer": {
+                "kind": "security-group",
+                "securityGroupId": "sg-app"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sg-bastion",
+          "name": "bastion-sg",
+          "inbound": [
+            {
+              "ports": "ssh",
+              "peer": {
+                "kind": "cidr",
+                "cidr": "203.0.113.25/32"
+              }
+            }
+          ],
+          "outbound": [
+            {
+              "ports": "all",
+              "peer": {
+                "kind": "anywhere"
+              }
+            }
+          ]
+        }
+      ],
+      "resources": [
+        {
+          "kind": "internet-gateway",
+          "id": "igw",
+          "name": "Internet Gateway"
+        },
+        {
+          "kind": "load-balancer",
+          "id": "alb",
+          "name": "Application Load Balancer",
+          "scheme": "internet-facing",
+          "subnetIds": ["public-a", "public-b"],
+          "securityGroupIds": ["sg-alb"],
+          "listener": "https",
+          "targetIds": ["app-a", "app-b"]
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "app-a",
+          "name": "Web server A",
+          "subnetId": "private-a",
+          "securityGroupIds": ["sg-app"],
+          "roleId": "app-role",
+          "size": "small",
+          "healthy": true
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "app-b",
+          "name": "Web server B",
+          "subnetId": "private-b",
+          "securityGroupIds": ["sg-app"],
+          "roleId": "app-role",
+          "size": "small",
+          "healthy": true
+        },
+        {
+          "kind": "s3-bucket",
+          "id": "receipts",
+          "name": "receipts",
+          "blockPublicAccess": true,
+          "policy": [],
+          "dataClass": "sensitive",
+          "encryption": {
+            "kind": "sse-kms",
+            "keyId": "shop-key"
+          }
+        },
+        {
+          "kind": "iam-role",
+          "id": "app-role",
+          "name": "app-role",
+          "statements": [
+            {
+              "effect": "allow",
+              "actions": ["s3:Write"],
+              "resource": "receipts"
+            },
+            {
+              "effect": "allow",
+              "actions": ["kms:Use"],
+              "resource": "shop-key"
+            }
+          ]
+        },
+        {
+          "kind": "rds-database",
+          "id": "db",
+          "name": "orders database",
+          "engine": "mysql",
+          "subnetIds": ["private-a", "private-b"],
+          "securityGroupIds": ["sg-db"],
+          "primarySubnetId": "private-a",
+          "multiAz": false,
+          "status": "available",
+          "encryption": {
+            "kind": "kms",
+            "keyId": "shop-key"
+          }
+        },
+        {
+          "kind": "waf-web-acl",
+          "id": "shop-waf",
+          "name": "shop-web-acl",
+          "loadBalancerId": "alb",
+          "defaultAction": "allow",
+          "rules": [
+            {
+              "kind": "core-rule-set"
+            },
+            {
+              "kind": "rate-based",
+              "limit": 100
+            }
+          ]
+        },
+        {
+          "kind": "kms-key",
+          "id": "shop-key",
+          "name": "shop-key"
+        },
+        {
+          "kind": "ec2-instance",
+          "id": "bastion",
+          "name": "Bastion host",
+          "subnetId": "public-a",
+          "securityGroupIds": ["sg-bastion"],
+          "roleId": null,
+          "size": "small",
+          "healthy": true,
+          "publicAddress": true
+        }
+      ]
+    }
+  },
+  "initialScene": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "edge-acl"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "edge-acl"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": [
+          {
+            "destination": "s3",
+            "target": {
+              "kind": "gateway-endpoint",
+              "service": "s3"
+            }
+          }
+        ]
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "isDefault": true,
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      },
+      {
+        "id": "edge-acl",
+        "name": "edge-acl",
+        "inbound": [
+          {
+            "number": 90,
+            "action": "deny",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "198.51.100.0/24"
+            },
+            "ports": "all"
+          },
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "https"
+          },
+          {
+            "number": 200,
+            "action": "allow",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "10.0.0.0/16"
+            },
+            "ports": "ephemeral"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "ephemeral"
+          },
+          {
+            "number": 200,
+            "action": "allow",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "10.0.0.0/16"
+            },
+            "ports": "http"
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "ec2-app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-db",
+        "name": "rds-db-sg",
+        "inbound": [
+          {
+            "ports": "mysql",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-app"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "https",
+        "targetIds": ["app-a", "app-b"]
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-a",
+        "name": "Web server A",
+        "subnetId": "private-a",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-b",
+        "name": "Web server B",
+        "subnetId": "private-b",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "s3-bucket",
+        "id": "receipts",
+        "name": "receipts",
+        "blockPublicAccess": true,
+        "policy": [],
+        "dataClass": "sensitive",
+        "encryption": {
+          "kind": "sse-kms",
+          "keyId": "shop-key"
+        }
+      },
+      {
+        "kind": "iam-role",
+        "id": "app-role",
+        "name": "app-role",
+        "statements": [
+          {
+            "effect": "allow",
+            "actions": ["s3:Write"],
+            "resource": "receipts"
+          },
+          {
+            "effect": "allow",
+            "actions": ["kms:Use"],
+            "resource": "shop-key"
+          }
+        ]
+      },
+      {
+        "kind": "rds-database",
+        "id": "db",
+        "name": "orders database",
+        "engine": "mysql",
+        "subnetIds": ["private-a", "private-b"],
+        "securityGroupIds": ["sg-db"],
+        "primarySubnetId": "private-a",
+        "multiAz": false,
+        "status": "available",
+        "encryption": {
+          "kind": "kms",
+          "keyId": "shop-key"
+        }
+      },
+      {
+        "kind": "waf-web-acl",
+        "id": "shop-waf",
+        "name": "shop-web-acl",
+        "loadBalancerId": "alb",
+        "defaultAction": "allow",
+        "rules": [
+          {
+            "kind": "core-rule-set"
+          },
+          {
+            "kind": "rate-based",
+            "limit": 100
+          }
+        ]
+      },
+      {
+        "kind": "kms-key",
+        "id": "shop-key",
+        "name": "shop-key"
+      }
+    ]
+  },
+  "population": [
+    {
+      "id": "green-1",
+      "kind": "friendly",
+      "groundPosition": 0,
+      "ip": "203.0.113.10",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "backendCall": {
+        "destinationId": "db"
+      },
+      "label": "looks up an order",
+      "says": "Are the striped flip-flops back in my size yet?"
+    },
+    {
+      "id": "green-2",
+      "kind": "friendly",
+      "groundPosition": 1,
+      "ip": "192.0.2.20",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "backendCall": {
+        "destinationId": "receipts",
+        "action": "s3:Write"
+      },
+      "label": "uploads a receipt to return a bikini",
+      "says": "Receipt attached: this bikini is a size too small."
+    },
+    {
+      "id": "green-3",
+      "kind": "friendly",
+      "groundPosition": 2,
+      "ip": "203.0.113.31",
+      "destinationId": "alb",
+      "port": 443,
+      "payload": "clean",
+      "backendCall": {
+        "destinationId": "db"
+      },
+      "label": "checks a delivery",
+      "says": "Will my beach umbrella arrive before Saturday?"
+    },
+    {
+      "id": "operator",
+      "kind": "operator",
+      "groundPosition": 3,
+      "ip": "203.0.113.25",
+      "destinationId": "app-a",
+      "port": 22,
+      "payload": "clean",
+      "via": "bastion",
+      "label": "opens a shell on Web server A to read last week's logs",
+      "says": "I'm the shop's admin. I need a shell on Web server A: last week's logs, and a patch to install.",
+      "moves": {
+        "atStep": "twist",
+        "ip": "192.0.2.77",
+        "groundPosition": 5,
+        "says": "Working from the coast this weekend, on the beach café's connection. New address, same job.",
+        "label": "opens a shell on Web server A, from the coast"
+      }
+    },
+    {
+      "id": "red-probe",
+      "kind": "hostile",
+      "groundPosition": 6,
+      "ip": "192.0.2.150",
+      "destinationId": "bastion",
+      "port": 22,
+      "payload": "clean",
+      "label": "probes for an open SSH port",
+      "says": "Port 22, anybody? I've got a long list of passwords to try…"
+    }
+  ],
+  "events": [],
+  "objectives": [
+    {
+      "id": "visitors-answered",
+      "text": "Every visitor is answered: orders found, receipts stored",
+      "predicate": {
+        "kind": "flows-delivered",
+        "flows": {
+          "flowIds": ["green-1", "green-2", "green-3"]
+        }
+      }
+    },
+    {
+      "id": "session",
+      "text": "The operator gets a shell through Session Manager",
+      "predicate": {
+        "kind": "session-opened",
+        "flows": {
+          "flowIds": ["operator"]
+        }
+      }
+    },
+    {
+      "id": "no-ssh-in",
+      "text": "No security group lets SSH (port 22) in",
+      "predicate": {
+        "kind": "security-groups-closed-to",
+        "ports": "ssh"
+      }
+    }
+  ],
+  "stars": {
+    "wellArchitected": {
+      "text": "No keys at the door: no bastion host, and no security group or network ACL rule anywhere mentions SSH (port 22)",
+      "predicates": [
+        {
+          "kind": "no-rule-names",
+          "ports": "ssh"
+        },
+        {
+          "kind": "none-of",
+          "predicates": [
+            {
+              "kind": "resource-exists",
+              "resourceId": "bastion"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "hints": [
+    {
+      "objectiveId": "visitors-answered",
+      "nudge": "Click a visitor who was turned away and follow its kite: which check stopped it?",
+      "pointer": {
+        "text": "The visitors need what Level 8 left: HTTPS through edge-acl and the load balancer, and the app role's permissions for the bucket and its key.",
+        "highlight": "subnet:public-a"
+      },
+      "nearAnswer": "Undo the last change that touched edge-acl, ec2-app-sg or app-role, and fly again."
+    },
+    {
+      "objectiveId": "session",
+      "nudge": "Session Manager needs three things: to be in the sky, an instance that is managed, and a way out for the SSM Agent.",
+      "pointer": {
+        "text": "A managed instance's role allows ssm:ManagedInstance. Its agent reaches Systems Manager on HTTPS 443, through a NAT Gateway and back through edge-acl.",
+        "highlight": "resource:app-role"
+      },
+      "nearAnswer": "Place Session Manager; allow ssm:ManagedInstance on Session Manager in app-role; add a NAT Gateway in Public subnet B with the private route 0.0.0.0/0 to it; on edge-acl allow HTTPS out to anywhere and ephemeral ports in from anywhere."
+    },
+    {
+      "objectiveId": "no-ssh-in",
+      "nudge": "Which security groups still have a rule for SSH 22?",
+      "pointer": {
+        "text": "Look at bastion-sg and ec2-app-sg. A rule naming a security group that no longer exists goes when you remove it.",
+        "highlight": "resource:app-a"
+      },
+      "nearAnswer": "Remove the bastion host, and remove ec2-app-sg's rule allowing SSH from bastion-sg."
+    }
+  ],
+  "factCards": [
+    "session-manager",
+    "session-manager-real-world",
+    "concept-bastion-host",
+    "nat-gateway",
+    "cloudtrail",
+    "network-acl"
+  ],
+  "referenceSolution": {
+    "vpc": {
+      "cidr": "10.0.0.0/16"
+    },
+    "subnets": [
+      {
+        "id": "public-a",
+        "name": "Public subnet A",
+        "availabilityZone": "a",
+        "band": "low",
+        "cidr": "10.0.1.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "edge-acl"
+      },
+      {
+        "id": "public-b",
+        "name": "Public subnet B",
+        "availabilityZone": "b",
+        "band": "low",
+        "cidr": "10.0.2.0/24",
+        "routeTableId": "rt-public",
+        "networkAclId": "edge-acl"
+      },
+      {
+        "id": "private-a",
+        "name": "Private subnet A",
+        "availabilityZone": "a",
+        "band": "mid",
+        "cidr": "10.0.11.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      },
+      {
+        "id": "private-b",
+        "name": "Private subnet B",
+        "availabilityZone": "b",
+        "band": "mid",
+        "cidr": "10.0.12.0/24",
+        "routeTableId": "rt-private",
+        "networkAclId": "nacl-default"
+      }
+    ],
+    "routeTables": [
+      {
+        "id": "rt-public",
+        "name": "Public route table",
+        "routes": [
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "internet-gateway"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rt-private",
+        "name": "Private route table",
+        "routes": [
+          {
+            "destination": "s3",
+            "target": {
+              "kind": "gateway-endpoint",
+              "service": "s3"
+            }
+          },
+          {
+            "destination": "internet",
+            "target": {
+              "kind": "nat-gateway",
+              "natGatewayId": "nat"
+            }
+          }
+        ]
+      }
+    ],
+    "networkAcls": [
+      {
+        "id": "nacl-default",
+        "name": "Default NACL",
+        "isDefault": true,
+        "inbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "all"
+          }
+        ]
+      },
+      {
+        "id": "edge-acl",
+        "name": "edge-acl",
+        "inbound": [
+          {
+            "number": 90,
+            "action": "deny",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "198.51.100.0/24"
+            },
+            "ports": "all"
+          },
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "https"
+          },
+          {
+            "number": 200,
+            "action": "allow",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "10.0.0.0/16"
+            },
+            "ports": "ephemeral"
+          },
+          {
+            "number": 300,
+            "action": "allow",
+            "ports": "ephemeral",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "number": 100,
+            "action": "allow",
+            "peer": {
+              "kind": "anywhere"
+            },
+            "ports": "ephemeral"
+          },
+          {
+            "number": 200,
+            "action": "allow",
+            "peer": {
+              "kind": "cidr",
+              "cidr": "10.0.0.0/16"
+            },
+            "ports": "http"
+          },
+          {
+            "number": 300,
+            "action": "allow",
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "securityGroups": [
+      {
+        "id": "sg-alb",
+        "name": "alb-sg",
+        "inbound": [
+          {
+            "ports": "https",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-app",
+        "name": "ec2-app-sg",
+        "inbound": [
+          {
+            "ports": "http",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-alb"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      },
+      {
+        "id": "sg-db",
+        "name": "rds-db-sg",
+        "inbound": [
+          {
+            "ports": "mysql",
+            "peer": {
+              "kind": "security-group",
+              "securityGroupId": "sg-app"
+            }
+          }
+        ],
+        "outbound": [
+          {
+            "ports": "all",
+            "peer": {
+              "kind": "anywhere"
+            }
+          }
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "kind": "internet-gateway",
+        "id": "igw",
+        "name": "Internet Gateway"
+      },
+      {
+        "kind": "load-balancer",
+        "id": "alb",
+        "name": "Application Load Balancer",
+        "scheme": "internet-facing",
+        "subnetIds": ["public-a", "public-b"],
+        "securityGroupIds": ["sg-alb"],
+        "listener": "https",
+        "targetIds": ["app-a", "app-b"]
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-a",
+        "name": "Web server A",
+        "subnetId": "private-a",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "ec2-instance",
+        "id": "app-b",
+        "name": "Web server B",
+        "subnetId": "private-b",
+        "securityGroupIds": ["sg-app"],
+        "roleId": "app-role",
+        "size": "small",
+        "healthy": true
+      },
+      {
+        "kind": "s3-bucket",
+        "id": "receipts",
+        "name": "receipts",
+        "blockPublicAccess": true,
+        "policy": [],
+        "dataClass": "sensitive",
+        "encryption": {
+          "kind": "sse-kms",
+          "keyId": "shop-key"
+        }
+      },
+      {
+        "kind": "iam-role",
+        "id": "app-role",
+        "name": "app-role",
+        "statements": [
+          {
+            "effect": "allow",
+            "actions": ["s3:Write"],
+            "resource": "receipts"
+          },
+          {
+            "effect": "allow",
+            "actions": ["kms:Use"],
+            "resource": "shop-key"
+          },
+          {
+            "effect": "allow",
+            "actions": ["ssm:ManagedInstance"],
+            "resource": "ssm"
+          }
+        ]
+      },
+      {
+        "kind": "rds-database",
+        "id": "db",
+        "name": "orders database",
+        "engine": "mysql",
+        "subnetIds": ["private-a", "private-b"],
+        "securityGroupIds": ["sg-db"],
+        "primarySubnetId": "private-a",
+        "multiAz": false,
+        "status": "available",
+        "encryption": {
+          "kind": "kms",
+          "keyId": "shop-key"
+        }
+      },
+      {
+        "kind": "waf-web-acl",
+        "id": "shop-waf",
+        "name": "shop-web-acl",
+        "loadBalancerId": "alb",
+        "defaultAction": "allow",
+        "rules": [
+          {
+            "kind": "core-rule-set"
+          },
+          {
+            "kind": "rate-based",
+            "limit": 100
+          }
+        ]
+      },
+      {
+        "kind": "kms-key",
+        "id": "shop-key",
+        "name": "shop-key"
+      },
+      {
+        "kind": "session-manager",
+        "id": "ssm",
+        "name": "Session Manager"
+      },
+      {
+        "kind": "nat-gateway",
+        "id": "nat",
+        "name": "NAT Gateway",
+        "subnetId": "public-b"
+      }
+    ]
+  }
+}

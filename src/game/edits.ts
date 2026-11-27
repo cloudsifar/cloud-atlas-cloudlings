@@ -39,9 +39,16 @@ function changeResource<K extends ResourceKind>(
   })
 }
 
-/** The subnets a kind of resource may sit in. Empty for resources that are not in a subnet. */
-export function validSubnetsFor(scene: Scene, kind: ResourceKind): Subnet[] {
-  if (kind === 'nat-gateway') return scene.subnets.filter((subnet) => subnet.band === 'low')
+/**
+ * The subnets a resource may sit in. Empty for resources that are not in a subnet. An
+ * instance with a public address (a bastion host) goes in a public subnet, in the low
+ * band; every other instance in a private one.
+ */
+export function validSubnetsFor(scene: Scene, of: ResourceKind | Resource): Subnet[] {
+  const kind = typeof of === 'string' ? of : of.kind
+  const publicInstance = typeof of !== 'string' && of.kind === 'ec2-instance' && of.publicAddress
+  if (kind === 'nat-gateway' || publicInstance)
+    return scene.subnets.filter((subnet) => subnet.band === 'low')
   if (kind === 'ec2-instance') return scene.subnets.filter((subnet) => subnet.band === 'mid')
   return []
 }
@@ -57,7 +64,7 @@ export function placeFromPalette(scene: Scene, entry: PaletteEntry, subnetId?: s
         .map((subnet) => subnet.id)
     }
     if (resource.kind === 'nat-gateway' || resource.kind === 'ec2-instance') {
-      resource.subnetId = subnetId ?? validSubnetsFor(draft, resource.kind)[0]?.id ?? ''
+      resource.subnetId = subnetId ?? validSubnetsFor(draft, resource)[0]?.id ?? ''
     }
     if (resource.kind === 'waf-web-acl') {
       // Dropped in the low band, a web ACL is associated with the load balancer there.
@@ -171,7 +178,23 @@ export function removeSecurityGroupRule(
   index: number,
 ): Scene {
   return edit(scene, (draft) => {
-    draft.securityGroups.find((group) => group.id === groupId)?.[direction].splice(index, 1)
+    const [removed] =
+      draft.securityGroups.find((group) => group.id === groupId)?.[direction].splice(index, 1) ?? []
+    // A group this rule named, that nothing wears and no other rule names, has nothing
+    // left to do: it goes, as it would have with its cloud (removeResource). Otherwise a
+    // removed bastion host's group would linger with no card to open it by (Level 9).
+    if (removed?.peer.kind !== 'security-group') return
+    const named = removed.peer.securityGroupId
+    const worn = draft.resources.some(
+      (resource) => 'securityGroupIds' in resource && resource.securityGroupIds.includes(named),
+    )
+    const mentioned = draft.securityGroups.some((group) =>
+      [...group.inbound, ...group.outbound].some(
+        (rule) => rule.peer.kind === 'security-group' && rule.peer.securityGroupId === named,
+      ),
+    )
+    if (!worn && !mentioned)
+      draft.securityGroups = draft.securityGroups.filter((group) => group.id !== named)
   })
 }
 
@@ -408,6 +431,8 @@ export function roleStatementProblem(scene: Scene, statement: PolicyStatement): 
       return `kms:Use is about a KMS key, and "${target.name}" is not one.`
     if (action.startsWith('s3:') && target.kind !== 's3-bucket')
       return `${action} is about an S3 bucket, and "${target.name}" is not one.`
+    if (action === 'ssm:ManagedInstance' && target.kind !== 'session-manager')
+      return `ssm:ManagedInstance lets an instance's SSM Agent register with Systems Manager: name Session Manager, not "${target.name}".`
   }
   return null
 }

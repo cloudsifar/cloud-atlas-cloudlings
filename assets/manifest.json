@@ -101,6 +101,16 @@
       "priority": 1,
       "description": "KMS key (customer managed): a thin cirrostratus veil in the high band, with a faint halo in the key's colour. Every cloud encrypted with this key wears the same halo."
     },
+    "cloud.cirrocumulus.session-manager": {
+      "file": null,
+      "width": 120,
+      "height": 44,
+      "anchor": [0.5, 0.5],
+      "highlight": null,
+      "group": "Clouds",
+      "priority": 1,
+      "description": "Session Manager (AWS Systems Manager): a high rippled cirrocumulus, the \"mackerel sky\", in the high band: the control layer above everything (Level 9). An operator's session comes down from it to the instance."
+    },
     "construct.waf-net": {
       "file": null,
       "width": 300,
@@ -294,6 +304,48 @@
       "priority": 1,
       "description": "A hostile Cloudling, snickering: its kite got in (a breach)."
     },
+    "cloudling.operator.idle": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [0.5, 1],
+      "frames": 1,
+      "fps": 8,
+      "points": {
+        "hand": [0.85, 0.52]
+      },
+      "group": "Cloudlings",
+      "priority": 1,
+      "description": "The operator Cloudling (Level 9): the shop's administrator, in a distinct broad-brimmed hat that never changes with the region, holding the string of a box kite."
+    },
+    "cloudling.operator.cheer": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [0.5, 1],
+      "frames": 4,
+      "fps": 8,
+      "points": {
+        "hand": [0.85, 0.52]
+      },
+      "group": "Cloudlings",
+      "priority": 1,
+      "description": "The operator Cloudling, jumping and cheering: its shell opened. The hat stays on."
+    },
+    "cloudling.operator.droop": {
+      "file": null,
+      "width": 34,
+      "height": 58,
+      "anchor": [0.5, 1],
+      "frames": 1,
+      "fps": 8,
+      "points": {
+        "hand": [0.85, 0.52]
+      },
+      "group": "Cloudlings",
+      "priority": 1,
+      "description": "The operator Cloudling, drooping: it could not get in. The hat stays on."
+    },
     "cloudling.costume.us-east-1": {
       "file": null,
       "width": 34,
@@ -417,6 +469,50 @@
       "group": "Kites",
       "priority": 1,
       "description": "A red kite shaped like a bird, crumpled, falling to the ground."
+    },
+    "kite.operator.flying": {
+      "file": null,
+      "width": 30,
+      "height": 36,
+      "anchor": [0.5, 0.5],
+      "frames": 1,
+      "fps": 8,
+      "group": "Kites",
+      "priority": 1,
+      "description": "The operator's box kite (Level 9): two square cells on long spars, flown to reach an instance by SSH or through Session Manager."
+    },
+    "kite.operator.tangled": {
+      "file": null,
+      "width": 30,
+      "height": 36,
+      "anchor": [0.5, 0.5],
+      "frames": 3,
+      "fps": 8,
+      "group": "Kites",
+      "priority": 1,
+      "description": "The operator's box kite, tangled in a network ACL's ribbon."
+    },
+    "kite.operator.netted": {
+      "file": null,
+      "width": 30,
+      "height": 36,
+      "anchor": [0.5, 0.5],
+      "frames": 3,
+      "fps": 8,
+      "group": "Kites",
+      "priority": 1,
+      "description": "The operator's box kite, caught in a net (not met in Level 9, kept so every kite has every state)."
+    },
+    "kite.operator.crumpled": {
+      "file": null,
+      "width": 30,
+      "height": 36,
+      "anchor": [0.5, 0.5],
+      "frames": 1,
+      "fps": 8,
+      "group": "Kites",
+      "priority": 1,
+      "description": "The operator's box kite, crumpled, falling to the ground."
     },
     "station.body": {
       "file": null,
@@ -553,26 +649,6 @@
       "group": "Narrator and interface",
       "priority": 2,
       "description": "The narrator in the bottom box, idling."
-    },
-    "cloudling.operator.idle": {
-      "file": null,
-      "width": 34,
-      "height": 58,
-      "anchor": [0.5, 0.5],
-      "status": "planned",
-      "group": "Planned: not drawn yet",
-      "priority": 3,
-      "description": "The operator Cloudling (Level 9): a distinct hat, holding a box-shaped kite."
-    },
-    "kite.operator.flying": {
-      "file": null,
-      "width": 30,
-      "height": 30,
-      "anchor": [0.5, 0.5],
-      "status": "planned",
-      "group": "Planned: not drawn yet",
-      "priority": 3,
-      "description": "The operator's box-shaped kite (Level 9)."
     },
     "kite.hostile.stolen": {
       "file": null,

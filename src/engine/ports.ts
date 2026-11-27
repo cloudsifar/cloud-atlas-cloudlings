@@ -15,6 +15,7 @@ export const PORT_OPTIONS: Record<PortOption, PortRange> = {
   all: { label: 'All traffic', from: 0, to: 65535 },
 }
 
+export const SSH_PORT = 22
 export const HTTP_PORT = 80
 export const HTTPS_PORT = 443
 export const MYSQL_PORT = 3306

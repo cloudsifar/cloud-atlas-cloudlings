@@ -150,6 +150,7 @@
       "Management events are recorded by default: creating a bucket, changing a security group, every call to KMS. Data events, such as reading or writing an object in S3, are not: you add them to a trail, at extra cost.",
       "For a record longer than 90 days, create a trail: it delivers the events to an S3 bucket.",
       "With SSE-S3, S3 manages the keys itself and never calls KMS, so CloudTrail has no record of key use. With SSE-KMS there is a record of every call, whether the key is an AWS managed key or your own.",
+      "Each Session Manager session start is a StartSession call, recorded with the identity that started it. An SSH login with a shared key leaves no record in AWS at all.",
       "CloudTrail and CloudWatch are different services: CloudTrail records who did what through the AWS API, and CloudWatch measures how things are running."
     ],
     "simplifications": [
@@ -205,7 +206,7 @@
       "AWS also offers a way to do without one: Systems Manager Session Manager needs no open inbound ports, no bastion host and no SSH keys. Access is controlled with IAM, and sessions can be logged."
     ],
     "simplifications": [
-      "There is no bastion host in these levels: nothing here needs anyone to log in to an EC2 instance."
+      "Level 9's bastion host runs only SSH, and its SSH key pair is assumed rather than modelled. The red Cloudling never has the key; in AWS a leaked key is the real danger."
     ],
     "atlasPage": "TODO(Simon)"
   },
@@ -272,6 +273,37 @@
       "Every key here has the default key policy, which leaves permissions to IAM. Key policies, grants, aliases, rotation and multi-Region keys are left out.",
       "A key that still encrypts something cannot be removed. In AWS you schedule a key's deletion, 7 to 30 days ahead, and data under a deleted key can never be read again."
     ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "session-manager": {
+    "title": "Session Manager",
+    "body": "AWS Systems Manager Session Manager gives you a shell on an instance with no inbound port open, no public address, no bastion host and no SSH key. The SSM Agent on the instance connects out to Systems Manager over HTTPS 443 and keeps that connection open; a session runs over it. Who may start a session is decided by IAM, and every session start is recorded in CloudTrail.",
+    "points": [
+      "An instance is managed once its agent has registered with Systems Manager, using the instance's IAM role: the role needs the permissions in the AWS managed policy AmazonSSMManagedInstanceCore.",
+      "The agent needs HTTPS (443) out to the Systems Manager endpoints: from a private subnet, through a NAT Gateway or through interface VPC endpoints.",
+      "The person starting a session needs permission too (ssm:StartSession), and signs in with their own AWS identity: nothing depends on where they are connecting from.",
+      "What happens inside a session can be logged to S3 or CloudWatch Logs, once you switch that on."
+    ],
+    "simplifications": [
+      "ssm:ManagedInstance stands for the permissions in AmazonSSMManagedInstanceCore, and names Session Manager; the managed policy grants them on every resource (*).",
+      "Placing Session Manager stands for choosing to use it: in AWS it is always there in a Region. The SSM Agent is assumed to be installed, as it is on Amazon Linux.",
+      "The operator's own permission to start a session (ssm:StartSession) is assumed.",
+      "Interface VPC endpoints are left out: \"Session Manager in the real world\" says what they need."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
+  "session-manager-real-world": {
+    "title": "Session Manager in the real world",
+    "body": "In this level Session Manager needs three things: Session Manager itself, a role that lets the instance's agent register, and a way out on HTTPS 443. A real account needs a few details more, and most surprises come from them. Nothing on this card is something you have to set up in the game.",
+    "points": [
+      "The SSM Agent: preinstalled on Amazon Linux 2, Amazon Linux 2023 and many other AWS images; on others you install it.",
+      "An instance profile: the EC2 instance's role, with the AWS managed policy AmazonSSMManagedInstanceCore attached.",
+      "HTTPS (443) out to three endpoints in the Region: ssm, ssmmessages and ec2messages. Network ACLs are stateless, so their replies need allowing too, on ephemeral ports.",
+      "From a private subnet, either a NAT Gateway, as in this level, or interface VPC endpoints (AWS PrivateLink) for those three services, with no internet access at all.",
+      "With interface endpoints: switch on private DNS for each endpoint, switch on the VPC's DNS hostnames and DNS resolution settings, and let the endpoints' security group allow HTTPS in from the instances. Missing any of these is the classic reason a private instance never shows up as managed.",
+      "The person starting a session needs ssm:StartSession and, from the command line, the Session Manager plugin for the AWS CLI."
+    ],
+    "simplifications": [],
     "atlasPage": "TODO(Simon)"
   },
   "concept-encryption-at-rest": {

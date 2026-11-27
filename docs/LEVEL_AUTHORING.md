@@ -110,6 +110,15 @@ needs `kms:Use` on the key. A red kite reading a bucket reads the objects stored
 the level began, which keep SSE-S3 whatever the default says: start every level's
 buckets on SSE-S3, or the trace's explanation is wrong.
 
+A bastion host (Level 9) is an `ec2-instance` with `"publicAddress": true`: it goes in a
+public subnet, in the low band, and runs only SSH. Offer it in the palette with its own
+security group (`securityGroups` on the palette entry), which starts with no inbound
+rules. Session Manager is `{ "kind": "session-manager", "id": "ssm", "name": "Session
+Manager" }`: it lives in the high band, one per scene, and costs nothing. An instance is
+managed once its role allows `ssm:ManagedInstance` on it, and its agent then needs HTTPS
+443 out: from a private subnet, through a NAT Gateway, crossing the NAT Gateway's
+subnet's network ACL both ways.
+
 An AWS WAF web ACL (Level 7) protects one load balancer:
 
 ```json
@@ -169,9 +178,18 @@ carries a complete resource with a fixed id (for example the bucket `photos`).
   counts as delivered if that call succeeds too.
 - A kite that calls a service directly (a hostile kite reading a bucket) uses `action`
   instead, e.g. `"action": "s3:Read"`.
-- A hostile kite must aim at something the internet can reach: the load balancer or
-  S3, never an EC2 instance in a private subnet. Add a row to `docs/THREATS.md` saying
-  what it tries and what stops it; a level test checks the target.
+- A hostile kite must aim at something the internet can reach: the load balancer, S3
+  or a bastion host (an instance with a public address, which may come from the
+  palette), never an EC2 instance in a private subnet. Add a row to `docs/THREATS.md`
+  saying what it tries and what stops it; a level test checks the target.
+- `"kind": "operator"` is the shop's administrator (Level 9): a hat and a box kite. It
+  aims at an instance on SSH 22 and wants a shell. With Session Manager in the sky it
+  starts a session instead; without, it connects by SSH, through the bastion host named
+  by `via` when the instance has only a private address.
+- `moves` (optional) moves a Cloudling when the narrator reaches a step:
+  `{ "atStep": "twist", "ip": "192.0.2.77", "groundPosition": 5, "says": "…" }`. From
+  that step on, and once the narrator has finished, it flies from there. The rule
+  dropdowns offer the operator's current address as a /32.
 - A `backendCall` to an RDS database (`{ "destinationId": "db" }`, no `action`) is a
   query from the instance that answered the kite: it needs the database's security
   group to allow the engine's port from that instance, and the database to be
@@ -290,6 +308,10 @@ The predicates available today (`src/engine/predicates.ts`):
 | `bucket-encrypted-with-customer-key`      | The bucket's default encryption is SSE-KMS with a customer managed key that exists                                                          |
 | `database-encrypted`                      | The database is encrypted at rest, with any key                                                                                             |
 | `one-customer-key`                        | Every one of `resourceIds` (buckets and databases) is encrypted under one and the same customer managed key                                 |
+| `all-of`                                  | Every one of the listed `predicates` holds, e.g. a network ACL rule in each direction                                                       |
+| `session-opened`                          | Every selected kite got its shell through Session Manager                                                                                   |
+| `security-groups-closed-to`               | No security group has an inbound rule letting `ports` in ("All traffic" counts)                                                             |
+| `no-rule-names`                           | No security group or network ACL rule, in or out, names `ports`                                                                             |
 
 Select kites with `{ "intent": "legitimate" }`, `{ "intent": "hostile" }` or
 `{ "flowIds": ["green-1"] }`. Values for `by`: `route`, `nacl`, `security-group`,
@@ -368,6 +390,14 @@ player rebuilds. Steps that were acknowledged or saw a run stay done. So write s
 steps cumulatively: each one should still hold in the reference solution. The level
 tests check exactly that, so a step that would bounce back fails them.
 
+**Steps that build something the level later removes.** Level 9 builds a bastion host
+and then takes it away. Its steps are `run-finished` steps (they never come back), and
+the level gives each one the scene a player has when its flight shows what it asks for:
+`"narrationCheckpoints": { "<step id>": <scene> }`. The level tests fly each such step's
+predicate against its checkpoint, with the Cloudlings where they stand at that step; a
+playthrough test (`tests/game/noKeys.test.ts`) checks that real edits reach each
+checkpoint exactly.
+
 **Say where to drop a cloud.** A cloud is placed only if it is let go over a zone where
 it belongs, which lights up under the pointer; anywhere else it goes back to the tray
 (ADR 0007). In guided levels, the narration names the band or the spot.
@@ -382,7 +412,10 @@ and a `nearAnswer`. They are revealed one at a time and carry no penalty.
 - the file validates;
 - the initial scene fails at least one objective;
 - the reference solution meets every objective and earns all three stars;
-- the narrator's steps can all be completed by the reference solution.
+- the narrator's steps can all be completed by the reference solution, or by their
+  checkpoint scene;
+- every red kite aims at something the internet can reach;
+- every step that waits for a flight says "fly".
 
 ## Zone and subnet letters
 

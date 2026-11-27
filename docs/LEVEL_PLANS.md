@@ -51,6 +51,12 @@ already includes flip-flops and a sun hat.
 
 ## Level 9, No Keys at the Door (São Paulo)
 
+**Built, 27 November 2026 (ADR 0020).** What follows is the plan it was built from. The
+level differs from it in two ways:
+
+- the NAT Gateway's subnet network ACL is a deliberate trap (step 6 of the ADR);
+- the "In the real world" card is a fact card of its own (`session-manager-real-world`).
+
 The brief starts with a leftover SSH 22 rule from anywhere. Simon's version tells how
 that rule comes about, so the player feels why Session Manager is better.
 
@@ -204,15 +210,47 @@ From the brief:
 To decide: whether the "small shop" is Tokyo's business launching, which would tie the
 finale to the region.
 
+## After Level 12: the Field Guide to the Sky
+
+Build this once all 12 levels are complete (brief, Section 12, Milestone 4). Simon's
+requirements, 27 November 2026:
+
+**Part 1, the clouds and the metaphor.**
+
+- **One entry for each of the ten cloud genera.** Each names the genus and where it sits
+  in the game's sky: low, mid or high band, or the vertical S3 cloud spanning all three.
+- **Each entry explains the metaphor:**
+  - altitude is distance from the internet;
+  - why that genus stands for its service family (the "Why this cloud" column in the
+    brief's Section 6).
+- **Each entry has one sentence about the real cloud.** It says what the cloud looks
+  like and where it forms, checked against the WMO _International Cloud Atlas_, as the
+  brief requires.
+
+**Part 2, the card deck.**
+
+- **Every fact card in one deck.** That is every service and concept the game mentions:
+  all of `content/fact-cards.json`, including cards with no cloud of their own, such as
+  CloudTrail.
+- **Open to shuffle through from the start.** The player doesn't have to play a level
+  to read a card.
+- **The cards stay as they are.** The deck shows the same text the levels open. A card
+  means most in the level where it comes up, while the player is looking at the thing
+  it describes; the deck is for browsing and revision.
+- **Built from the content file.** The deck reads `content/fact-cards.json` directly, so
+  a card added for a level appears in it automatically, and a test can check that the
+  deck holds every card.
+- **A suggestion, not yet agreed:** each card could show where it comes up ("Met in
+  Level 8") as a link to play that level, which joins the two ways of reading it.
+
 ## Open decisions
 
 1. **Tokyo's business.** It needs shared files (10), an event-driven upload pipeline
    (11) and a shop launch (12). It should have regional flavour with an invented name,
    and a winter season.
-2. **Level 9's address change.** A per-step population override, or a timeline event.
-3. **The "In the real world" card.** A new kind of fact card, or a section of the SSM
-   fact card.
-4. **Long narrator steps.** Several older steps (Level 2's `explain`, `chain` and `wrap`)
+2. **Decided in Level 9:** the address change is a per-kite `moves` at a narrator step,
+   and the "In the real world" card is a fact card of its own.
+3. **Long narrator steps.** Several older steps (Level 2's `explain`, `chain` and `wrap`)
    run past three lines and scroll inside the narrator box. They work, but the step
    counter is hidden until the player scrolls. Shorten them when Level 2 is next
    touched.

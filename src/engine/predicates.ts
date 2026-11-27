@@ -21,6 +21,7 @@ import {
   type ServiceAction,
   type WafRule,
 } from './model'
+import { PORT_OPTIONS, portOptionCovers } from './ports'
 import { resolveRoute } from './routing'
 import { hasPublicStatement } from './s3'
 import { failingStep, type CheckKind, type Flow, type FlowResult } from './trace'
@@ -59,6 +60,14 @@ export type Predicate =
   | { kind: 'group-can-scale'; groupId: string }
   /** None of these holds, e.g. neither fixed instance is a target any more. */
   | { kind: 'none-of'; predicates: Predicate[] }
+  /** Every one of these holds, e.g. a network ACL rule in each direction. */
+  | { kind: 'all-of'; predicates: Predicate[] }
+  /** Every selected flow got its shell through Session Manager (Level 9). */
+  | { kind: 'session-opened'; flows: FlowSelector }
+  /** No security group has an inbound rule that lets this port in ("All traffic" does). */
+  | { kind: 'security-groups-closed-to'; ports: PortOption }
+  /** No security group or network ACL rule, in or out, names this port option. */
+  | { kind: 'no-rule-names'; ports: PortOption }
   /** The Auto Scaling group's subnets span at least this many Availability Zones. */
   | { kind: 'group-spans-zones'; groupId: string; zones: number }
   /** The RDS database is Multi-AZ: it keeps a standby in another Availability Zone. */
@@ -306,6 +315,41 @@ export function evaluatePredicate(
     case 'none-of':
       return predicate.predicates.every(
         (inner) => !evaluatePredicate(authoredScene, runs, inner, crowd),
+      )
+    case 'all-of':
+      return predicate.predicates.every((inner) =>
+        evaluatePredicate(authoredScene, runs, inner, crowd),
+      )
+    case 'session-opened': {
+      const selected = selectRuns(runs, predicate.flows)
+      const sessionManagerIds = new Set(
+        resourcesOfKind(scene, 'session-manager').map((resource) => resource.id),
+      )
+      return (
+        selected.length > 0 &&
+        selected.every(
+          (run) =>
+            run.result.outcome === 'delivered' &&
+            run.result.trace.some(
+              (step) => step.at.kind === 'resource' && sessionManagerIds.has(step.at.id),
+            ),
+        )
+      )
+    }
+    case 'security-groups-closed-to': {
+      const port = PORT_OPTIONS[predicate.ports].from
+      return scene.securityGroups.every((group) =>
+        group.inbound.every((rule) => !portOptionCovers(rule.ports, port)),
+      )
+    }
+    case 'no-rule-names':
+      return (
+        scene.securityGroups.every((group) =>
+          [...group.inbound, ...group.outbound].every((rule) => rule.ports !== predicate.ports),
+        ) &&
+        scene.networkAcls.every((acl) =>
+          [...acl.inbound, ...acl.outbound].every((rule) => rule.ports !== predicate.ports),
+        )
       )
     case 'targets-in-both-azs': {
       const loadBalancer = findResourceOfKind(scene, 'load-balancer', predicate.loadBalancerId)

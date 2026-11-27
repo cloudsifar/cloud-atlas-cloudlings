@@ -16,6 +16,8 @@
 // - A customer managed KMS key is charged by the month (about a dollar), plus a little
 //   per request; AWS managed keys (aws/s3, aws/rds) have no monthly charge, and SSE-S3
 //   costs nothing extra. Encrypting an RDS database adds nothing to its price.
+// - Session Manager has no charge for EC2 instances; a bastion host is an instance,
+//   charged like any other.
 
 import { runningCount } from './autoScaling'
 import type { Resource, Scene } from './model'
@@ -44,6 +46,7 @@ export function coinsFor(resource: Resource): number {
       return 1
     case 'internet-gateway':
     case 'iam-role':
+    case 'session-manager':
       return 0
   }
 }

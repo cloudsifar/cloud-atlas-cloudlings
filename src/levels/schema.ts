@@ -29,7 +29,12 @@ export const REGION_NAMES: Record<RegionCode, string> = {
 /** One Cloudling and the kite it flies. */
 export type Kite = {
   id: string
-  kind: 'friendly' | 'hostile'
+  /**
+   * A friendly visitor, a hostile one, or the operator (Level 9): the shop's own
+   * administrator, in a distinct hat with a box kite, who wants a shell on the kite's
+   * destination instance rather than a web page.
+   */
+  kind: 'friendly' | 'hostile' | 'operator'
   /** Where the Cloudling stands on the ground, 0 (left) to 6 (right). */
   groundPosition: number
   /** The Cloudling's address, from the documentation ranges. */
@@ -51,6 +56,18 @@ export type Kite = {
   label: string
   /** What the Cloudling says in its speech bubble when clicked, in its own voice. */
   says: string
+  /**
+   * For the operator: the bastion host it would SSH through to reach an instance that
+   * has only a private address. Ignored once Session Manager is in the sky.
+   */
+  via?: string
+  /**
+   * The Cloudling moves when the narrator reaches step `atStep`: a new address, and
+   * optionally a new place on the ground and new words (Level 9: the operator works
+   * from the coast for a weekend). From then on, and once the narrator has finished,
+   * the kite flies from there.
+   */
+  moves?: { atStep: string; ip: string; groundPosition?: number; says?: string; label?: string }
 }
 
 /** A cloud the player may add. Its id is fixed so kites and objectives can refer to it. */
@@ -162,6 +179,13 @@ export type Level = {
   azs: 1 | 2
   /** Narrator steps, in order. May be empty for unguided levels. */
   narration: NarrationStep[]
+  /**
+   * The scene a player has at a "run-finished" step whose flight shows something the
+   * finished level no longer has: Level 9 builds a bastion host, then takes it away.
+   * Keyed by step id. Tests check each step's predicate against its checkpoint (and
+   * every other step against the reference solution); Demo Mode can show them.
+   */
+  narrationCheckpoints?: Record<string, Scene>
   /** The scene the player starts from. Every level is self-contained. */
   initialScene: Scene
   /** Ids (resources, security groups, route tables, NACLs) the player may not change. */

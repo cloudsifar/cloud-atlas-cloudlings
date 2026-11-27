@@ -33,12 +33,16 @@ export function scoreScene(scene: Scene, runs: FlowRun[], lockedIds: string[]): 
   const used = matchesUsedByFriendlyKites(runs)
   const editable = (id: string) => !lockedIds.includes(id)
 
-  // Security groups worn by an internet-facing load balancer legitimately face the internet.
-  const internetFacingGroupIds = new Set(
-    resourcesOfKind(scene, 'load-balancer')
+  // Security groups worn by an internet-facing load balancer, or by an instance with a
+  // public address (a bastion host), legitimately face the internet.
+  const internetFacingGroupIds = new Set([
+    ...resourcesOfKind(scene, 'load-balancer')
       .filter((loadBalancer) => loadBalancer.scheme === 'internet-facing')
       .flatMap((loadBalancer) => loadBalancer.securityGroupIds),
-  )
+    ...resourcesOfKind(scene, 'ec2-instance')
+      .filter((instance) => instance.publicAddress === true)
+      .flatMap((instance) => instance.securityGroupIds),
+  ])
 
   for (const group of scene.securityGroups.filter((candidate) => editable(candidate.id))) {
     group.inbound.forEach((rule, index) => {

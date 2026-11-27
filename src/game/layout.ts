@@ -31,6 +31,8 @@ export type CloudGenus =
   | 'cirrus'
   /** A thin veil that forms halos: a KMS key (brief, Section 6). */
   | 'cirrostratus'
+  /** High rippled "mackerel sky", the control layer above everything: SSM (brief, Section 6). */
+  | 'cirrocumulus'
   /** Not a cloud: AWS WAF is a woven net slung beneath the load balancer (brief, Section 6). */
   | 'net'
 
@@ -46,6 +48,7 @@ export const GENUS_OF: Record<ResourceKind, CloudGenus> = {
   'rds-database': 'altostratus',
   'waf-web-acl': 'net',
   'kms-key': 'cirrostratus',
+  'session-manager': 'cirrocumulus',
 }
 
 /** Which band of sky each kind of cloud belongs to. 'vertical' spans every band. */
@@ -62,6 +65,17 @@ export const BAND_OF: Record<ResourceKind, SkyBand> = {
   'rds-database': 'mid',
   'waf-web-acl': 'low',
   'kms-key': 'high',
+  'session-manager': 'high',
+}
+
+/**
+ * The band one particular cloud belongs to. An instance with a public address (a
+ * bastion host) faces the internet, so it sits in a public subnet in the low band;
+ * every other instance is in the mid band.
+ */
+export function bandOf(resource: Resource): SkyBand {
+  if (resource.kind === 'ec2-instance' && resource.publicAddress === true) return 'low'
+  return BAND_OF[resource.kind]
 }
 
 // The fixed geometry of the sky. Altitude means distance from the internet:
@@ -142,7 +156,18 @@ export function layoutScene(scene: Scene): SceneLayout {
       const rect = subnets[subnet.id]
       if (!rect) continue
       members.forEach((resource, index) => {
-        if (kind === 'ec2-instance') {
+        if (kind === 'ec2-instance' && subnet.band === 'low') {
+          // A bastion host: at the outer edge of its public cell, clear of the load
+          // balancer in the middle, and below a NAT Gateway if one shares the cell.
+          const outerX = subnet.availabilityZone === 'a' ? rect.x + 64 : rect.x + rect.width - 64
+          const sharing = resourcesOfKind(scene, 'nat-gateway').some(
+            (nat) => nat.subnetId === subnet.id,
+          )
+          clouds[resource.id] = centred(
+            { x: outerX, y: (sharing ? lowCentreY + 34 : lowCentreY - 8) + index * 70 },
+            kind,
+          )
+        } else if (kind === 'ec2-instance') {
           const offset = (index - (members.length - 1) / 2) * 120
           clouds[resource.id] = centred(
             {
@@ -199,6 +224,16 @@ export function layoutScene(scene: Scene): SceneLayout {
           resourcesOfKind(scene, 'kms-key').indexOf(resource)
         clouds[resource.id] = centred(
           { x: 330 + index * 170 + 40, y: (SKY.high.top + SKY.high.bottom) / 2 },
+          resource.kind,
+        )
+        break
+      }
+      case 'session-manager': {
+        // The control layer above everything: after the roles and keys in the high band.
+        const index =
+          resourcesOfKind(scene, 'iam-role').length + resourcesOfKind(scene, 'kms-key').length
+        clouds[resource.id] = centred(
+          { x: 330 + index * 170 + 60, y: (SKY.high.top + SKY.high.bottom) / 2 },
           resource.kind,
         )
         break

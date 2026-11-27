@@ -9,6 +9,7 @@ export {
   centreOf,
   STAGE,
   BAND_OF,
+  bandOf,
   GENUS_OF,
   spriteIdOf,
   type DropZone,

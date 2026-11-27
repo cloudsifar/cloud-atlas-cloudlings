@@ -10,9 +10,9 @@ Running log. Newest state first; updated at the end of every milestone.
       `docs/SIMPLIFICATIONS.md`
 - [x] **Milestone 2** — Levels 1–3 playable with placeholder art
 - [ ] **Milestone 3** — in progress: Levels 4 (Skyway), 5 (Crowd Day), 6 (Storm Front),
-      7 (The Wrong Kite) and 8 (Under Lock) finished; Levels 9–12 and the rest of the
-      engine to do, planned in `docs/LEVEL_PLANS.md`. See "Handover: what to build next"
-      below
+      7 (The Wrong Kite), 8 (Under Lock) and 9 (No Keys at the Door) finished; Levels
+      10–12 and the rest of the engine to do, planned in `docs/LEVEL_PLANS.md`. See
+      "Handover: what to build next" below
 - [ ] Milestone 4 — shell (partly started: start screen, level select with ticks and stars,
       Guided Run from Level 1 with "Next level", settings)
 - [ ] Milestone 5 — finish
@@ -133,10 +133,10 @@ Running log. Newest state first; updated at the end of every milestone.
 ## Not verified — do these first
 
 1. **Vitest, the Vite build and lint on Windows, on everything since 18 November**
-   (ADRs 0007–0019). In that time the suite has run only on the offline runner
-   (424 tests), and ESLint, Prettier and the project `tsc` were run against the
+   (ADRs 0007–0020). In that time the suite has run only on the offline runner
+   (457 tests), and ESLint, Prettier and the project `tsc` were run against the
    installed packages from the cloud sandbox. On Windows, after `git pull`:
-   `npm ci --ignore-scripts`, then `npm test` (expect 26 test files and **424 passed**),
+   `npm ci --ignore-scripts`, then `npm test` (expect 28 test files and **457 passed**),
    `npm run build` (writes `dist/`, including `dist/sounds/README.md`) and
    `npm run lint`. Read each output, not only the exit code.
 2. **Level 8 played by a person** (ADR 0018): whether the eight steps leave time to
@@ -212,10 +212,10 @@ Running log. Newest state first; updated at the end of every milestone.
 ## Not started (from the brief)
 
 - Engine: instance failure outside an AZ failure, RDS read replicas,
-  DynamoDB, SQS, SNS, Lambda, SSM, Route 53,
+  DynamoDB, SQS, SNS, Lambda, Route 53,
   CloudWatch alarms other than a scaling policy's (e.g. publishing to SNS), EBS, EFS,
   DynamoDB gateway endpoint flows, and the cost penalty for idle oversized instances.
-- Levels 7–12.
+- Levels 10–12.
 - Demo Mode, Field Guide, About screen, phone path, link
   preview tags, regional scenes beyond N. Virginia, costumes.
 - `docs/ASSET_LIST.md`, `CREDITS.md`, font choice ADR (the game currently uses system
@@ -323,19 +323,22 @@ Within São Paulo, each level starts from the previous level's solved state, wit
 inherited parts locked. Keep new narrator steps to about 330 characters, so "Step x of
 y" stays in view.
 
-**Level 9, No Keys at the Door (next).** The agreed plan, with the steps, objectives,
-the operator's changing address, the "In the real world" card for Session Manager and
-the engine work it needs, is in **`docs/LEVEL_PLANS.md`**. Read that first. In short:
+**Level 9, No Keys at the Door: done** (ADR 0020). Fifteen narrator steps:
 
-1. Port 22 is closed, and both the probe and the operator fail.
-2. A bastion host lets the operator in from a /32.
-3. The operator's address changes and they are locked out.
-4. Session Manager through a NAT Gateway, with no port 22 anywhere.
+- a closed door;
+- a bastion host built rule by rule;
+- the operator's address changing;
+- Session Manager through a NAT Gateway, with the stateless edge-acl as the trap;
+- the door closed.
 
-The art manifest already has planned `cloudling.operator.idle` and
-`kite.operator.flying` entries: give them hooks and take them out of `planned`
-(ADR 0016). Levels 10–12 and the open decisions (Tokyo's business first) are in the
-same file.
+`narrationCheckpoints` hold the scenes of the bastion steps, and a store playthrough
+test checks real edits reach them. Still open for it: the fact cards' `atlasPage`
+links (`TODO(Simon)`), and final art for the operator, its box kite and the
+cirrocumulus.
+
+**Level 10, Shared Ground (next).** See **`docs/LEVEL_PLANS.md`** for Levels 10–12 and
+the open decisions. Tokyo's business comes first: it needs shared files (10), an
+event-driven upload pipeline (11) and a shop launch (12).
 
 **Smaller jobs, any time.**
 
@@ -522,6 +525,30 @@ Two places where the brief's wording was made more exact:
   - **Plans for Levels 9–12** are in `docs/LEVEL_PLANS.md`.
   - **Checks.** 422 tests pass offline. Played headlessly: the Level 1–7 texts, and
     Level 8 to three stars, with no console errors.
+- **Session 3, continued: Level 9, No Keys at the Door (ADR 0020, 27 November 2026).**
+  - **Engine** (ENGINE.md section 18):
+    - bastion hosts (an instance with a public address, SSH only);
+    - the operator's shell, by SSH as two connections through the bastion, or by
+      Session Manager: the managed-instance check, then the SSM Agent's HTTPS 443 out
+      through a NAT Gateway and its subnet's network ACL, both ways;
+    - predicates `session-opened`, `security-groups-closed-to`, `no-rule-names` and
+      `all-of`.
+  - **Game:**
+    - the operator Cloudling (hat, box kite);
+    - Cloudlings that move at a narrator step (`moves`, `populationAt`);
+    - the bastion in the low band;
+    - the session's thread from the cirrocumulus;
+    - the operator's /32 in rule dropdowns;
+    - the Session Manager card;
+    - orphaned groups removed with the rule that named them.
+  - **Content:** fact cards `session-manager` and `session-manager-real-world`;
+    SIMPLIFICATIONS 53–60; THREATS row.
+  - **Tests.** Two generic level tests now accept checkpoints and public-address
+    targets (ADR 0020 says why neither is weaker). 457 tests in 28 files pass offline.
+    The level was played headlessly to three stars with no console errors.
+  - **Notes for later.** `docs/LEVEL_PLANS.md` now also holds Simon's Field Guide notes:
+    the ten genera with their places in the sky and the metaphor, and a card deck of
+    every fact card, CloudTrail included.
 - **Session 3, continued: a CloudTrail fact card (27 November 2026).** No level plans
   CloudTrail, and the brief doesn't mention it, but Level 8's auditor asks for "every
   use logged". The new `cloudtrail` card covers:

@@ -289,6 +289,10 @@ export function validateScene(scene: Scene): SceneProblem[] {
           misconfigured(resource.id, `"${resource.name}" has the same kind of rule twice.`)
         break
       }
+      case 'session-manager':
+        if (scene.resources.filter((candidate) => candidate.kind === 'session-manager').length > 1)
+          misconfigured(resource.id, 'Session Manager is one service per Region: place it once.')
+        break
       case 'internet-gateway':
       case 'kms-key':
         break

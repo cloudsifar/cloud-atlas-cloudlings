@@ -39,6 +39,13 @@ export type Flow = {
    * thousands.
    */
   rate?: number
+  /**
+   * The Cloudling wants a shell on the destination instance: the operator (Level 9).
+   * With Session Manager in the sky it starts a session; without, it connects by SSH
+   * on `port`, straight to the instance if it has a public address, otherwise through
+   * the bastion host named by `jumpHostId`.
+   */
+  shell?: { jumpHostId?: string }
 }
 
 export type FlowOutcome = 'delivered' | 'blocked' | 'dropped' | 'breach'

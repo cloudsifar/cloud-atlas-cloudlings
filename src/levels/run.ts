@@ -53,11 +53,41 @@ export function kiteToFlow(kite: Kite, sequence: number): Flow {
     backendCall: kite.backendCall,
     rate: kite.rate,
     sequence,
+    ...(kite.kind === 'operator' ? { shell: kite.via ? { jumpHostId: kite.via } : {} } : {}),
   }
 }
 
-export function runLevel(level: Level, scene: Scene): LevelRun {
-  const kiteRuns = level.population.map((kite, index) => {
+/**
+ * The Cloudlings as they stand when the narrator is at `narrationIndex`: a kite with
+ * `moves` has moved once the narrator has reached that step. Past the last step, every
+ * move has happened.
+ */
+export function populationAt(level: Level, narrationIndex: number): Kite[] {
+  return level.population.map((kite) => {
+    if (!kite.moves) return kite
+    const step = level.narration.findIndex((candidate) => candidate.id === kite.moves?.atStep)
+    if (step < 0 || narrationIndex < step) return kite
+    const { ip, groundPosition, says, label } = kite.moves
+    return {
+      ...kite,
+      ip,
+      ...(groundPosition === undefined ? {} : { groundPosition }),
+      ...(says === undefined ? {} : { says }),
+      ...(label === undefined ? {} : { label }),
+    }
+  })
+}
+
+/**
+ * `narrationIndex` says where the narrator is, which decides where any moving Cloudling
+ * stands (`populationAt`). Leave it out for the level as it ends: every move made.
+ */
+export function runLevel(
+  level: Level,
+  scene: Scene,
+  narrationIndex = level.narration.length,
+): LevelRun {
+  const kiteRuns = populationAt(level, narrationIndex).map((kite, index) => {
     const flow = kiteToFlow(kite, index)
     return { kite, flow, result: evaluateFlow(scene, flow) }
   })

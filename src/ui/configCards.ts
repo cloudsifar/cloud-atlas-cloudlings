@@ -4,6 +4,8 @@
 // with one of the pure edits from the game layer.
 
 import {
+  evaluateIdentityPolicy,
+  findResourceOfKind,
   isPublicSubnet,
   PORT_OPTIONS,
   resourcesOfKind,
@@ -56,7 +58,7 @@ import {
   setTargetRegistered,
   type GameState,
 } from '../game'
-import { REGION_NAMES } from '../levels'
+import { populationAt, REGION_NAMES } from '../levels'
 import { button, dropdown, h, type Option } from './dom'
 
 export type CardSubject = { kind: 'resource'; id: string } | { kind: 'subnet'; id: string }
@@ -93,6 +95,23 @@ const NAMED_RANGES: Option<string>[] = [
   { value: '198.51.100.0/24', label: '198.51.100.0/24' },
   { value: '203.0.113.0/24', label: '203.0.113.0/24' },
 ]
+
+/**
+ * The ranges a rule can name here: the fixed ones, plus the operator's own address as
+ * it stands now (Level 9), so a rule can let in one address and no other.
+ */
+function rangesFor(state: GameState): Option<string>[] {
+  const operators = populationAt(state.level, state.narrationIndex).filter(
+    (kite) => kite.kind === 'operator',
+  )
+  return [
+    ...NAMED_RANGES,
+    ...operators.map((kite) => ({
+      value: `${kite.ip}/32`,
+      label: `The operator's address (${kite.ip}/32)`,
+    })),
+  ]
+}
 
 /** The clouds wearing a security group, by name. */
 function wearersOf(scene: Scene, groupId: string): string[] {
@@ -223,7 +242,7 @@ function securityGroupEditor(
     }))
     const peerOptions: Option<string>[] = [
       { value: 'anywhere', label: 'Anywhere (0.0.0.0/0)' },
-      ...NAMED_RANGES.map((range) => ({ value: `cidr:${range.value}`, label: range.label })),
+      ...rangesFor(state).map((range) => ({ value: `cidr:${range.value}`, label: range.label })),
       ...state.scene.securityGroups
         .filter((other) => other.id !== group.id)
         .map((other) => ({
@@ -526,7 +545,10 @@ function networkAclSection(
           direction === 'inbound' ? 'Source' : 'Destination',
           [
             { value: 'anywhere', label: 'Anywhere (0.0.0.0/0)' },
-            ...NAMED_RANGES.map((range) => ({ value: `cidr:${range.value}`, label: range.label })),
+            ...rangesFor(state).map((range) => ({
+              value: `cidr:${range.value}`,
+              label: range.label,
+            })),
           ],
           pick(key('peer'), 'anywhere'),
           (value) => (draft[key('peer')] = value),
@@ -590,6 +612,7 @@ const KIND_SUBTITLE: Record<Resource['kind'], string> = {
   'rds-database': 'A managed relational database',
   'waf-web-acl': 'A web application firewall: it reads each request',
   'kms-key': 'A customer managed encryption key',
+  'session-manager': 'Shell access with no open port, through Systems Manager',
 }
 
 /**
@@ -794,7 +817,9 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
       body.append(
         h('p', {
           class: 'note',
-          textContent: `In ${subnetName(resource.subnetId)} · size ${resource.size} · private address only`,
+          textContent: resource.publicAddress
+            ? `In ${subnetName(resource.subnetId)} · size ${resource.size} · a public address, reachable from the internet wherever its rules allow`
+            : `In ${subnetName(resource.subnetId)} · size ${resource.size} · private address only`,
         }),
         roleField,
       )
@@ -949,6 +974,58 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
           class: 'note',
           textContent: `With a policy, CloudWatch alarms watch the fleet’s CPU. When it rises above the target, the group launches enough instances to bring it back down; they take ${LAUNCH_TICKS} minutes to start serving. When it stays below the target, the group removes instances, at most half the fleet at a time.`,
         }),
+      )
+      break
+    }
+    case 'session-manager': {
+      // Which instances it can reach: managed ones, whose role lets the agent register.
+      const managed = resourcesOfKind(scene, 'ec2-instance').filter((instance) => {
+        const role = instance.roleId
+          ? findResourceOfKind(scene, 'iam-role', instance.roleId)
+          : undefined
+        return (
+          role !== undefined &&
+          evaluateIdentityPolicy(role, 'ssm:ManagedInstance', resource.id).verdict === 'allow'
+        )
+      })
+      body.append(
+        h('p', {
+          class: 'note',
+          textContent: `In ${REGION_NAMES[level.region]} (${level.region}) · no charge for EC2 instances`,
+        }),
+        h('h5', { textContent: 'How a session works' }),
+        h('p', {
+          class: 'note',
+          textContent:
+            'The operator asks Systems Manager for a session, signed with their own IAM identity. The SSM Agent on the instance keeps its own connection out to Systems Manager on HTTPS 443, and the session runs over it: no inbound port, no public address, no SSH key.',
+        }),
+        h('h5', { textContent: 'Managed instances' }),
+        h('p', {
+          class: 'note',
+          textContent:
+            managed.length > 0
+              ? `${listNames(managed.map((instance) => instance.name))}: their role allows ssm:ManagedInstance. Each still needs a way out to the internet on HTTPS 443.`
+              : 'None yet. An instance is managed once its role allows ssm:ManagedInstance on Session Manager, and its agent can reach Systems Manager on HTTPS 443.',
+        }),
+        h(
+          'p',
+          { class: 'note' },
+          'Each session start is recorded in ',
+          button(
+            'CloudTrail',
+            () => actions.openFactCard('cloudtrail'),
+            'ssm-cloudtrail',
+            'inline-link',
+          ),
+          '. What it takes in a real account: ',
+          button(
+            'Session Manager in the real world',
+            () => actions.openFactCard('session-manager-real-world'),
+            'ssm-real-world',
+            'inline-link',
+          ),
+          '.',
+        ),
       )
       break
     }
@@ -1213,13 +1290,16 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
     case 'iam-role': {
       const buckets = resourcesOfKind(scene, 's3-bucket')
       const keys = resourcesOfKind(scene, 'kms-key')
+      const sessionManagers = resourcesOfKind(scene, 'session-manager')
       const actionOptions: Option<ServiceAction>[] = [
         ...(['s3:Read', 's3:Write', 's3:Delete'] as const),
         ...(keys.length > 0 ? (['kms:Use'] as const) : []),
+        ...(sessionManagers.length > 0 ? (['ssm:ManagedInstance'] as const) : []),
       ].map((action) => ({ value: action, label: action }))
       const resourceOptions: Option<string>[] = [
         ...buckets.map((bucket) => ({ value: bucket.id, label: `${bucket.name} (bucket)` })),
         ...keys.map((key) => ({ value: key.id, label: `${key.name} (KMS key)` })),
+        ...sessionManagers.map((service) => ({ value: service.id, label: service.name })),
         { value: '*', label: '* (every resource)' },
       ]
       const nameOf = (id: string) =>

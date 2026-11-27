@@ -427,7 +427,55 @@ only the S3 access decision applies.
   read note in `s3.ts`; `atRestNote` in `flow.ts`; the key checks in `validate.ts`.
 - **Tests.** `tests/engine/kms.test.ts`, `tests/game/underLock.test.ts`.
 
+## 18. Shell access: bastion hosts and Session Manager: `flow.ts`
+
+- **Modelled.**
+  - **Public addresses.** An `ec2-instance` with `publicAddress: true` (a bastion host)
+    is reachable from the internet: route (its subnet must be public), the subnet's
+    network ACL, then its security group. It runs only SSH 22. A hostile kite that
+    reaches it is a breach. Every other instance still has a private address only.
+  - **The operator** is a flow with `shell` (the kite kind `operator`). Without Session
+    Manager it connects by SSH: straight to an instance with a public address, or
+    through the bastion host named by `shell.jumpHostId`, as two connections. The hop
+    leaves through the bastion's security group (outbound) and its subnet's network ACL
+    (outbound, port 22), enters the instance's subnet (network ACL inbound) and its
+    security group, which must allow the bastion (by its group, ideally). Replies cross
+    every network ACL again.
+  - **Session Manager** (`session-manager`, one per scene). With it in the sky the
+    operator starts a session instead:
+    1. the request reaches Session Manager (HTTPS, the operator's own identity);
+    2. the instance must be managed: its role must allow `ssm:ManagedInstance` on
+       Session Manager (an explicit deny wins);
+    3. the SSM Agent's own connection: HTTPS 443 out through the instance's security
+       group and subnet network ACL, then by the subnet's route to the internet. From a
+       private subnet that is a NAT Gateway in a public subnet, whose network ACL it
+       crosses in and out; a gateway endpoint does not carry it;
+    4. the replies, on an ephemeral port, back through both network ACLs.
+
+    No inbound rule is involved anywhere. The trace shows the operator's request first
+    and the agent's connection second, the order a player can follow; in AWS the agent
+    connects first (SIMPLIFICATIONS row 59).
+
+  - **Predicates.** `session-opened`, `security-groups-closed-to`, `no-rule-names`,
+    and the general `all-of`.
+  - **Scoring.** A security group worn by an instance with a public address faces the
+    internet, like the load balancer's: an address range there is not a finding. The
+    managed-instance check records the role statement, so an unused
+    `ssm:ManagedInstance` is a finding.
+  - **Cost.** Session Manager is free; a bastion host costs what any instance does.
+- **AWS references.**
+  [Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html),
+  [its prerequisites: agent, instance profile, HTTPS 443 to ssm, ssmmessages and ec2messages](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-prerequisites.html),
+  [no public IP address needed](https://docs.aws.amazon.com/prescriptive-guidance/latest/patterns/connect-to-an-amazon-ec2-instance-by-using-session-manager.html),
+  [logging session activity with CloudTrail](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-auditing.html),
+  [NAT gateways](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html),
+  [network ACL rules are stateless](https://docs.aws.amazon.com/vpc/latest/userguide/nacl-rules.html),
+  [Linux bastion hosts on AWS](https://aws.amazon.com/solutions/implementations/linux-bastion/).
+- **Code.** Journeys 5 to 7 in `src/engine/flow.ts`: `evaluateInternetToPublicInstance`,
+  `evaluateShell`, `evaluateSshThroughBastion`, `evaluateSession`, `agentChannelChecks`.
+- **Tests.** `tests/engine/session-manager.test.ts`, `tests/game/noKeys.test.ts`.
+
 ## Not built yet
 
-DynamoDB, SQS, SNS, Lambda, SSM, Route 53, and CloudWatch alarms other than a
+DynamoDB, SQS, SNS, Lambda, Route 53, EFS and EBS, and CloudWatch alarms other than a
 scaling policy's. See `PROGRESS.md`.

@@ -46,18 +46,28 @@ export type Store = {
 }
 
 /** A quiet run of a scene nobody has flown yet, kept per scene (scenes are never edited in place). */
-const rehearsals = new WeakMap<Scene, LevelRun>()
+const rehearsals = new WeakMap<Scene, Map<number, LevelRun>>()
 
 /**
  * What flying this scene would show, without flying it: the same pure, deterministic
- * run, worked out once per scene. The Fly button's pointer and the attacker's string
- * snapping when a breach is fixed both ask it.
+ * run, worked out once per scene and narrator step (a Cloudling may have moved: Level 9).
+ * The Fly button's pointer and the attacker's string snapping when a breach is fixed
+ * both ask it.
  */
-export function rehearse(level: Level, scene: Scene): LevelRun {
-  let rehearsal = rehearsals.get(scene)
+export function rehearse(
+  level: Level,
+  scene: Scene,
+  narrationIndex = level.narration.length,
+): LevelRun {
+  let byStep = rehearsals.get(scene)
+  if (!byStep) {
+    byStep = new Map()
+    rehearsals.set(scene, byStep)
+  }
+  let rehearsal = byStep.get(narrationIndex)
   if (!rehearsal) {
-    rehearsal = runLevel(level, scene)
-    rehearsals.set(scene, rehearsal)
+    rehearsal = runLevel(level, scene, narrationIndex)
+    byStep.set(narrationIndex, rehearsal)
   }
   return rehearsal
 }
@@ -73,7 +83,7 @@ export function readyToFly(state: GameState): boolean {
   if (state.phase === 'flying' || state.lastRunIsCurrent) return false
   const trigger = state.level.narration[state.narrationIndex]?.advanceWhen
   if (trigger?.kind !== 'run-finished' || trigger.predicate === undefined) return false
-  const rehearsal = rehearse(state.level, state.scene)
+  const rehearsal = rehearse(state.level, state.scene, state.narrationIndex)
   return evaluatePredicate(
     state.scene,
     rehearsal.kiteRuns,
@@ -138,11 +148,17 @@ export function createStore(level: Level): Store {
   }
 
   function nextNarrationStep(): void {
+    const narrationIndex = state.narrationIndex + 1
+    // A Cloudling that moves at this step (Level 9's operator) makes the last flight out
+    // of date: it was flown from where the Cloudling used to stand.
+    const stepId = level.narration[narrationIndex]?.id
+    const someoneMoves = level.population.some((kite) => kite.moves?.atStep === stepId)
     state = {
       ...state,
-      narrationIndex: state.narrationIndex + 1,
+      narrationIndex,
       narrationRunBaseline: state.runCount,
       openedCards: [],
+      lastRunIsCurrent: someoneMoves ? false : state.lastRunIsCurrent,
     }
   }
 
@@ -238,7 +254,7 @@ export function createStore(level: Level): Store {
     },
 
     startRun() {
-      const run = runLevel(level, state.scene)
+      const run = runLevel(level, state.scene, state.narrationIndex)
       commit({ ...state, phase: 'flying', lastRun: run, lastRunIsCurrent: true })
       return run
     },

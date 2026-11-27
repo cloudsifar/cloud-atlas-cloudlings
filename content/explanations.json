@@ -13,7 +13,7 @@
   },
   "ec2-instance": {
     "label": "EC2 instance",
-    "placement": "Instances live in the mid band, in private subnets, where kite strings cannot reach them directly."
+    "placement": "Instances live in the mid band, in private subnets, where kite strings cannot reach them directly. A bastion host is the exception: it has a public address, so it goes in a public subnet in the low band."
   },
   "s3-bucket": {
     "label": "S3 bucket",
@@ -34,5 +34,9 @@
   "kms-key": {
     "label": "KMS key",
     "placement": "A KMS key lives in the high band with the other managed services, outside the VPC. On its own it protects nothing: choose it in a bucket's default encryption, or for a database's encrypted copy."
+  },
+  "session-manager": {
+    "label": "Session Manager",
+    "placement": "Session Manager lives in the high band with the other managed services, outside the VPC. It reaches managed instances over a connection their own SSM Agent opens, so nothing has to open an inbound port."
   }
 }

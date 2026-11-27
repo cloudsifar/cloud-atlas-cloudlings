@@ -41,6 +41,7 @@ No code changes. If a picture fails to load, its placeholder is drawn instead.
 | `cloud.cirrus.iam-role` | 130 × 50 | 0.5, 0.5 | 1 | base + highlight layers | IAM role: wispy cirrus in the high band; a thread runs down from it to the clouds that wear it. | placeholder |
 | `cloud.altostratus.rds-database` | 124 × 34 | 0.5, 0.5 | 1 | base + highlight layers | RDS database: a flat, layered altostratus in a private subnet. A Multi-AZ standby is the same graphic, drawn faint in the other zone. | placeholder |
 | `cloud.cirrostratus.kms-key` | 120 × 40 | 0.5, 0.5 | 1 | base + highlight layers | KMS key (customer managed): a thin cirrostratus veil in the high band, with a faint halo in the key's colour. Every cloud encrypted with this key wears the same halo. | placeholder |
+| `cloud.cirrocumulus.session-manager` | 120 × 44 | 0.5, 0.5 | 1 | base + highlight layers | Session Manager (AWS Systems Manager): a high rippled cirrocumulus, the "mackerel sky", in the high band: the control layer above everything (Level 9). An operator's session comes down from it to the instance. | placeholder |
 | `construct.waf-net` | 300 × 30 | 0.5, 0.5 | 1 | base + highlight layers. Idle and changed (golden sunlight), tinted in code like a cloud. | AWS WAF web ACL: a woven net slung just beneath the load balancer. Red kites it blocks are caught in it, then fall. | placeholder |
 
 ### Cloudlings
@@ -53,6 +54,9 @@ No code changes. If a picture fails to load, its placeholder is drawn instead.
 | `cloudling.hostile.idle` | 34 × 58 | 0.5, 1 | 1 | hand at 0.85, 0.52 | A hostile Cloudling, in a black hoodie, hood up, only eyes visible, holding the string. | placeholder |
 | `cloudling.hostile.stamp` | 34 × 58 | 0.5, 1 | 4 at 10 fps | hand at 0.85, 0.52 | A hostile Cloudling, stamping and huffing: its kite was stopped. | placeholder |
 | `cloudling.hostile.snicker` | 34 × 58 | 0.5, 1 | 4 at 10 fps | hand at 0.85, 0.52 | A hostile Cloudling, snickering: its kite got in (a breach). | placeholder |
+| `cloudling.operator.idle` | 34 × 58 | 0.5, 1 | 1 | hand at 0.85, 0.52 | The operator Cloudling (Level 9): the shop's administrator, in a distinct broad-brimmed hat that never changes with the region, holding the string of a box kite. | placeholder |
+| `cloudling.operator.cheer` | 34 × 58 | 0.5, 1 | 4 at 8 fps | hand at 0.85, 0.52 | The operator Cloudling, jumping and cheering: its shell opened. The hat stays on. | placeholder |
+| `cloudling.operator.droop` | 34 × 58 | 0.5, 1 | 1 | hand at 0.85, 0.52 | The operator Cloudling, drooping: it could not get in. The hat stays on. | placeholder |
 
 ### Kites
 
@@ -66,6 +70,10 @@ No code changes. If a picture fails to load, its placeholder is drawn instead.
 | `kite.hostile.tangled` | 44 × 26 | 0.5, 0.5 | 3 at 8 fps |  | A red kite shaped like a bird, tangled in a network ACL's ribbon. | placeholder |
 | `kite.hostile.netted` | 44 × 26 | 0.5, 0.5 | 3 at 8 fps |  | A red kite shaped like a bird, caught in WAF's net beneath the load balancer. | placeholder |
 | `kite.hostile.crumpled` | 44 × 26 | 0.5, 0.5 | 1 |  | A red kite shaped like a bird, crumpled, falling to the ground. | placeholder |
+| `kite.operator.flying` | 30 × 36 | 0.5, 0.5 | 1 |  | The operator's box kite (Level 9): two square cells on long spars, flown to reach an instance by SSH or through Session Manager. | placeholder |
+| `kite.operator.tangled` | 30 × 36 | 0.5, 0.5 | 3 at 8 fps |  | The operator's box kite, tangled in a network ACL's ribbon. | placeholder |
+| `kite.operator.netted` | 30 × 36 | 0.5, 0.5 | 3 at 8 fps |  | The operator's box kite, caught in a net (not met in Level 9, kept so every kite has every state). | placeholder |
+| `kite.operator.crumpled` | 30 × 36 | 0.5, 0.5 | 1 |  | The operator's box kite, crumpled, falling to the ground. | placeholder |
 
 ## Priority 2: the full scene
 
@@ -143,8 +151,6 @@ hooked up, with its entry checked by the tests, when the feature that shows it i
 
 | Id | Size (px) | Description |
 | --- | --- | --- |
-| `cloudling.operator.idle` | 34 × 58 | The operator Cloudling (Level 9): a distinct hat, holding a box-shaped kite. |
-| `kite.operator.flying` | 30 × 30 | The operator's box-shaped kite (Level 9). |
 | `kite.hostile.stolen` | 44 × 40 | A hostile kite carrying stolen raindrops down its string after a breach. |
 | `construct.efs-mist` | 300 × 60 | EFS: a shared mist between instances in both zones (Level 10). |
 | `construct.ebs-wisp` | 40 × 30 | EBS: a small wisp tied beneath one instance (Level 10). |

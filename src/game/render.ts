@@ -26,7 +26,7 @@ import { drawArt, drawArtAt, drawArtBetween, regionArtId } from './art'
 import { canStartConnection } from './edits'
 import { CHECK_LABELS } from './labels'
 import {
-  BAND_OF,
+  bandOf,
   centreOf,
   cidrLabelRect,
   cloudlingPosition,
@@ -201,6 +201,8 @@ export const SPEECH_DURATION = 4200
 
 export type SkyViewModel = {
   level: Level
+  /** The Cloudlings as they stand at the narrator's step (a moving one may have moved). */
+  population: Kite[]
   scene: Scene
   layout: SceneLayout
   /** Animation clock, in milliseconds. */
@@ -649,7 +651,7 @@ const OUTLINE_STYLES: { colour: string; dash: number[] }[] = [
 function tintFor(resource: Resource, compromised: boolean): string[] {
   if (compromised) return [RED_TINT]
   if (resource.kind === 'ec2-instance' && !resource.healthy) return [GREY_TINT]
-  const band = BAND_OF[resource.kind]
+  const band = bandOf(resource)
   // The S3 cloud shades through all three blues, top to bottom.
   return band === 'vertical' ? [BAND_TINT.high, BAND_TINT.mid, BAND_TINT.low] : [BAND_TINT[band]]
 }
@@ -1564,7 +1566,40 @@ function drawStandingBreach(
   // The kite tumbles out of the cloud to the ground beside its Cloudling.
   const landing = { x: feet.x + 46, y: feet.y - 14 }
   const kiteAt = lerp(breach.at, landing, progress * progress)
-  drawKite(context, kiteAt.x, kiteAt.y, hostile, 'crumpled', model.time, 0.9)
+  drawKite(
+    context,
+    kiteAt.x,
+    kiteAt.y,
+    hostile ? 'hostile' : 'friendly',
+    'crumpled',
+    model.time,
+    0.9,
+  )
+}
+
+/** Where a session's kite hangs from: Session Manager's cloud, if this is a session. */
+function sessionAnchor(scene: Scene, script: KiteScript): Point | undefined {
+  const first = script.beats[0]
+  if (first?.step.at.kind !== 'resource') return undefined
+  const id = first.step.at.id
+  return scene.resources.some(
+    (resource) => resource.id === id && resource.kind === 'session-manager',
+  )
+    ? first.position
+    : undefined
+}
+
+/** The session's thread from Session Manager down to the instance: fine and dashed. */
+function drawSessionThread(context: CanvasRenderingContext2D, from: Point, to: Point): void {
+  context.save()
+  context.strokeStyle = 'rgba(46, 90, 150, 0.85)'
+  context.lineWidth = 1.4
+  context.setLineDash([5, 4])
+  context.beginPath()
+  context.moveTo(from.x, from.y)
+  context.lineTo(to.x, to.y)
+  context.stroke()
+  context.restore()
 }
 
 function drawKiteAndCloudling(
@@ -1576,22 +1611,15 @@ function drawKiteAndCloudling(
   labelled: Set<string>,
 ): void {
   const hostile = kite.kind === 'hostile'
+  const side = kite.kind
   // A flood is a flock of kites from one Cloudling (brief, Section 6): one on the string,
   // the rest flying with it, so a flood looks like many requests, not one.
   const flock = (kite.rate ?? 0) > FLOOD_RATE
   const kites = (x: number, y: number, state: KiteState, time: number, scale = 1) => {
-    drawKite(context, x, y, hostile, state, time, scale)
+    drawKite(context, x, y, side, state, time, scale)
     if (!flock) return
     for (const [dx, dy] of FLOCK)
-      drawKite(
-        context,
-        x + dx * scale,
-        y + dy * scale,
-        hostile,
-        state,
-        time + dx * 37,
-        scale * 0.75,
-      )
+      drawKite(context, x + dx * scale, y + dy * scale, side, state, time + dx * 37, scale * 0.75)
   }
   const frame: KiteFrame | undefined = script ? frameAt(script, model.runTime) : undefined
   const finished = frame?.phase === 'ending' || frame?.phase === 'done'
@@ -1612,7 +1640,7 @@ function drawKiteAndCloudling(
     context,
     feet.x,
     feet.y,
-    hostile,
+    side,
     model.reducedMotion && mood === 'cheer' ? 'idle' : mood,
     costume,
     model.time,
@@ -1668,7 +1696,16 @@ function drawKiteAndCloudling(
   })
 
   if (frame.phase === 'flying') {
-    drawString(context, hand, frame.kitePosition, 0, model.time)
+    // A session comes down from Session Manager (brief, Section 11): once the operator's
+    // kite has reached it, the string runs up to the cirrocumulus and a fine thread runs
+    // from there down to the kite. Nothing from the ground reaches the instance itself.
+    const session = sessionAnchor(model.scene, script)
+    if (session && frame.reached >= 0) {
+      drawString(context, hand, session, 0, model.time)
+      drawSessionThread(context, session, frame.kitePosition)
+    } else {
+      drawString(context, hand, frame.kitePosition, 0, model.time)
+    }
     if (frame.carrier === 'kite') kites(frame.position.x, frame.position.y, 'flying', model.time)
     else drawRain(context, frame.position, model.time)
     return
@@ -1850,7 +1887,7 @@ function drawCrowd(context: CanvasRenderingContext2D, model: SkyViewModel, costu
       context,
       view.feet.x,
       view.feet.y,
-      false,
+      'friendly',
       mood,
       costume,
       model.time,
@@ -1874,7 +1911,7 @@ function drawCrowd(context: CanvasRenderingContext2D, model: SkyViewModel, costu
   for (const { view, at } of placed) {
     context.save()
     context.globalAlpha = view.opacity
-    drawKite(context, at.x, at.y, false, 'flying', model.reducedMotion ? 0 : model.time, 0.6)
+    drawKite(context, at.x, at.y, 'friendly', 'flying', model.reducedMotion ? 0 : model.time, 0.6)
     context.restore()
   }
 }
@@ -2184,13 +2221,13 @@ function drawSpeech(
 ): void {
   const speech = model.speech
   if (!speech) return
-  const index = model.level.population.findIndex((kite) => kite.id === speech.kiteId)
-  const kite = model.level.population[index]
+  const index = model.population.findIndex((kite) => kite.id === speech.kiteId)
+  const kite = model.population[index]
   if (!kite) return
   // In a crowd level the regulars stand in the crowd once it has gathered.
   const feet =
     crowdFrame && model.level.crowd
-      ? (crowdSpots(model.level.population)[index] ?? cloudlingPosition(kite.groundPosition))
+      ? (crowdSpots(model.population)[index] ?? cloudlingPosition(kite.groundPosition))
       : cloudlingPosition(kite.groundPosition)
   const hostile = kite.kind === 'hostile'
 
@@ -2304,7 +2341,7 @@ export function drawSky(context: CanvasRenderingContext2D, model: SkyViewModel):
     drawCrowd(context, model, theme.costume)
   } else {
     const labelled = new Set<string>()
-    for (const kite of model.level.population) {
+    for (const kite of model.population) {
       drawKiteAndCloudling(
         context,
         model,

@@ -33,37 +33,47 @@ describe('shipped levels', () => {
       it('has narrator steps the reference solution can complete', () => {
         // Every "scene" trigger must be true in the finished scene, or the narrator would stick.
         const run = runLevel(level, level.referenceSolution)
-        for (const step of level.narration) {
+        level.narration.forEach((step, index) => {
           // A flight that must show something ("add this rule and fly") must show it in
-          // the reference solution too.
+          // the reference solution too, or, for a step whose flight shows something the
+          // finished level no longer has (Level 9's bastion host), in the scene the level
+          // names for that step, flown with the Cloudlings where they stand at that step.
           const predicate =
             step.advanceWhen.kind === 'scene' || step.advanceWhen.kind === 'run-finished'
               ? step.advanceWhen.predicate
               : undefined
-          if (!predicate) continue
-          const [result] = [predicate].map(
-            (predicate) =>
-              runLevel(
-                { ...level, objectives: [{ id: step.id, text: step.id, predicate }] },
-                level.referenceSolution,
-              ).objectives[0],
-          )
+          if (!predicate) return
+          const checkpoint =
+            step.advanceWhen.kind === 'run-finished'
+              ? level.narrationCheckpoints?.[step.id]
+              : undefined
+          const result = runLevel(
+            { ...level, objectives: [{ id: step.id, text: step.id, predicate }] },
+            checkpoint ?? level.referenceSolution,
+            checkpoint ? index : undefined,
+          ).objectives[0]
           expect(result?.met, `narration step "${step.id}"`).toBe(true)
-        }
+        })
         expect(run.kiteRuns.length).toBe(level.population.length)
       })
 
       it('aims every red kite at something the internet can actually reach', () => {
         // An attacker on the internet can only address a public endpoint: an
-        // internet-facing load balancer, or S3. An EC2 instance in a private subnet has
-        // no route from an internet gateway and only a private address, so a red kite
-        // never aims at one (docs/THREATS.md).
+        // internet-facing load balancer, S3, or an instance with a public address (Level
+        // 9's bastion host, which the player builds from the tray). An EC2 instance in a
+        // private subnet has no route from an internet gateway and only a private
+        // address, so a red kite never aims at one (docs/THREATS.md).
         // https://docs.aws.amazon.com/vpc/latest/userguide/configure-subnets.html
         for (const kite of level.population.filter((candidate) => candidate.kind === 'hostile')) {
-          const target = level.referenceSolution.resources.find(
-            (resource) => resource.id === kite.destinationId,
-          )
-          expect(['load-balancer', 's3-bucket'], `red kite "${kite.id}"`).toContain(target?.kind)
+          const target = [
+            ...level.referenceSolution.resources,
+            ...level.palette.map((entry) => entry.resource),
+          ].find((resource) => resource.id === kite.destinationId)
+          const reachable =
+            target?.kind === 'load-balancer' ||
+            target?.kind === 's3-bucket' ||
+            (target?.kind === 'ec2-instance' && target.publicAddress === true)
+          expect(reachable, `red kite "${kite.id}" aims at ${target?.kind}`).toBe(true)
         }
       })
 

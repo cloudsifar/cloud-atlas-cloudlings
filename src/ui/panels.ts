@@ -15,7 +15,7 @@ import {
   type TraceStep,
 } from '../engine'
 import {
-  BAND_OF,
+  bandOf,
   CHECK_LABELS,
   crowdLog,
   drawCloud,
@@ -91,7 +91,7 @@ export function renderPalette(
     parts.push(h('p', { class: 'note', textContent: 'Every cloud is in the sky.' }))
   }
   for (const band of ['low', 'mid', 'high', 'vertical'] as const) {
-    const entries = available.filter((entry) => BAND_OF[entry.resource.kind] === band)
+    const entries = available.filter((entry) => bandOf(entry.resource) === band)
     if (entries.length === 0) continue
     parts.push(h('h3', { textContent: BAND_HEADINGS[band] }))
     for (const entry of entries) {
@@ -111,7 +111,11 @@ export function renderPalette(
         familyIcon(entry.resource.kind),
         h('span', {
           class: 'specimen-name',
-          textContent: EXPLANATIONS[entry.resource.kind]?.label ?? entry.resource.name,
+          // A bastion host is an EC2 instance, but the tray names it for what it is for.
+          textContent:
+            entry.resource.kind === 'ec2-instance' && entry.resource.publicAddress
+              ? entry.resource.name
+              : (EXPLANATIONS[entry.resource.kind]?.label ?? entry.resource.name),
         }),
       )
       card.onpointerdown = (event) => onDragStart(entry, event)
@@ -622,6 +626,13 @@ const LEG_HEADINGS: Record<TraceStep['leg'], string> = {
   response: 'The response',
 }
 
+/** The operator's session runs over the SSM Agent's own connection (Level 9). */
+const SESSION_LEG_HEADINGS: Record<TraceStep['leg'], string> = {
+  ...LEG_HEADINGS,
+  'backend-request': "The SSM Agent's own connection, out to Systems Manager",
+  'backend-response': 'Systems Manager replies, and the session opens',
+}
+
 function describeRef(scene: Scene, ref: ResourceRef): string {
   switch (ref.kind) {
     case 'ground':
@@ -653,10 +664,11 @@ export function renderTraceInspector(
       : result.outcome === 'delivered'
 
   const body = h('ol', { class: 'trace' })
+  const headings = kite.kind === 'operator' ? SESSION_LEG_HEADINGS : LEG_HEADINGS
   let previousLeg: TraceStep['leg'] | null = null
   steps.forEach((step, index) => {
     if (step.leg !== previousLeg) {
-      body.append(h('li', { class: 'leg-heading', textContent: LEG_HEADINGS[step.leg] }))
+      body.append(h('li', { class: 'leg-heading', textContent: headings[step.leg] }))
       previousLeg = step.leg
     }
     const passed = step.result === 'pass'
@@ -690,7 +702,7 @@ export function renderTraceInspector(
         'div',
         null,
         h('h3', {
-          textContent: `${kite.kind === 'hostile' ? 'Red kite' : 'Green kite'}: ${kite.label}`,
+          textContent: `${kite.kind === 'hostile' ? 'Red kite' : kite.kind === 'operator' ? 'Box kite' : 'Green kite'}: ${kite.label}`,
         }),
         h('p', {
           class: 'subtitle',
@@ -714,11 +726,15 @@ export function renderTraceInspector(
         ? good
           ? 'The attacker was stopped: that is what you want.'
           : 'The attacker got through.'
-        : good
-          ? 'The visitor was served.'
-          : result.outcome === 'dropped'
-            ? 'The visitor got no answer: something needs fixing.'
-            : 'A visitor was turned away: something needs fixing.',
+        : kite.kind === 'operator'
+          ? good
+            ? 'The operator has a shell.'
+            : 'The operator could not get in: something needs fixing.'
+          : good
+            ? 'The visitor was served.'
+            : result.outcome === 'dropped'
+              ? 'The visitor got no answer: something needs fixing.'
+              : 'A visitor was turned away: something needs fixing.',
     ),
     body,
   )

@@ -4,7 +4,7 @@
 // the DOM panels around it.
 
 import { resourcesOfKind, type Resource, type ResourceKind, type Scene } from '../engine'
-import type { PaletteEntry } from '../levels'
+import { populationAt, type PaletteEntry } from '../levels'
 import { canStartConnection, connect, moveToSubnet, validSubnetsFor } from './edits'
 import {
   cidrLabelRect,
@@ -242,7 +242,7 @@ export function createSkyView(
       standing.length > 0
     ) {
       standingScene = state.scene
-      const rehearsal = rehearse(state.level, state.scene)
+      const rehearsal = rehearse(state.level, state.scene, state.narrationIndex)
       for (const breach of standing) {
         if (breach.snappedAt !== null) continue
         const now = rehearsal.kiteRuns.find((kiteRun) => kiteRun.kite.id === breach.kiteId)
@@ -263,6 +263,7 @@ export function createSkyView(
 
     drawSky(context!, {
       level: state.level,
+      population: populationAt(state.level, state.narrationIndex),
       scene: state.scene,
       layout,
       time: timestamp,
@@ -289,7 +290,8 @@ export function createSkyView(
   // --- pointer input ---------------------------------------------------------
 
   function kiteAt(point: Point): string | undefined {
-    return store.getState().level.population.find((kite) => {
+    const state = store.getState()
+    return populationAt(state.level, state.narrationIndex).find((kite) => {
       const feet = cloudlingPosition(kite.groundPosition)
       return Math.abs(point.x - feet.x) <= 20 && point.y >= feet.y - 66 && point.y <= feet.y + 22
     })?.id
@@ -371,7 +373,7 @@ export function createSkyView(
         resource !== undefined &&
         state.phase !== 'flying' &&
         !state.level.lockedIds.includes(resource.id) &&
-        validSubnetsFor(state.scene, resource.kind).length > 0
+        validSubnetsFor(state.scene, resource).length > 0
       if (resource && movable) {
         const layout = layoutScene(state.scene)
         dragAction = { kind: 'move', resourceId: resource.id }
@@ -379,7 +381,7 @@ export function createSkyView(
           kind: 'place',
           resourceKind: resource.kind,
           point,
-          zones: dropZones(layout, resource.kind, validSubnetsFor(state.scene, resource.kind)),
+          zones: dropZones(layout, resource.kind, validSubnetsFor(state.scene, resource)),
         }
         press = null
       }
@@ -406,7 +408,10 @@ export function createSkyView(
       if (!overSky) return // let go over the tray: nothing placed
       const kind = action.entry.resource.kind
       // Only a drop over a lit zone places the cloud (ADR 0007). Anywhere else, it goes back.
-      const zone = zoneAt(dropZones(layout, kind, validSubnetsFor(state.scene, kind)), point)
+      const zone = zoneAt(
+        dropZones(layout, kind, validSubnetsFor(state.scene, action.entry.resource)),
+        point,
+      )
       if (zone) callbacks.onPlaced(action.entry, zone.subnetId)
       else callbacks.onDropRejected(kind)
       return
@@ -414,7 +419,7 @@ export function createSkyView(
     const resource = state.scene.resources.find((candidate) => candidate.id === action.resourceId)
     if (!resource) return
     const zone = zoneAt(
-      dropZones(layout, resource.kind, validSubnetsFor(state.scene, resource.kind)),
+      dropZones(layout, resource.kind, validSubnetsFor(state.scene, resource)),
       point,
     )
     if (!zone) {
@@ -493,7 +498,11 @@ export function createSkyView(
         kind: 'place',
         resourceKind: kind,
         point: toStage(event),
-        zones: dropZones(layoutScene(state.scene), kind, validSubnetsFor(state.scene, kind)),
+        zones: dropZones(
+          layoutScene(state.scene),
+          kind,
+          validSubnetsFor(state.scene, entry.resource),
+        ),
       }
     },
     setHighlights(next) {

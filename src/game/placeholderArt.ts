@@ -17,6 +17,7 @@ import {
   kiteArtId,
   regionArtId,
   type ArtId,
+  type CloudlingSide,
 } from './art'
 import type { CloudGenus } from './layout'
 
@@ -108,6 +109,26 @@ export const SILHOUETTES: Record<Exclude<SpriteShape, 'cirrus' | 'net'>, Ellipse
       [0.28, 0.48, 0.24, 0.3],
       [0.72, 0.5, 0.25, 0.28],
     ],
+  ],
+  // High rippled "mackerel sky": rows of small, regular puffs, the control layer
+  // above everything (Session Manager).
+  cirrocumulus: [
+    [[0.1, 0.24, 0.07, 0.11]],
+    [[0.26, 0.24, 0.07, 0.11]],
+    [[0.42, 0.24, 0.07, 0.11]],
+    [[0.58, 0.24, 0.07, 0.11]],
+    [[0.74, 0.24, 0.07, 0.11]],
+    [[0.9, 0.24, 0.07, 0.11]],
+    [[0.18, 0.52, 0.07, 0.11]],
+    [[0.34, 0.52, 0.07, 0.11]],
+    [[0.5, 0.52, 0.07, 0.11]],
+    [[0.66, 0.52, 0.07, 0.11]],
+    [[0.82, 0.52, 0.07, 0.11]],
+    [[0.1, 0.8, 0.07, 0.11]],
+    [[0.26, 0.8, 0.07, 0.11]],
+    [[0.42, 0.8, 0.07, 0.11]],
+    [[0.58, 0.8, 0.07, 0.11]],
+    [[0.74, 0.8, 0.07, 0.11]],
   ],
   // Enormous and vertical: a tower with an anvil top.
   cumulonimbus: [
@@ -407,7 +428,7 @@ export function drawCloudling(
   context: CanvasRenderingContext2D,
   x: number,
   y: number,
-  hostile: boolean,
+  side: CloudlingSide,
   mood: Mood,
   costume: string,
   time: number,
@@ -416,7 +437,8 @@ export function drawCloudling(
 ): { x: number; y: number } {
   // Final art first: the mood's picture, the region's costume over a friendly one, and
   // the hand where the picture says it is.
-  const art = cloudlingArtId(hostile ? 'hostile' : 'friendly', mood)
+  const hostile = side === 'hostile'
+  const art = cloudlingArtId(side, mood)
   if (drawArtAt(context, art, { x, y }, { time })) {
     const overlay = !hostile && region ? regionArtId(region, 'costume') : null
     if (overlay) drawArtAt(context, overlay, { x, y }, { time })
@@ -503,6 +525,21 @@ export function drawCloudling(
     context.lineTo(centreX - 9, headY + 4)
     context.closePath()
     context.fill()
+    if (side === 'operator') {
+      // The operator's hat: a broad-brimmed field hat in ochre with a dark band, the
+      // same in every region (brief, Section 8).
+      context.fillStyle = '#c8973a'
+      context.beginPath()
+      context.ellipse(centreX, headY - 6, 15, 3.6, 0, 0, Math.PI * 2)
+      context.fill()
+      context.stroke()
+      context.beginPath()
+      context.roundRect(centreX - 8, headY - 15, 16, 10, [5, 5, 1, 1])
+      context.fill()
+      context.stroke()
+      context.fillStyle = '#4a3a22'
+      context.fillRect(centreX - 8, headY - 8.5, 16, 2.5)
+    }
     // Eyes and mouth carry the mood.
     context.fillStyle = '#2d2a3a'
     context.beginPath()
@@ -529,14 +566,15 @@ export function drawKite(
   context: CanvasRenderingContext2D,
   x: number,
   y: number,
-  hostile: boolean,
+  side: CloudlingSide,
   state: KiteState,
   time: number,
   scale = 1,
 ): void {
+  const hostile = side === 'hostile'
   const sway = state === 'flying' ? Math.sin(time / 420 + x) * 0.12 : 0
   // Final art first: the state's picture, swaying while it flies.
-  const art = kiteArtId(hostile ? 'hostile' : 'friendly', state)
+  const art = kiteArtId(side, state)
   if (drawArtAt(context, art, { x, y }, { time, scale, angle: sway })) return
   context.save()
   context.translate(x, y)
@@ -547,6 +585,29 @@ export function drawKite(
   context.lineWidth = 1.5
   context.lineJoin = 'round'
 
+  if (side === 'operator') {
+    // A box kite: two square cells joined by long spars, in ochre, so it reads apart
+    // from the green diamonds and the red raptors without relying on colour.
+    context.fillStyle = '#e0a83a'
+    for (const top of [-17, 3]) {
+      context.beginPath()
+      context.rect(-10, top, 20, 12)
+      context.fill()
+      context.stroke()
+    }
+    context.beginPath()
+    context.moveTo(-10, -17)
+    context.lineTo(-10, 15)
+    context.moveTo(10, -17)
+    context.lineTo(10, 15)
+    context.moveTo(-10, -17)
+    context.lineTo(10, -5)
+    context.moveTo(10, -17)
+    context.lineTo(-10, -5)
+    context.stroke()
+    context.restore()
+    return
+  }
   context.beginPath()
   if (hostile) {
     const outline: [number, number][] = [

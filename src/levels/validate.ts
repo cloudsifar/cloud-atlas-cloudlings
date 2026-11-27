@@ -39,6 +39,7 @@ const RESOURCE_FIELDS: Record<ResourceKind, Record<string, 'string' | 'boolean' 
     scaling: 'object',
   },
   'waf-web-acl': { defaultAction: 'string', rules: 'object' },
+  'session-manager': {},
   'rds-database': {
     engine: 'string',
     subnetIds: 'object',
@@ -157,6 +158,18 @@ export function validateLevel(value: unknown, knownFactCardIds: string[]): strin
   for (const problem of validateScene(level.referenceSolution)) {
     errors.push(`referenceSolution: ${problem.message}`)
   }
+  // A checkpoint is a scene the player reaches on the way, so it must be sound too, and
+  // belong to a step that waits for a flight.
+  for (const [stepId, scene] of Object.entries(level.narrationCheckpoints ?? {})) {
+    const step = level.narration.find((candidate) => candidate.id === stepId)
+    if (step?.advanceWhen.kind !== 'run-finished')
+      errors.push(
+        `narrationCheckpoints.${stepId}: expected the id of a step that waits for a flight`,
+      )
+    for (const problem of validateScene(scene)) {
+      errors.push(`narrationCheckpoints.${stepId}: ${problem.message}`)
+    }
+  }
 
   const idsIn = (scene: Scene) =>
     new Set(
@@ -221,13 +234,28 @@ export function validateLevel(value: unknown, knownFactCardIds: string[]): strin
   }
 
   const solutionIds = idsIn(level.referenceSolution)
+  // A kite may aim at a cloud the player builds and later removes, such as Level 9's
+  // bastion host: it still names something real if the tray offers it.
+  const aimableIds = new Set([...solutionIds, ...level.palette.map((entry) => entry.resource.id)])
+  const stepIds = new Set(level.narration.map((step) => step.id))
   const kiteIds = new Set<string>()
   level.population.forEach((kite, index) => {
     const path = `population[${index}]`
     if (kiteIds.has(kite.id)) errors.push(`${path}.id: "${kite.id}" is used twice`)
     kiteIds.add(kite.id)
-    if (kite.kind !== 'friendly' && kite.kind !== 'hostile')
-      errors.push(`${path}.kind: expected "friendly" or "hostile"`)
+    if (kite.kind !== 'friendly' && kite.kind !== 'hostile' && kite.kind !== 'operator')
+      errors.push(`${path}.kind: expected "friendly", "hostile" or "operator"`)
+    if (kite.via !== undefined && (kite.kind !== 'operator' || !aimableIds.has(kite.via)))
+      errors.push(`${path}.via: expected the operator's bastion host, from the scene or the tray`)
+    if (kite.moves !== undefined) {
+      if (!stepIds.has(kite.moves.atStep))
+        errors.push(`${path}.moves.atStep: there is no narrator step "${kite.moves.atStep}"`)
+      if (!DOCUMENTATION_RANGES.some((range) => safeContains(range, kite.moves?.ip ?? '')))
+        errors.push(`${path}.moves.ip: expected an address in ${DOCUMENTATION_RANGES.join(', ')}`)
+      const moved = kite.moves.groundPosition
+      if (moved !== undefined && !(Number.isInteger(moved) && moved >= 0 && moved <= 6))
+        errors.push(`${path}.moves.groundPosition: expected a whole number from 0 to 6`)
+    }
     if (typeof kite.says !== 'string' || kite.says.trim() === '')
       errors.push(`${path}.says: expected the words in the Cloudling's speech bubble`)
     if (kite.rate !== undefined && !(Number.isInteger(kite.rate) && kite.rate > 0))
@@ -245,9 +273,9 @@ export function validateLevel(value: unknown, knownFactCardIds: string[]): strin
     ) {
       errors.push(`${path}.ip: expected an address in ${DOCUMENTATION_RANGES.join(', ')}`)
     }
-    if (!solutionIds.has(kite.destinationId)) {
+    if (!aimableIds.has(kite.destinationId)) {
       errors.push(
-        `${path}.destinationId: "${kite.destinationId}" does not exist in the reference solution`,
+        `${path}.destinationId: "${kite.destinationId}" does not exist in the reference solution or the tray`,
       )
     }
     if (kite.backendCall && !solutionIds.has(kite.backendCall.destinationId)) {

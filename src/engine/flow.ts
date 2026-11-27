@@ -7,19 +7,22 @@
 // networkAcls, iam, s3); this file only puts them in the order AWS applies them.
 
 import { expandAutoScalingGroups } from './autoScaling'
-import { addressInSubnet, S3_ENDPOINT_ADDRESS } from './address'
+import { addressInSubnet, S3_ENDPOINT_ADDRESS, SSM_ENDPOINT_ADDRESS } from './address'
 import {
   findResource,
   findResourceOfKind,
+  resourcesOfKind,
   requireNetworkAcl,
   requireSubnet,
   subnetIsDown,
   webAclFor,
   type Ec2Instance,
   type LoadBalancer,
+  type IamRole,
   type RdsDatabase,
   type S3Bucket,
   type Scene,
+  type SessionManager,
   type ServiceAction,
   type Subnet,
 } from './model'
@@ -32,8 +35,10 @@ import {
   MYSQL_PORT,
   POSTGRESQL_PORT,
   REPRESENTATIVE_EPHEMERAL_PORT,
+  SSH_PORT,
 } from './ports'
 import { isPublicSubnet, resolveRoute } from './routing'
+import { evaluateIdentityPolicy } from './iam'
 import { evaluateKeyUse, needsKeyCheck } from './kms'
 import { evaluateBucketAccess, type Caller } from './s3'
 import { evaluateSecurityGroups, type ConnectionPeer } from './securityGroups'
@@ -112,6 +117,11 @@ export function evaluateFlow(authoredScene: Scene, flow: Flow): FlowResult {
         return evaluateInternetToLoadBalancer(scene, flow, flow.source.ip, destination)
       case 's3-bucket':
         return evaluateInternetToBucket(flow, destination)
+      case 'ec2-instance':
+        if (flow.shell) return evaluateShell(scene, flow, flow.source.ip, destination)
+        if (destination.publicAddress)
+          return evaluateInternetToPublicInstance(scene, flow, flow.source.ip, destination)
+        return evaluateInternetToPrivateResource(destination.name)
       default:
         return evaluateInternetToPrivateResource(destination.name)
     }
@@ -921,6 +931,497 @@ function evaluateInternetToPrivateResource(name: string): FlowResult {
         explanation: `"${name}" has only a private address (10.0.x.x). Nothing on the internet can route to a private address, so the kite drifts along the VPC border and finds no gate.`,
       }),
     ],
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Journey 5: a kite from the ground to an instance with a public address
+// ---------------------------------------------------------------------------
+
+/**
+ * AWS behaviour modelled: an instance with a public IPv4 address in a public subnet is
+ * reachable from the internet through the Internet Gateway, subject to the subnet's
+ * network ACL and then the instance's own security group. In the game only a bastion
+ * host has a public address, and it runs only SSH (docs/SIMPLIFICATIONS.md).
+ */
+function publicInstanceEntryChecks(
+  scene: Scene,
+  instance: Ec2Instance,
+  clientIp: string,
+  port: number,
+): PendingCheck[] {
+  const subnet = requireSubnet(scene, instance.subnetId)
+  const client: ConnectionPeer = {
+    ip: clientIp,
+    securityGroupIds: [],
+    description: `the Cloudling at ${clientIp}`,
+  }
+  return [
+    () =>
+      isPublicSubnet(scene, subnet)
+        ? makeStep('request', { kind: 'vpc' }, 'route', {
+            result: 'pass',
+            ruleRef: '0.0.0.0/0 → Internet Gateway',
+            explanation: `"${instance.name}" has a public address in "${subnet.name}", a public subnet, so the Internet Gateway lets the kite into the VPC.`,
+          })
+        : makeStep('request', { kind: 'vpc' }, 'route', {
+            result: 'fail',
+            explanation: `"${instance.name}" has a public address, but "${subnet.name}" has no route sending 0.0.0.0/0 to an Internet Gateway, so nothing on the internet can reach it.`,
+          }),
+    () => naclStep(scene, subnet, 'inbound', clientIp, port, 'request'),
+    () =>
+      makeStep(
+        'request',
+        atResource(instance.id),
+        'security-group',
+        evaluateSecurityGroups(scene, instance.securityGroupIds, 'inbound', client, port),
+      ),
+  ]
+}
+
+function evaluateInternetToPublicInstance(
+  scene: Scene,
+  flow: Flow,
+  clientIp: string,
+  instance: Ec2Instance,
+): FlowResult {
+  const trace: TraceStep[] = []
+  if (!runChecks(trace, publicInstanceEntryChecks(scene, instance, clientIp, flow.port)))
+    return { outcome: 'blocked', trace }
+  if (flow.port !== SSH_PORT) {
+    trace.push(
+      makeStep('request', atResource(instance.id), 'delivery', {
+        result: 'fail',
+        explanation: `Nothing on "${instance.name}" listens on ${describePort(flow.port)}: a bastion host runs only SSH.`,
+      }),
+    )
+    return { outcome: 'dropped', trace }
+  }
+  // A hostile kite that reaches an open SSH port can start guessing: a breach.
+  const breached = flow.intent === 'hostile'
+  trace.push(
+    makeStep('request', atResource(instance.id), 'delivery', {
+      result: 'pass',
+      explanation: breached
+        ? `SSH on "${instance.name}" answered the probe. From here it can try passwords and stolen keys for as long as the port stays open.`
+        : `SSH on "${instance.name}" answers.`,
+    }),
+  )
+  if (breached) return { outcome: 'breach', trace }
+  const subnet = requireSubnet(scene, instance.subnetId)
+  const responseTrace: TraceStep[] = []
+  const responded = runChecks(responseTrace, [
+    () => naclStep(scene, subnet, 'outbound', clientIp, REPRESENTATIVE_EPHEMERAL_PORT, 'response'),
+    () =>
+      makeStep('response', { kind: 'ground' }, 'delivery', {
+        result: 'pass',
+        explanation: 'The reply leaves through the Internet Gateway and reaches the Cloudling.',
+      }),
+  ])
+  return { outcome: responded ? 'delivered' : 'blocked', trace, responseTrace }
+}
+
+// ---------------------------------------------------------------------------
+// Journey 6: the operator wants a shell on an instance
+// ---------------------------------------------------------------------------
+
+/**
+ * With Session Manager in the sky the operator starts a session through it; without,
+ * the operator connects by SSH: straight to an instance with a public address, or
+ * through a bastion host to one with only a private address.
+ */
+function evaluateShell(
+  scene: Scene,
+  flow: Flow,
+  clientIp: string,
+  instance: Ec2Instance,
+): FlowResult {
+  const sessionManager = resourcesOfKind(scene, 'session-manager')[0]
+  if (sessionManager) return evaluateSession(scene, instance, sessionManager)
+  if (instance.publicAddress)
+    return evaluateInternetToPublicInstance(scene, { ...flow, port: SSH_PORT }, clientIp, instance)
+  const jumpHost = flow.shell?.jumpHostId
+    ? findResourceOfKind(scene, 'ec2-instance', flow.shell.jumpHostId)
+    : undefined
+  if (!jumpHost?.publicAddress) {
+    return {
+      outcome: 'blocked',
+      trace: [
+        makeStep('request', { kind: 'vpc' }, 'route', {
+          result: 'fail',
+          ruleRef: 'no public address',
+          explanation: `"${instance.name}" has only a private address, so nothing on the internet can reach it, by SSH or any other way, and there is no bastion host to step through. The operator has no way in.`,
+        }),
+      ],
+    }
+  }
+  return evaluateSshThroughBastion(scene, clientIp, jumpHost, instance)
+}
+
+/**
+ * AWS behaviour modelled: SSH through a bastion host is two connections. The operator
+ * connects to the bastion's public address on port 22; the bastion then opens its own
+ * connection to the private instance on port 22. Each crosses the network ACLs on its
+ * way and the security groups at each end: the bastion's group must let it out, and the
+ * instance's group must let the bastion in. Replies cross every network ACL again.
+ */
+function evaluateSshThroughBastion(
+  scene: Scene,
+  clientIp: string,
+  bastion: Ec2Instance,
+  target: Ec2Instance,
+): FlowResult {
+  const bastionSubnet = requireSubnet(scene, bastion.subnetId)
+  const targetSubnet = requireSubnet(scene, target.subnetId)
+  const bastionIp = addressInSubnet(bastionSubnet)
+  const targetIp = addressInSubnet(targetSubnet)
+  const crosses = bastionSubnet.id !== targetSubnet.id
+  const trace: TraceStep[] = []
+  const reached = runChecks(trace, [
+    ...publicInstanceEntryChecks(scene, bastion, clientIp, SSH_PORT),
+    () =>
+      makeStep(
+        'request',
+        atResource(bastion.id),
+        'security-group',
+        evaluateSecurityGroups(
+          scene,
+          bastion.securityGroupIds,
+          'outbound',
+          instancePeer(scene, target),
+          SSH_PORT,
+        ),
+      ),
+    ...(crosses
+      ? [
+          () => naclStep(scene, bastionSubnet, 'outbound', targetIp, SSH_PORT, 'request'),
+          () => naclStep(scene, targetSubnet, 'inbound', bastionIp, SSH_PORT, 'request'),
+        ]
+      : []),
+    () =>
+      makeStep(
+        'request',
+        atResource(target.id),
+        'security-group',
+        evaluateSecurityGroups(
+          scene,
+          target.securityGroupIds,
+          'inbound',
+          instancePeer(scene, bastion),
+          SSH_PORT,
+        ),
+      ),
+  ])
+  if (!reached) return { outcome: 'blocked', trace }
+  if (!target.healthy) {
+    trace.push(
+      makeStep('request', atResource(target.id), 'delivery', {
+        result: 'fail',
+        explanation: `"${target.name}" is not running, so nothing answers.`,
+      }),
+    )
+    return { outcome: 'dropped', trace }
+  }
+  trace.push(
+    makeStep('request', atResource(target.id), 'delivery', {
+      result: 'pass',
+      explanation: `SSH answers on "${target.name}": the operator has a shell, stepping through "${bastion.name}". It took a public machine with port 22 open, and a private key that must be kept safe.`,
+    }),
+  )
+  const responseTrace: TraceStep[] = []
+  const responded = runChecks(responseTrace, [
+    ...(crosses
+      ? [
+          () =>
+            naclStep(
+              scene,
+              targetSubnet,
+              'outbound',
+              bastionIp,
+              REPRESENTATIVE_EPHEMERAL_PORT,
+              'response',
+            ),
+          () =>
+            naclStep(
+              scene,
+              bastionSubnet,
+              'inbound',
+              targetIp,
+              REPRESENTATIVE_EPHEMERAL_PORT,
+              'response',
+            ),
+        ]
+      : []),
+    () =>
+      naclStep(
+        scene,
+        bastionSubnet,
+        'outbound',
+        clientIp,
+        REPRESENTATIVE_EPHEMERAL_PORT,
+        'response',
+      ),
+    () =>
+      makeStep('response', { kind: 'ground' }, 'delivery', {
+        result: 'pass',
+        explanation: 'The reply leaves through the Internet Gateway and reaches the operator.',
+      }),
+  ])
+  return { outcome: responded ? 'delivered' : 'blocked', trace, responseTrace }
+}
+
+// ---------------------------------------------------------------------------
+// Journey 7: a session through Session Manager
+// ---------------------------------------------------------------------------
+
+/**
+ * AWS behaviour modelled: Session Manager reaches managed instances only. An EC2
+ * instance becomes one when its SSM Agent registers with Systems Manager, using the
+ * credentials of the instance's IAM role, and it must allow HTTPS (443) out to the
+ * Systems Manager endpoints. The agent keeps that outbound connection open, and
+ * sessions run over it, so the instance needs no inbound port, no public address and
+ * no SSH key. The operator reaches Systems Manager over HTTPS with their own IAM
+ * identity (assumed allowed; docs/SIMPLIFICATIONS.md).
+ *
+ * Trace order: the operator's request reaches Session Manager and comes down to the
+ * instance, then the agent's outbound connection is checked, out and back. In AWS the
+ * agent connects first; this order is the one a player can follow in the sky.
+ */
+function evaluateSession(
+  scene: Scene,
+  instance: Ec2Instance,
+  sessionManager: SessionManager,
+): FlowResult {
+  const trace: TraceStep[] = [
+    makeStep('request', atResource(sessionManager.id), 'route', {
+      result: 'pass',
+      ruleRef: 'HTTPS to Systems Manager',
+      explanation: `The operator asks "${sessionManager.name}" for a shell on "${instance.name}", over HTTPS and signed with their own IAM identity. Nothing connects to the instance itself.`,
+    }),
+  ]
+  const role = instance.roleId ? findResourceOfKind(scene, 'iam-role', instance.roleId) : undefined
+  if (!runChecks(trace, [() => managedInstanceStep(instance, role, sessionManager)]))
+    return { outcome: 'blocked', trace }
+  if (!instance.healthy) {
+    trace.push(
+      makeStep('request', atResource(instance.id), 'delivery', {
+        result: 'fail',
+        explanation: `"${instance.name}" is not running, so its SSM Agent is offline.`,
+      }),
+    )
+    return { outcome: 'dropped', trace }
+  }
+  const channel = agentChannelChecks(scene, instance, sessionManager)
+  if (!runChecks(trace, channel.request)) return { outcome: 'blocked', trace }
+  const responseTrace: TraceStep[] = []
+  const opened = runChecks(responseTrace, [
+    ...channel.response,
+    () =>
+      makeStep('backend-response', atResource(instance.id), 'delivery', {
+        result: 'pass',
+        explanation: `"${sessionManager.name}" joins the operator to the SSM Agent's own connection: a shell on "${instance.name}", with no inbound port open.`,
+      }),
+  ])
+  return { outcome: opened ? 'delivered' : 'blocked', trace, responseTrace }
+}
+
+/** May the SSM Agent register? The instance's role must allow ssm:ManagedInstance. */
+function managedInstanceStep(
+  instance: Ec2Instance,
+  role: IamRole | undefined,
+  sessionManager: SessionManager,
+): TraceStep {
+  const at = atResource(instance.id)
+  if (!role) {
+    return makeStep('request', at, 'iam', {
+      result: 'fail',
+      ruleRef: 'no IAM role',
+      explanation: `"${instance.name}" has no IAM role, so its SSM Agent has no credentials to register with Systems Manager. Session Manager reaches only managed instances.`,
+    })
+  }
+  const decision = evaluateIdentityPolicy(role, 'ssm:ManagedInstance', sessionManager.id)
+  if (decision.verdict === 'explicit-deny') {
+    return makeStep('request', at, 'iam', {
+      result: 'fail',
+      ruleRef: `role "${role.name}": explicit deny ssm:ManagedInstance`,
+      explanation: `Role "${role.name}" explicitly denies ssm:ManagedInstance, and an explicit deny overrides every allow, so the SSM Agent on "${instance.name}" cannot register.`,
+    })
+  }
+  if (decision.verdict === 'allow') {
+    return makeStep('request', at, 'iam', {
+      result: 'pass',
+      ruleRef: `role "${role.name}": allow ssm:ManagedInstance`,
+      matched: {
+        kind: 'role-statement',
+        roleId: role.id,
+        index: decision.index,
+        action: 'ssm:ManagedInstance',
+        resourceId: sessionManager.id,
+      },
+      explanation: `Role "${role.name}" allows ssm:ManagedInstance, so the SSM Agent on "${instance.name}" can register with Systems Manager: it is a managed instance.`,
+    })
+  }
+  return makeStep('request', at, 'iam', {
+    result: 'fail',
+    ruleRef: 'implicit deny: no ssm:ManagedInstance',
+    explanation: `Session Manager reaches only managed instances. Role "${role.name}" does not allow ssm:ManagedInstance, so the SSM Agent on "${instance.name}" cannot register with Systems Manager.`,
+  })
+}
+
+/**
+ * The SSM Agent's connection out to the Systems Manager endpoints: HTTPS 443, out
+ * through the instance's security group and its subnet's network ACL, then by its
+ * subnet's route to the internet. From a private subnet that is a NAT Gateway in a
+ * public subnet, whose own subnet's network ACL the connection crosses both ways.
+ */
+function agentChannelChecks(
+  scene: Scene,
+  instance: Ec2Instance,
+  sessionManager: SessionManager,
+): { request: PendingCheck[]; response: PendingCheck[] } {
+  const leg: Leg = 'backend-request'
+  const back: Leg = 'backend-response'
+  const subnet = requireSubnet(scene, instance.subnetId)
+  const instanceIp = addressInSubnet(subnet)
+  const endpoints: ConnectionPeer = {
+    ip: SSM_ENDPOINT_ADDRESS,
+    securityGroupIds: [],
+    description: 'the Systems Manager endpoints',
+  }
+  const leaveInstance: PendingCheck[] = [
+    () =>
+      makeStep(
+        leg,
+        atResource(instance.id),
+        'security-group',
+        evaluateSecurityGroups(scene, instance.securityGroupIds, 'outbound', endpoints, HTTPS_PORT),
+      ),
+    () => naclStep(scene, subnet, 'outbound', SSM_ENDPOINT_ADDRESS, HTTPS_PORT, leg),
+  ]
+  const reachEndpoints: PendingCheck = () =>
+    makeStep(leg, atResource(sessionManager.id), 'delivery', {
+      result: 'pass',
+      explanation: `The SSM Agent on "${instance.name}" reaches the Systems Manager endpoints over HTTPS 443 and keeps the connection open, ready for sessions.`,
+    })
+  const replyReachesInstance: PendingCheck = () =>
+    naclStep(scene, subnet, 'inbound', SSM_ENDPOINT_ADDRESS, REPRESENTATIVE_EPHEMERAL_PORT, back)
+  const routeFails = (explanation: string): PendingCheck[] => [
+    () => makeStep(leg, atSubnet(subnet), 'route', { result: 'fail', explanation }),
+  ]
+  const route = resolveRoute(scene, subnet, 'internet')
+
+  switch (route.kind) {
+    case 'nat-gateway': {
+      const nat = route.natGateway
+      const natSubnet = requireSubnet(scene, nat.subnetId)
+      if (!isPublicSubnet(scene, natSubnet) || subnetIsDown(scene, natSubnet)) {
+        return {
+          request: [
+            ...leaveInstance,
+            ...routeFails(
+              `The route table of "${subnet.name}" sends this to "${nat.name}", but that NAT Gateway cannot reach the internet from "${natSubnet.name}".`,
+            ),
+          ],
+          response: [],
+        }
+      }
+      const crossesBoundary = natSubnet.id !== subnet.id
+      return {
+        request: [
+          ...leaveInstance,
+          () =>
+            makeStep(leg, atSubnet(subnet), 'route', {
+              result: 'pass',
+              ruleRef: '0.0.0.0/0 → NAT Gateway',
+              explanation: `The route table of "${subnet.name}" sends traffic for the internet to "${nat.name}".`,
+            }),
+          ...(crossesBoundary
+            ? [() => naclStep(scene, natSubnet, 'inbound', instanceIp, HTTPS_PORT, leg)]
+            : []),
+          () => naclStep(scene, natSubnet, 'outbound', SSM_ENDPOINT_ADDRESS, HTTPS_PORT, leg),
+          () =>
+            makeStep(leg, atResource(nat.id), 'route', {
+              result: 'pass',
+              ruleRef: '0.0.0.0/0 → Internet Gateway',
+              explanation: `"${nat.name}" forwards the agent's connection out through the Internet Gateway, using its own public address. It carries outbound connections only: nothing outside can start one in.`,
+            }),
+          reachEndpoints,
+        ],
+        response: [
+          () =>
+            naclStep(
+              scene,
+              natSubnet,
+              'inbound',
+              SSM_ENDPOINT_ADDRESS,
+              REPRESENTATIVE_EPHEMERAL_PORT,
+              back,
+            ),
+          ...(crossesBoundary
+            ? [
+                () =>
+                  naclStep(
+                    scene,
+                    natSubnet,
+                    'outbound',
+                    instanceIp,
+                    REPRESENTATIVE_EPHEMERAL_PORT,
+                    back,
+                  ),
+              ]
+            : []),
+          replyReachesInstance,
+        ],
+      }
+    }
+
+    case 'internet-gateway':
+      if (instance.publicAddress) {
+        return {
+          request: [
+            ...leaveInstance,
+            () =>
+              makeStep(leg, atSubnet(subnet), 'route', {
+                result: 'pass',
+                ruleRef: '0.0.0.0/0 → Internet Gateway',
+                explanation: `"${instance.name}" has a public address, so its connection leaves straight through the Internet Gateway.`,
+              }),
+            reachEndpoints,
+          ],
+          response: [replyReachesInstance],
+        }
+      }
+      return {
+        request: [
+          ...leaveInstance,
+          ...routeFails(
+            `"${subnet.name}" routes to the Internet Gateway, but "${instance.name}" has only a private address, which an Internet Gateway cannot carry. A NAT Gateway can.`,
+          ),
+        ],
+        response: [],
+      }
+
+    case 'blackhole':
+      return {
+        request: [
+          ...leaveInstance,
+          ...routeFails(`The route table of "${subnet.name}" leads nowhere: ${route.reason}.`),
+        ],
+        response: [],
+      }
+
+    case 'gateway-endpoint':
+    case 'no-route':
+    case 'local':
+      return {
+        request: [
+          ...leaveInstance,
+          ...routeFails(
+            `The route table of "${subnet.name}" has no route to the internet, so the SSM Agent on "${instance.name}" cannot reach the Systems Manager endpoints on HTTPS 443. A gateway endpoint carries only S3 and DynamoDB; a NAT Gateway in a public subnet would carry the agent's connection out.`,
+          ),
+        ],
+        response: [],
+      }
   }
 }
 

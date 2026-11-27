@@ -10,6 +10,12 @@ import type { CidrPeer, Subnet } from './model'
  */
 export const S3_ENDPOINT_ADDRESS = '52.216.0.10'
 
+/**
+ * A stand-in public address for the Systems Manager endpoints (ssm, ssmmessages and
+ * ec2messages) that the SSM Agent connects out to, outside every listed range.
+ */
+export const SSM_ENDPOINT_ADDRESS = '52.94.0.20'
+
 function toNumber(ip: string): number {
   const parts = ip.split('.').map(Number)
   if (
