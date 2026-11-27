@@ -68,7 +68,7 @@
     },
     {
       "id": "key",
-      "text": "The red kite is turned away. The receipts were never unencrypted: since January 2023 S3 encrypts every new object (SSE-S3), with keys S3 manages. The auditor wants a key the shop controls, with every use logged. Drag a KMS key from the tray: a customer managed key.",
+      "text": "The red kite is turned away. The receipts were never unencrypted: since January 2023 S3 encrypts every new object (SSE-S3) with keys S3 manages. The auditor wants a key the shop controls, with every use logged. Drag a KMS key from the tray: a customer managed key.",
       "highlight": "palette:shop-key",
       "advanceWhen": {
         "kind": "scene",
