@@ -10,6 +10,10 @@
 //   https://docs.aws.amazon.com/kms/latest/developerguide/deleting-keys.html
 // - Changing a bucket's default encryption leaves existing objects as they are.
 //   https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingEncryption.html
+// - CloudTrail records every call to KMS, including GenerateDataKey and Decrypt, and
+//   Event history keeps 90 days of management events with no setup.
+//   https://docs.aws.amazon.com/kms/latest/developerguide/logging-using-cloudtrail.html
+//   https://docs.aws.amazon.com/awscloudtrail/latest/userguide/view-cloudtrail-events.html
 
 import { describe, expect, it } from 'vitest'
 import type { Scene } from '../../src/engine'
@@ -204,5 +208,16 @@ describe("Level 8 carries Level 7's defences", () => {
     // Its address is in edge-acl's block-listed range, and still it reads the bucket.
     expect(reader?.outcome).toBe('breach')
     expect(reader?.trace.some((step) => step.check === 'nacl' || step.check === 'waf')).toBe(false)
+  })
+})
+
+describe('where Level 8 says key use is recorded', () => {
+  it('links the CloudTrail card where the auditor asks for every use logged', () => {
+    const step = level.narration.find((candidate) => candidate.id === 'key')
+    expect(step?.text).toContain('(card:cloudtrail)')
+  })
+
+  it('lists the CloudTrail card on the results card', () => {
+    expect(level.factCards).toContain('cloudtrail')
   })
 })

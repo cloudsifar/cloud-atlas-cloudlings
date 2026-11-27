@@ -143,6 +143,21 @@
     ],
     "atlasPage": "TODO(Simon)"
   },
+  "cloudtrail": {
+    "title": "CloudTrail",
+    "body": "CloudTrail records the calls made to AWS in your account: who called which action, on what, from where and when. It is on in every account with nothing to set up, and its Event history keeps the last 90 days of management events, free. Every call to KMS is one of them, so each use of a KMS key is recorded, with the role behind it: storing an object (GenerateDataKey) or reading one (Decrypt).",
+    "points": [
+      "Management events are recorded by default: creating a bucket, changing a security group, every call to KMS. Data events, such as reading or writing an object in S3, are not: you add them to a trail, at extra cost.",
+      "For a record longer than 90 days, create a trail: it delivers the events to an S3 bucket.",
+      "With SSE-S3, S3 manages the keys itself and never calls KMS, so CloudTrail has no record of key use. With SSE-KMS there is a record of every call, whether the key is an AWS managed key or your own.",
+      "CloudTrail and CloudWatch are different services: CloudTrail records who did what through the AWS API, and CloudWatch measures how things are running."
+    ],
+    "simplifications": [
+      "CloudTrail is not drawn in the sky and its records are not shown: it is on in every account, so there is nothing to place.",
+      "S3 Bucket Keys, which reuse a bucket-level key for a while and so make far fewer KMS calls (and fewer records), are left out."
+    ],
+    "atlasPage": "TODO(Simon)"
+  },
   "concept-elasticity": {
     "title": "Elasticity",
     "body": "Matching capacity to demand as demand changes: more when it is busy, less when it is quiet, without anyone doing it by hand. It is one of the main reasons to build in the cloud. The alternative is to buy for the busiest day and pay for that capacity on every other day.",
@@ -249,7 +264,7 @@
     "body": "AWS Key Management Service keeps encryption keys and uses them for you: the keys never leave it. S3, RDS and many other services ask KMS to use a key whenever they encrypt or decrypt your data. An AWS managed key (aws/s3, aws/rds) is created and controlled by AWS for one service. A customer managed key is yours: you decide who may use it, you can switch on yearly rotation, and every use is recorded in CloudTrail. It costs about a dollar a month.",
     "points": [
       "Who may use a key is decided by its key policy. The default key policy lets IAM policies in the account decide, so a role needs permission to use the key.",
-      "With SSE-KMS and a customer managed key, S3 uses the key as the caller: storing an object needs kms:GenerateDataKey, reading one needs kms:Decrypt. Without them, the request fails at the key, even when the role may use the bucket.",
+      "With SSE-KMS and a customer managed key, S3 calls KMS on the caller's behalf, and KMS checks the caller's permissions: storing an object needs kms:GenerateDataKey, reading one needs kms:Decrypt. Without them, the request fails at the key, even when the role may use the bucket.",
       "Keys are Regional: a key protects data in its own Region, and its key policy applies only there."
     ],
     "simplifications": [

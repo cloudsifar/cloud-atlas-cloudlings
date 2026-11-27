@@ -961,11 +961,18 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
           textContent: `Customer managed · in ${REGION_NAMES[level.region]} (${level.region}) · about a dollar a month, plus a little per use`,
         }),
         h('h5', { textContent: 'Key policy' }),
-        h('p', {
-          class: 'note',
-          textContent:
-            'The default policy: it lets IAM policies in this account decide who may use the key. So a role that reads or writes data under it needs kms:Use on it, and every use is logged.',
-        }),
+        h(
+          'p',
+          { class: 'note' },
+          'The default policy: it lets IAM policies in this account decide who may use the key. So a role that reads or writes data under it needs kms:Use on it, and every use is recorded in ',
+          button(
+            'CloudTrail',
+            () => actions.openFactCard('cloudtrail'),
+            'key-cloudtrail',
+            'inline-link',
+          ),
+          '.',
+        ),
         attention(h('h5', { textContent: 'Protects' }), actions, `key-users:${resource.id}`),
         h('p', {
           class: 'note',
@@ -1193,7 +1200,7 @@ function resourceCard(state: GameState, resource: Resource, actions: CardActions
               ? 'Every new object is encrypted at rest. With SSE-S3 nobody needs a key permission, and nobody outside S3 controls the key.'
               : resource.encryption.keyId === null
                 ? 'S3 uses the AWS managed key aws/s3 for new objects. Anyone in the account allowed to use the bucket may use it through S3; you cannot change its policy.'
-                : 'S3 uses your key for new objects, as the caller: whoever reads or writes them needs kms:Use on the key. You decide who, and every use is logged.',
+                : 'S3 uses your key for new objects, calling KMS on the caller’s behalf: whoever reads or writes them needs kms:Use on the key. You decide who, and CloudTrail records every use.',
         }),
         h('p', {
           class: 'note',

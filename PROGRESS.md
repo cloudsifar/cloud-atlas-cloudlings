@@ -134,9 +134,9 @@ Running log. Newest state first; updated at the end of every milestone.
 
 1. **Vitest, the Vite build and lint on Windows, on everything since 18 November**
    (ADRs 0007–0019). In that time the suite has run only on the offline runner
-   (422 tests), and ESLint, Prettier and the project `tsc` were run against the
+   (424 tests), and ESLint, Prettier and the project `tsc` were run against the
    installed packages from the cloud sandbox. On Windows, after `git pull`:
-   `npm ci --ignore-scripts`, then `npm test` (expect 26 test files and **422 passed**),
+   `npm ci --ignore-scripts`, then `npm test` (expect 26 test files and **424 passed**),
    `npm run build` (writes `dist/`, including `dist/sounds/README.md`) and
    `npm run lint`. Read each output, not only the exit code.
 2. **Level 8 played by a person** (ADR 0018): whether the eight steps leave time to
@@ -522,3 +522,17 @@ Two places where the brief's wording was made more exact:
   - **Plans for Levels 9–12** are in `docs/LEVEL_PLANS.md`.
   - **Checks.** 422 tests pass offline. Played headlessly: the Level 1–7 texts, and
     Level 8 to three stars, with no console errors.
+- **Session 3, continued: a CloudTrail fact card (27 November 2026).** No level plans
+  CloudTrail, and the brief doesn't mention it, but Level 8's auditor asks for "every
+  use logged". The new `cloudtrail` card covers:
+  - Event history (90 days of management events, with no setup);
+  - every KMS call being recorded;
+  - S3 object reads and writes, which are data events and not recorded by default;
+  - SSE-S3, which leaves no record of key use;
+  - how CloudTrail differs from CloudWatch.
+
+  Level 8's step 4 links it, it appears on the results card, and the key's card has a
+  CloudTrail link. Level 9's plan reuses it for `StartSession`. Step 6 and the KMS
+  check's explanations now say plainly that S3 calls KMS on the role's behalf.
+  SIMPLIFICATIONS row 52. 424 tests pass offline; both links were opened headlessly,
+  with no console errors.

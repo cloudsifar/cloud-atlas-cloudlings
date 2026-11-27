@@ -108,7 +108,12 @@ After step 2 it is in two security groups and a network ACL, so this is real wor
 - No inbound port, and no public address or bastion host.
 - No SSH keys.
 - IAM decides who may start a session.
-- Sessions can be logged.
+- Every session start is a `StartSession` call, so CloudTrail records it with the IAM
+  identity that made it. An SSH login with a shared key leaves no record in AWS at all.
+  Link the `cloudtrail` fact card (added for Level 8) here, and list it on the results
+  card.
+- What happens inside a session can also be logged, to S3 or CloudWatch Logs. That is a
+  setting, not on by default.
 - The connection runs outward, from the SSM Agent on the instance to AWS.
 
 **"In the real world" card**, a clickable card for what the player does not configure:
@@ -132,6 +137,7 @@ After step 2 it is in two security groups and a network ACL, so this is real wor
 
 Sources to cite in the engine tests:
 
+- [Logging session activity](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-auditing.html)
 - [Session Manager prerequisites](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-prerequisites.html)
 - [VPC endpoints for Systems Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/setup-create-vpc.html)
 - [Session Manager and PrivateLink](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-getting-started-privatelink.html)
